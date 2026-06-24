@@ -56,7 +56,9 @@ export default async function Home() {
         </section>
 
         <footer className="flex gap-3">
-          <Button variant="default" disabled>提案を見る（Step 7）</Button>
+          <Link href="/proposals">
+            <Button variant="default">提案を見る</Button>
+          </Link>
           {userEmail ? (
             <form action="/auth/sign-out" method="post">
               <Button type="submit" variant="outline">サインアウト</Button>
