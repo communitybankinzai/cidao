@@ -36,6 +36,33 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
     .eq('org_id', id)
     .is('left_at', null)
 
+  // 直近のイベント（前後3ヶ月の窓）。
+  // 正規イベント（organizer_type='org' AND organizer_id = id）に加えて、
+  // proxy 登録（organizer_name_text が当該団体名と一致）も含める。
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const pastWindowIso = new Date(now.getTime() - 90 * 86_400_000).toISOString()
+  const futureWindowIso = new Date(now.getTime() + 180 * 86_400_000).toISOString()
+  const orgEventFilter = `and(organizer_type.eq.org,organizer_id.eq.${id}),and(proxy_registration.eq.true,organizer_name_text.eq.${org.name})`
+  const { data: upcoming } = await supabase
+    .from('events')
+    .select('id, title, start_at, location, online_flag, category, proxy_registration')
+    .or(orgEventFilter)
+    .neq('status', 'draft')
+    .gte('start_at', nowIso)
+    .lt('start_at', futureWindowIso)
+    .order('start_at', { ascending: true })
+    .limit(8)
+  const { data: recentPast } = await supabase
+    .from('events')
+    .select('id, title, start_at, location, online_flag, category, proxy_registration')
+    .or(orgEventFilter)
+    .neq('status', 'draft')
+    .lt('start_at', nowIso)
+    .gte('start_at', pastWindowIso)
+    .order('start_at', { ascending: false })
+    .limit(5)
+
   // 自分自身のメンバーシップは直接別クエリで取得（一覧側の表示制限や RLS の影響を回避）
   const { data: myMembershipRaw } = user
     ? await supabase
@@ -75,6 +102,49 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
             <p className="whitespace-pre-wrap">{org.description}</p>
           </div>
         )}
+
+        <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+          <div className="flex justify-between items-end">
+            <h2 className="text-sm font-semibold uppercase text-slate-500">活動カレンダー</h2>
+            <Link href="/events" className="text-xs text-slate-500 hover:underline">全イベントを見る →</Link>
+          </div>
+          {upcoming && upcoming.length > 0 ? (
+            <ul className="space-y-2">
+              {upcoming.map((e) => (
+                <li key={e.id}>
+                  <Link href={`/events/${e.id}`} className="flex justify-between items-baseline gap-3 text-sm border-l-2 border-amber-400 pl-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-r">
+                    <span className="truncate">
+                      {e.title}
+                      {e.proxy_registration && <span className="ml-1 text-[10px] text-slate-400">(代理登録)</span>}
+                    </span>
+                    <span className="text-xs text-slate-500 tabular-nums whitespace-nowrap">
+                      {new Date(e.start_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short' })}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-slate-400">直近の予定はまだありません</p>
+          )}
+          {recentPast && recentPast.length > 0 && (
+            <details className="text-sm">
+              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">過去3ヶ月の活動（{recentPast.length}件）</summary>
+              <ul className="mt-2 space-y-1">
+                {recentPast.map((e) => (
+                  <li key={e.id}>
+                    <Link href={`/events/${e.id}`} className="flex justify-between items-baseline gap-3 text-xs text-slate-600 dark:text-slate-400 hover:underline py-0.5">
+                      <span className="truncate">{e.title}</span>
+                      <span className="tabular-nums whitespace-nowrap">
+                        {new Date(e.start_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' })}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <h2 className="text-sm font-semibold uppercase text-slate-500">参加 / 加入</h2>

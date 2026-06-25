@@ -13,6 +13,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const { data: event } = await supabase.from('events').select('*').eq('id', id).single()
   if (!event) notFound()
 
+  const { data: organizerOrg } = event.organizer_type === 'org'
+    ? await supabase.from('organizations').select('id, name').eq('id', event.organizer_id).maybeSingle()
+    : { data: null }
+
   const { data: participants } = await supabase
     .from('event_participants')
     .select('member_id, role, attended, members(display_name)')
@@ -45,6 +49,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         </header>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+          <p className="text-sm text-slate-500 mb-3">
+            主催:{' '}
+            {organizerOrg ? (
+              <Link href={`/orgs/${organizerOrg.id}`} className="text-slate-900 dark:text-slate-100 hover:underline">{organizerOrg.name}</Link>
+            ) : event.organizer_name_text ? (
+              <span className="text-slate-900 dark:text-slate-100">{event.organizer_name_text}<span className="ml-1 text-xs text-slate-400">（代理登録）</span></span>
+            ) : (
+              <span>個人主催</span>
+            )}
+          </p>
           <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">{event.description}</p>
           {event.location && <p className="mt-3 text-sm">📍 {event.location}</p>}
           {event.fee != null && <p className="text-sm">参加費: {event.fee} 円</p>}
