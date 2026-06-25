@@ -6,6 +6,7 @@ import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { updateProfile } from '../actions'
 import { claimMemberships, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
+import AvatarUpload from './_components/AvatarUpload'
 
 export default async function EditProfilePage() {
   const supabase = await createClient()
@@ -103,6 +104,14 @@ export default async function EditProfilePage() {
         </header>
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+          <Field label="プロフィール画像（任意）">
+            <AvatarUpload
+              userId={user.id}
+              initialUrl={member.avatar_url ?? null}
+              displayName={member.display_name}
+            />
+          </Field>
+
           <Field label="表示名" required>
             <input
               name="display_name"

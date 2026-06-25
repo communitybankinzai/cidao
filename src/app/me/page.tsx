@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-summary'
 import { categoryLabel } from '@/lib/categories'
 import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
@@ -172,19 +173,27 @@ export default async function MyPage({
           </div>
         )}
 
-        <header className="space-y-2">
+        <header className="space-y-3">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">マイページ</p>
-          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
-            {member.display_name}
-          </h1>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className={`px-2 py-1 rounded ${tierInfo.color}`}>{tierInfo.label}</span>
-            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
-              {member.residency_type === 'citizen' ? '市民' : '関係人口'}
-            </span>
-            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
-              投票重み {member.residency_type === 'citizen' ? tierInfo.weight_citizen : tierInfo.weight_related}
-            </span>
+          <div className="flex items-center gap-4">
+            <Avatar src={member.avatar_url} name={member.display_name} size="xl" />
+            <div className="flex-1 min-w-0 space-y-2">
+              <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 truncate">
+                {member.display_name}
+              </h1>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className={`px-2 py-1 rounded ${tierInfo.color}`}>{tierInfo.label}</span>
+                <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
+                  {member.residency_type === 'citizen' ? '市民' : '関係人口'}
+                </span>
+                <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
+                  投票重み {member.residency_type === 'citizen' ? tierInfo.weight_citizen : tierInfo.weight_related}
+                </span>
+              </div>
+            </div>
+            <Link href="/me/edit" className="shrink-0">
+              <Button size="sm" variant="outline">編集</Button>
+            </Link>
           </div>
         </header>
 
