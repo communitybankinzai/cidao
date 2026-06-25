@@ -29,6 +29,15 @@ export default async function AdminHomePage() {
               <p className="text-sm text-slate-500">GitHub のコミットから自動取得した変更ログ</p>
             </Link>
           </li>
+          <li>
+            <Link
+              href="/admin/claims"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">所属申告キュー</h2>
+              <p className="text-sm text-slate-500">メンバーが申告した所属団体・代表者申告の承認・却下</p>
+            </Link>
+          </li>
         </ul>
       </div>
     </div>

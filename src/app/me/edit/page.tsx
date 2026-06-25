@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { updateProfile } from '../actions'
+import { claimMemberships, type OrgClaim } from '../../orgs/actions'
+import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
 
 export default async function EditProfilePage() {
   const supabase = await createClient()
@@ -20,6 +22,21 @@ export default async function EditProfilePage() {
 
   const wasLight = member.tier === 'light'
 
+  // 所属団体 picker 用データ
+  const { data: orgs } = await supabase
+    .from('organizations')
+    .select('id, name, type')
+    .eq('public_flag', true)
+    .order('name')
+
+  const { data: myMemberships } = await supabase
+    .from('memberships')
+    .select('org_id, role, status, organizations(name)')
+    .eq('member_id', user.id)
+    .is('left_at', null)
+
+  const alreadyJoinedIds = (myMemberships ?? []).map((m) => m.org_id)
+
   async function handleSubmit(formData: FormData) {
     'use server'
     const interests = formData.getAll('interests').map(String)
@@ -35,6 +52,30 @@ export default async function EditProfilePage() {
       ranking_opt_in: formData.get('ranking_opt_in') === 'on',
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
     })
+  }
+
+  async function handleOrgClaims(formData: FormData) {
+    'use server'
+    const raw = String(formData.get('org_claims') ?? '[]')
+    let parsed: OrgClaim[] = []
+    try {
+      const arr = JSON.parse(raw) as unknown
+      if (Array.isArray(arr)) {
+        parsed = arr
+          .filter((x): x is { org_id: unknown; as_representative: unknown } => typeof x === 'object' && x !== null)
+          .map((x) => ({
+            org_id: String((x as { org_id: unknown }).org_id),
+            as_representative: Boolean((x as { as_representative: unknown }).as_representative),
+          }))
+      }
+    } catch {
+      parsed = []
+    }
+    if (parsed.length === 0) {
+      redirect('/me/edit')
+    }
+    await claimMemberships(parsed)
+    redirect('/me?claims=submitted')
   }
 
   return (
@@ -164,6 +205,47 @@ export default async function EditProfilePage() {
             <Button type="button" variant="outline">キャンセル</Button>
           </Link>
           <Button type="submit">{wasLight ? '本登録する' : '保存'}</Button>
+        </div>
+      </form>
+
+      <form action={handleOrgClaims} className="max-w-3xl mx-auto space-y-4 mt-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">所属団体（任意）</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              既に印西市内の団体に所属している場合は、ここから申告できます。プロフィール保存とは別フォームで、いつでも追加可能です。
+            </p>
+          </div>
+
+          {alreadyJoinedIds.length > 0 && (
+            <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-3 space-y-1.5">
+              <p className="text-xs text-slate-500">既に申告 / 所属済の団体</p>
+              <ul className="space-y-1 text-sm">
+                {(myMemberships ?? []).map((m) => (
+                  <li key={m.org_id} className="flex items-center justify-between gap-2">
+                    <span className="truncate">
+                      {(m.organizations as { name?: string } | null)?.name ?? '(団体名取得不可)'}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 shrink-0">
+                      {m.role === 'representative' ? '代表者' : m.role === 'officer' ? '役員' : '会員'}
+                      {' / '}
+                      {m.status === 'confirmed' ? '承認済' : '申請中'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <OrgClaimPicker
+            orgs={(orgs ?? []) as OrgOption[]}
+            alreadyJoinedIds={alreadyJoinedIds}
+            initial={[]}
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="submit" variant="outline">所属団体を申告</Button>
         </div>
       </form>
     </div>
