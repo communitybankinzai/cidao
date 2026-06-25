@@ -732,6 +732,7 @@ export type Database = {
           inzai_registration_number: string | null
           name: string
           public_flag: boolean
+          recruitment_status: Database["public"]["Enums"]["recruitment_status"]
           representative_id: string
           type: Database["public"]["Enums"]["organization_type"]
           updated_at: string
@@ -747,6 +748,7 @@ export type Database = {
           inzai_registration_number?: string | null
           name: string
           public_flag?: boolean
+          recruitment_status?: Database["public"]["Enums"]["recruitment_status"]
           representative_id: string
           type: Database["public"]["Enums"]["organization_type"]
           updated_at?: string
@@ -762,6 +764,7 @@ export type Database = {
           inzai_registration_number?: string | null
           name?: string
           public_flag?: boolean
+          recruitment_status?: Database["public"]["Enums"]["recruitment_status"]
           representative_id?: string
           type?: Database["public"]["Enums"]["organization_type"]
           updated_at?: string
@@ -1075,6 +1078,7 @@ export type Database = {
         | "closed"
         | "passed"
         | "rejected"
+      recruitment_status: "open" | "closed" | "invitation_only" | "unknown"
       residency_type: "citizen" | "related_population"
       sns_medium: "x" | "facebook" | "line"
       sns_status: "success" | "failed" | "pending"
@@ -1234,6 +1238,7 @@ export const Constants = {
         "passed",
         "rejected",
       ],
+      recruitment_status: ["open", "closed", "invitation_only", "unknown"],
       residency_type: ["citizen", "related_population"],
       sns_medium: ["x", "facebook", "line"],
       sns_status: ["success", "failed", "pending"],

@@ -12,6 +12,7 @@ export type EnrichedMatch = {
   name: string
   description: string | null
   type: string
+  recruitment_status: 'open' | 'closed' | 'invitation_only' | 'unknown'
   score: number
   reason: string
 }
@@ -52,18 +53,21 @@ export async function findMatchingOrgs(
     .slice(0, CANDIDATE_LIMIT)
     .map(([id]) => id)
 
-  // 2. 候補団体の name + description + type を取得
+  // 2. 候補団体の name + description + type + recruitment_status を取得
+  // 募集停止中 (closed) と招待制 (invitation_only) は除外、open と unknown のみ
   const { data: orgs } = await supabase
     .from('organizations')
-    .select('id, name, description, type')
+    .select('id, name, description, type, recruitment_status')
     .in('id', candidateIds)
     .eq('public_flag', true)
+    .in('recruitment_status', ['open', 'unknown'])
 
   const candidates = (orgs ?? []).map((o) => ({
     id: o.id,
     name: o.name,
     description: o.description ?? '',
     type: o.type,
+    recruitment_status: o.recruitment_status,
     overlap: overlapByOrg.get(o.id) ?? 0,
   }))
 
@@ -78,6 +82,7 @@ export async function findMatchingOrgs(
           name: c.name,
           description: c.description || null,
           type: c.type,
+          recruitment_status: c.recruitment_status,
           score: Math.min(1, c.overlap / interests.length),
           reason: `あなたの興味分野と ${c.overlap} 件のカテゴリが一致`,
         })),
@@ -99,6 +104,7 @@ export async function findMatchingOrgs(
           name: c.name,
           description: c.description || null,
           type: c.type,
+          recruitment_status: c.recruitment_status,
           score: Math.min(1, c.overlap / interests.length),
           reason: 'カテゴリ重なり（AI rerank 未設定）',
         })),
@@ -186,6 +192,7 @@ export async function findMatchingOrgs(
         name: c.name,
         description: c.description || null,
         type: c.type,
+        recruitment_status: c.recruitment_status,
         score: m.score,
         reason: m.reason,
       }

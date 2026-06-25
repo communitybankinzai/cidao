@@ -13,6 +13,25 @@ const ORG_TYPE_LABEL: Record<string, string> = {
   government: '行政',
 }
 
+const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
+  open: {
+    label: '🟢 募集中',
+    className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+  },
+  unknown: {
+    label: '⚪ 募集状況未確認',
+    className: 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+  },
+  invitation_only: {
+    label: '🔵 招待制',
+    className: 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300 border-sky-200 dark:border-sky-800',
+  },
+  closed: {
+    label: '⛔ 募集停止中',
+    className: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border-red-200 dark:border-red-800',
+  },
+}
+
 const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
   light:      { label: 'ライト登録',   weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
   email_only: { label: '本登録',       weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
@@ -111,26 +130,35 @@ export default async function MyPage({
               </p>
             ) : (
               <ul className="space-y-3">
-                {matchResult.map((m) => (
-                  <li key={m.org_id}>
-                    <Link
-                      href={`/orgs/${m.org_id}`}
-                      className="block p-3 rounded border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 space-y-1"
-                    >
-                      <div className="flex justify-between items-baseline gap-2">
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {m.name}
+                {matchResult.map((m) => {
+                  const badge = RECRUITMENT_BADGE[m.recruitment_status] ?? RECRUITMENT_BADGE.unknown
+                  return (
+                    <li key={m.org_id}>
+                      <Link
+                        href={`/orgs/${m.org_id}`}
+                        className="block p-3 rounded border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 space-y-1.5"
+                      >
+                        <div className="flex justify-between items-baseline gap-2">
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {m.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {ORG_TYPE_LABEL[m.type] ?? m.type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">{m.reason}</p>
+                        <span className={`inline-block text-[10px] px-2 py-0.5 rounded border ${badge.className}`}>
+                          {badge.label}
                         </span>
-                        <span className="text-[10px] text-slate-400 shrink-0">
-                          {ORG_TYPE_LABEL[m.type] ?? m.type}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">{m.reason}</p>
-                    </Link>
-                  </li>
-                ))}
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
             )}
+            <p className="text-[10px] text-slate-400">
+              ⚪ 募集状況未確認の団体は、本物の代表者による情報更新（claim）待ちの状態です。問い合わせ前に印西市市民活動支援センター等で活動状況をご確認ください。
+            </p>
             <div className="text-right">
               <Link href="/orgs" className="text-xs text-slate-500 hover:underline">
                 すべての団体を見る →

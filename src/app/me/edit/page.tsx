@@ -100,11 +100,15 @@ export default async function EditProfilePage() {
           <Field label="自己紹介（400字以内）">
             <textarea
               name="self_introduction"
-              rows={3}
+              rows={4}
               maxLength={400}
               defaultValue={member.self_introduction ?? ''}
+              placeholder="例: 印西市木下在住。環境問題に関心があり、子どもと一緒に里山保全に関わりたいと考えています。動画編集スキルがあり、団体の活動記録づくりにも貢献できます。"
               className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
             />
+            <p className="text-xs text-slate-500 mt-1.5">
+              💡 詳しく書くほど、AI があなたの関心に合う団体を見つけやすくなります。活動歴・関心の背景・期待する活動形態（定例会型／プロジェクト型など）・活かせるスキルを書くと効果的です。
+            </p>
           </Field>
 
           <Field label="スキル・できそうなこと">

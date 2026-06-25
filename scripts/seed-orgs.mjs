@@ -231,10 +231,10 @@ async function main() {
         }
 
         const ins = await pgClient.query(
-          `INSERT INTO public.organizations (name, type, description, representative_id, accept_messages, public_flag)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO public.organizations (name, type, description, representative_id, accept_messages, public_flag, recruitment_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
-          [org.name, type, description, systemMemberId, false, true],
+          [org.name, type, description, systemMemberId, false, true, 'unknown'],
         )
         const orgId = ins.rows[0].id
 
