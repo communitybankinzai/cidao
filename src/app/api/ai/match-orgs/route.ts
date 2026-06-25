@@ -119,7 +119,7 @@ export async function POST(request: Request) {
                 type: 'object',
                 properties: {
                   org_id: { type: 'string' },
-                  score: { type: 'number', minimum: 0, maximum: 1 },
+                  score: { type: 'number' },
                   reason: { type: 'string' },
                 },
                 required: ['org_id', 'score', 'reason'],

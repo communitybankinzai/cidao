@@ -37,7 +37,7 @@ export async function POST(request: Request) {
           type: 'object',
           properties: {
             category: { type: 'string', enum: CATEGORY_KEYS },
-            confidence: { type: 'number', minimum: 0, maximum: 1 },
+            confidence: { type: 'number' },
             reason: { type: 'string' },
           },
           required: ['category', 'confidence', 'reason'],
