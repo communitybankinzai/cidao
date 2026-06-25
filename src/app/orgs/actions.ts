@@ -81,6 +81,39 @@ export async function requestJoinOrg(orgId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
+  // (org_id, member_id) は memberships の主キー。再申請で duplicate 500 にならないよう
+  // 既存行を必ず先に見て、状態別に処理する。
+  const { data: existing } = await supabase
+    .from('memberships')
+    .select('status, role, left_at')
+    .eq('org_id', orgId)
+    .eq('member_id', user.id)
+    .maybeSingle()
+
+  if (existing && existing.left_at === null) {
+    // 既に active（申請中 or 承認済み）→ 何もしない冪等
+    revalidatePath(`/orgs/${orgId}`)
+    return { alreadyExists: true, status: existing.status, role: existing.role }
+  }
+
+  if (existing && existing.left_at !== null) {
+    // 過去に脱退済 → 「再加入」として更新（status='claimed' で承認待ちに戻す）
+    const { error } = await supabase
+      .from('memberships')
+      .update({
+        status: 'claimed',
+        role: 'member',
+        left_at: null,
+        approved_at: null,
+        approved_by: null,
+      })
+      .eq('org_id', orgId)
+      .eq('member_id', user.id)
+    if (error) throw new Error(`再加入申請失敗: ${error.message}`)
+    revalidatePath(`/orgs/${orgId}`)
+    return { alreadyExists: false, status: 'claimed' as const, role: 'member' as const }
+  }
+
   const { error } = await supabase.from('memberships').insert({
     org_id: orgId,
     member_id: user.id,
@@ -89,6 +122,7 @@ export async function requestJoinOrg(orgId: string) {
   })
   if (error) throw new Error(`参加申請失敗: ${error.message}`)
   revalidatePath(`/orgs/${orgId}`)
+  return { alreadyExists: false, status: 'claimed' as const, role: 'member' as const }
 }
 
 export type OrgClaim = { org_id: string; as_representative: boolean }
