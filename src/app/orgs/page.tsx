@@ -1,13 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-
-const TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体',
-  civic: '市民活動団体',
-  company: '企業',
-  government: '行政',
-}
+import OrgsBrowser from './_components/OrgsBrowser'
 
 export default async function OrgsPage() {
   const supabase = await createClient()
@@ -15,14 +9,14 @@ export default async function OrgsPage() {
 
   const { data: orgs } = await supabase
     .from('organizations')
-    .select('id, name, type, description, public_flag')
+    .select('id, name, type, description, public_flag, organization_categories(category, is_primary)')
     .eq('public_flag', true)
     .order('name')
-    .limit(100)
+    .limit(200)
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500"><Link href="/" className="hover:underline">← ホーム</Link></nav>
         <header className="flex items-end justify-between">
           <div>
@@ -34,23 +28,7 @@ export default async function OrgsPage() {
           )}
         </header>
 
-        {!orgs || orgs.length === 0 ? (
-          <p className="text-slate-400 text-center py-12">団体はまだありません</p>
-        ) : (
-          <ul className="space-y-3">
-            {orgs.map((o) => (
-              <li key={o.id}>
-                <Link href={`/orgs/${o.id}`} className="block bg-white dark:bg-slate-900 border rounded-lg p-4 hover:border-slate-400">
-                  <div className="flex justify-between mb-1">
-                    <h2 className="text-lg font-semibold">{o.name}</h2>
-                    <span className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{TYPE_LABEL[o.type]}</span>
-                  </div>
-                  {o.description && <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{o.description}</p>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        <OrgsBrowser orgs={orgs ?? []} />
       </div>
     </div>
   )
