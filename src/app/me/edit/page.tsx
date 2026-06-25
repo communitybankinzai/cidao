@@ -224,7 +224,7 @@ export default async function EditProfilePage() {
                 {(myMemberships ?? []).map((m) => (
                   <li key={m.org_id} className="flex items-center justify-between gap-2">
                     <span className="truncate">
-                      {(m.organizations as { name?: string } | null)?.name ?? '(団体名取得不可)'}
+                      {(m.organizations as unknown as { name?: string } | null)?.name ?? '(団体名取得不可)'}
                     </span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 shrink-0">
                       {m.role === 'representative' ? '代表者' : m.role === 'officer' ? '役員' : '会員'}

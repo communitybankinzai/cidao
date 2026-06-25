@@ -65,8 +65,8 @@ export default async function AdminClaimsPage() {
         ) : (
           <ul className="space-y-3">
             {rows.map((c) => {
-              const org = c.organizations as { id: string; name: string; type: string; representative_id: string | null } | null
-              const m = c.members as { display_name: string; residency_type: string; self_introduction: string | null } | null
+              const org = c.organizations as unknown as { id: string; name: string; type: string; representative_id: string | null } | null
+              const m = c.members as unknown as { display_name: string; residency_type: string; self_introduction: string | null } | null
               const hasExistingRep = !!org?.representative_id
               const isRepClaim = c.role === 'representative'
               return (
