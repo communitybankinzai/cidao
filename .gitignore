@@ -42,3 +42,9 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Claude Code セッション固有のローカルファイル
+.claude/
+
+# 単発のデバッグ調査スクリプト（infra スクリプトは scripts/setup-*.mjs に分離）
+scripts/check-*.mjs
