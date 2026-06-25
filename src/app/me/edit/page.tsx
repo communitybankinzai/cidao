@@ -39,6 +39,8 @@ export default async function EditProfilePage() {
 
   async function handleSubmit(formData: FormData) {
     'use server'
+
+    // 1. プロフィール更新
     const interests = formData.getAll('interests').map(String)
     await updateProfile({
       display_name: String(formData.get('display_name') ?? ''),
@@ -52,10 +54,8 @@ export default async function EditProfilePage() {
       ranking_opt_in: formData.get('ranking_opt_in') === 'on',
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
     })
-  }
 
-  async function handleOrgClaims(formData: FormData) {
-    'use server'
+    // 2. 所属団体申告（あれば）
     const raw = String(formData.get('org_claims') ?? '[]')
     let parsed: OrgClaim[] = []
     try {
@@ -71,11 +71,18 @@ export default async function EditProfilePage() {
     } catch {
       parsed = []
     }
-    if (parsed.length === 0) {
-      redirect('/me/edit')
+
+    let claimsResult: { inserted: number; skipped?: number } | null = null
+    if (parsed.length > 0) {
+      claimsResult = await claimMemberships(parsed)
     }
-    await claimMemberships(parsed)
-    redirect('/me?claims=submitted')
+
+    // 3. リダイレクト（クエリで結果を区別）
+    const params = new URLSearchParams({ updated: '1' })
+    if (claimsResult && claimsResult.inserted > 0) {
+      params.set('claims', String(claimsResult.inserted))
+    }
+    redirect(`/me?${params.toString()}`)
   }
 
   return (
@@ -200,20 +207,11 @@ export default async function EditProfilePage() {
           </Field>
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Link href="/me">
-            <Button type="button" variant="outline">キャンセル</Button>
-          </Link>
-          <Button type="submit">{wasLight ? '本登録する' : '保存'}</Button>
-        </div>
-      </form>
-
-      <form action={handleOrgClaims} className="max-w-3xl mx-auto space-y-4 mt-6">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
           <div>
             <h2 className="text-lg font-semibold">所属団体（任意）</h2>
             <p className="text-xs text-slate-500 mt-1">
-              既に印西市内の団体に所属している場合は、ここから申告できます。プロフィール保存とは別フォームで、いつでも追加可能です。
+              既に印西市内の団体に所属している場合はここから申告できます。代表者として申告した場合、管理者の承認後に <code className="text-[10px]">organizations.representative_id</code> が更新されます。
             </p>
           </div>
 
@@ -244,8 +242,11 @@ export default async function EditProfilePage() {
           />
         </div>
 
-        <div className="flex justify-end">
-          <Button type="submit" variant="outline">所属団体を申告</Button>
+        <div className="flex justify-end gap-2">
+          <Link href="/me">
+            <Button type="button" variant="outline">キャンセル</Button>
+          </Link>
+          <Button type="submit">{wasLight ? '本登録する' : '保存'}</Button>
         </div>
       </form>
     </div>

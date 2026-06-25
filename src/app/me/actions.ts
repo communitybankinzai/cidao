@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
 type ProfileUpdate = {
@@ -54,7 +53,6 @@ export async function updateProfile(input: ProfileUpdate) {
   if (error) throw new Error(`プロフィール更新に失敗: ${error.message}`)
 
   revalidatePath('/me')
-  redirect('/me?updated=1')
 }
 
 export async function updatePublicSettings(publicSettings: Record<string, 'public' | 'members_only' | 'consent_only' | 'private'>) {
