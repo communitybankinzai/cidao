@@ -26,6 +26,7 @@ export default async function NewOrgPage() {
   async function handleCreate(formData: FormData) {
     'use server'
     const categories = formData.getAll('categories').map(String)
+    const asRep = formData.get('as_representative') === 'yes'
     await createOrganization({
       name: String(formData.get('name') ?? ''),
       type: String(formData.get('type') ?? 'voluntary') as 'voluntary' | 'civic' | 'company' | 'government',
@@ -34,6 +35,7 @@ export default async function NewOrgPage() {
       contact_email: (formData.get('contact_email') as string | null) ?? undefined,
       contact_url: (formData.get('contact_url') as string | null) ?? undefined,
       categories,
+      as_representative: asRep,
     })
   }
 
@@ -72,6 +74,29 @@ export default async function NewOrgPage() {
           </L>
           <L label="連絡メール"><input type="email" name="contact_email" className={inp} /></L>
           <L label="ウェブサイト URL"><input type="url" name="contact_url" placeholder="https://..." className={inp} /></L>
+
+          <L label="あなたとこの団体の関係" req>
+            <div className="space-y-2 text-sm">
+              <label className="flex items-start gap-2">
+                <input type="radio" name="as_representative" value="no" defaultChecked className="mt-1" />
+                <span>
+                  <strong>代表者ではない</strong>（情報を入れただけ／会員として参加など）
+                  <span className="block text-xs text-slate-500">
+                    representative_id は空のまま作成。後で本人が「私が代表者」と申告するか、管理者が手動で代表者を設定する。
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input type="radio" name="as_representative" value="yes" className="mt-1" />
+                <span>
+                  <strong>私がこの団体の代表者です</strong>
+                  <span className="block text-xs text-slate-500">
+                    あなたを representative_id として登録。一般ユーザーの場合は管理者承認後に確定。
+                  </span>
+                </span>
+              </label>
+            </div>
+          </L>
         </div>
         <div className="flex justify-end gap-2">
           <Link href="/orgs"><Button variant="outline" type="button">キャンセル</Button></Link>

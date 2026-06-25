@@ -12,6 +12,10 @@ type OrgInput = {
   contact_email?: string
   contact_url?: string
   categories: string[]
+  // 作成者が自分を代表者として申告するかどうか。
+  // true: representative_id=user, membership role='representative'
+  // false: representative_id=null, membership role='member'（情報を入れた人 / 会員扱い）
+  as_representative: boolean
 }
 
 export async function createOrganization(input: OrgInput) {
@@ -29,8 +33,9 @@ export async function createOrganization(input: OrgInput) {
     throw new Error('プロフィール完成（本登録）後に団体を申告できます')
   }
 
-  // admin が登録する場合は即公開＋代表者確定。一般ユーザーは申告として承認待ち。
+  // admin が登録する場合は即公開。一般ユーザーは申告として承認待ち。
   const isAdmin = !!member.admin_role
+  const asRep = !!input.as_representative
   const nowIso = new Date().toISOString()
 
   const { data: org, error } = await supabase
@@ -43,9 +48,9 @@ export async function createOrganization(input: OrgInput) {
       contact_email: input.contact_email || null,
       contact_url: input.contact_url || null,
       public_flag: isAdmin,
-      // representative_id は申請者を必ず入れる（NOT NULL 制約）。
-      // 一般ユーザーの場合は承認時に管理者が必要に応じて差し替え可能。
-      representative_id: user.id,
+      // 代表者として申告した場合のみ自分を representative_id にセット。
+      // そうでない場合は NULL（後から admin/me/edit で代表者が確定）。
+      representative_id: asRep ? user.id : null,
     })
     .select('id')
     .single()
@@ -54,7 +59,7 @@ export async function createOrganization(input: OrgInput) {
   await supabase.from('memberships').insert({
     org_id: org.id,
     member_id: user.id,
-    role: 'representative',
+    role: asRep ? 'representative' : 'member',
     status: isAdmin ? 'confirmed' : 'claimed',
     approved_at: isAdmin ? nowIso : null,
     approved_by: isAdmin ? user.id : null,
