@@ -505,6 +505,7 @@ export type Database = {
         Row: {
           admin_role: Database["public"]["Enums"]["admin_role"] | null
           auth_provider_id: string
+          avatar_url: string | null
           collaboration_consent: boolean | null
           contact_permission: boolean
           contact_preferences: Json | null
@@ -530,6 +531,7 @@ export type Database = {
         Insert: {
           admin_role?: Database["public"]["Enums"]["admin_role"] | null
           auth_provider_id?: string
+          avatar_url?: string | null
           collaboration_consent?: boolean | null
           contact_permission?: boolean
           contact_preferences?: Json | null
@@ -555,6 +557,7 @@ export type Database = {
         Update: {
           admin_role?: Database["public"]["Enums"]["admin_role"] | null
           auth_provider_id?: string
+          avatar_url?: string | null
           collaboration_consent?: boolean | null
           contact_permission?: boolean
           contact_preferences?: Json | null
