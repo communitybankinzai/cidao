@@ -55,14 +55,20 @@ export default async function Home() {
           </dl>
         </section>
 
+        <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <NavCard href="/proposals" label="提案・投票" desc="F1-F3" />
+          <NavCard href="/events"    label="イベント"   desc="F7" />
+          <NavCard href="/orgs"      label="団体"       desc="F10" />
+          <NavCard href="/talent"    label="人材バンク" desc="F13" />
+          <NavCard href="/freefree"  label="FreeFree"   desc="F15" />
+          <NavCard href="/ranking"   label="ランキング" desc="F4" />
+        </section>
+
         <footer className="flex gap-3">
-          <Link href="/proposals">
-            <Button variant="default">提案を見る</Button>
-          </Link>
           {userEmail ? (
             <>
               <Link href="/me">
-                <Button variant="outline">マイページ</Button>
+                <Button variant="default">マイページ</Button>
               </Link>
               <form action="/auth/sign-out" method="post">
                 <Button type="submit" variant="outline">サインアウト</Button>
@@ -70,15 +76,24 @@ export default async function Home() {
             </>
           ) : (
             <Link href="/login">
-              <Button variant="outline">ログイン</Button>
+              <Button variant="default">ログイン</Button>
             </Link>
           )}
         </footer>
 
         <p className="text-xs text-slate-400">
-          Step 4: Next.js スキャフォールド完了 · 仕様書 v2.0 §2.3 準拠
+          Step 10 完了：MVP 18 機能群実装済 · 仕様書 v2.0 §3 準拠
         </p>
       </main>
     </div>
+  )
+}
+
+function NavCard({ href, label, desc }: { href: string; label: string; desc: string }) {
+  return (
+    <Link href={href} className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 hover:border-slate-400 transition text-center">
+      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</div>
+      <div className="text-[10px] text-slate-400 mt-0.5">{desc}</div>
+    </Link>
   )
 }
