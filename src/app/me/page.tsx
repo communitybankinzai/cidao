@@ -191,9 +191,14 @@ export default async function MyPage({
                 </span>
               </div>
             </div>
-            <Link href="/me/edit" className="shrink-0">
-              <Button size="sm" variant="outline">編集</Button>
-            </Link>
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <Link href="/me/edit">
+                <Button size="sm" variant="outline" className="w-full">編集</Button>
+              </Link>
+              <Link href="/match">
+                <Button size="sm" className="w-full">💬 AI に相談</Button>
+              </Link>
+            </div>
           </div>
         </header>
 

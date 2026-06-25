@@ -55,6 +55,22 @@ export default async function Home() {
           </dl>
         </section>
 
+        <Link
+          href="/match"
+          className="block bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950 dark:to-sky-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-5 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs tracking-[0.2em] text-emerald-700 dark:text-emerald-300 uppercase">Agent A7 · Match</div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-0.5">マッチング相談</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                印西市内 219 団体を把握した AI と会話して、あなたに合う活動を見つける
+              </p>
+            </div>
+            <span className="text-2xl shrink-0">💬</span>
+          </div>
+        </Link>
+
         <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <NavCard href="/proposals" label="提案・投票" desc="F1-F3" />
           <NavCard href="/events"    label="イベント"   desc="F7" />
