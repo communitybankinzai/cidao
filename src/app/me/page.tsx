@@ -4,6 +4,14 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-summary'
 import { categoryLabel } from '@/lib/categories'
+import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
+
+const ORG_TYPE_LABEL: Record<string, string> = {
+  voluntary: '任意団体',
+  civic: '市民活動団体',
+  company: '企業',
+  government: '行政',
+}
 
 const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
   light:      { label: 'ライト登録',   weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
@@ -55,6 +63,23 @@ export default async function MyPage({
 
   const tierInfo = TIER_LABEL[member.tier]
 
+  // /me?updated=1（保存直後）かつ興味分野が入っているとき限り、match-orgs を呼ぶ
+  // 通常閲覧では Claude API を叩かない（クレジット節約）
+  let matchResult: EnrichedMatch[] | null = null
+  let matchError: string | null = null
+  if (sp.updated && (member.interests ?? []).length > 0) {
+    try {
+      const r = await findMatchingOrgs(user.id, supabase)
+      if (r.ok) {
+        matchResult = r.matches
+      } else if (r.reason === 'no_candidates') {
+        matchResult = []
+      }
+    } catch (err) {
+      matchError = err instanceof Error ? err.message : String(err)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -65,6 +90,57 @@ export default async function MyPage({
         {sp.updated && (
           <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-3 rounded text-sm">
             プロフィールを更新しました
+          </div>
+        )}
+
+        {/* マッチング結果（更新直後のみ） */}
+        {sp.updated && matchResult !== null && (
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
+            <div className="flex justify-between items-baseline">
+              <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">
+                あなたに合う団体
+              </h2>
+              <span className="text-[10px] text-slate-400">AI が興味分野から提案</span>
+            </div>
+            {matchResult.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                現状の興味分野に合致する団体は見つかりませんでした。
+                <Link href="/orgs" className="text-slate-700 dark:text-slate-300 hover:underline ml-1">
+                  全団体一覧から探す →
+                </Link>
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {matchResult.map((m) => (
+                  <li key={m.org_id}>
+                    <Link
+                      href={`/orgs/${m.org_id}`}
+                      className="block p-3 rounded border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 space-y-1"
+                    >
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {m.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {ORG_TYPE_LABEL[m.type] ?? m.type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">{m.reason}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="text-right">
+              <Link href="/orgs" className="text-xs text-slate-500 hover:underline">
+                すべての団体を見る →
+              </Link>
+            </div>
+          </section>
+        )}
+        {sp.updated && matchError && (
+          <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-3 rounded text-xs text-amber-900 dark:text-amber-100">
+            マッチング処理に失敗しました（{matchError}）
           </div>
         )}
 
