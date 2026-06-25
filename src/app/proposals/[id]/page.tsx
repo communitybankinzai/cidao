@@ -184,7 +184,7 @@ export default async function ProposalDetailPage({
         )}
 
         {/* 層別可視化（投票期間中・終了後） */}
-        {(proposal.status === 'voting' || proposal.status === 'passed' || proposal.status === 'rejected' || proposal.status === 'closed') && (
+        {meta && (proposal.status === 'voting' || proposal.status === 'passed' || proposal.status === 'rejected' || proposal.status === 'closed') && (
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
             <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase mb-4">層別投票状況</h2>
             <LayerBars aggregates={aggregates ?? []} choices={[...meta.choices]} />

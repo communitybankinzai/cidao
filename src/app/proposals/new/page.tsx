@@ -23,9 +23,9 @@ export default async function NewProposalPage() {
           <p className="text-slate-600">
             提案投稿には本登録（メール認証以上）が必要です。マイページからプロフィールを完成させてください。
           </p>
-          <Button asChild>
-            <a href="/">ホームへ戻る</a>
-          </Button>
+          <a href="/">
+            <Button>ホームへ戻る</Button>
+          </a>
         </div>
       </div>
     )
@@ -156,9 +156,9 @@ export default async function NewProposalPage() {
         </div>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" asChild>
-            <a href="/proposals">キャンセル</a>
-          </Button>
+          <a href="/proposals">
+            <Button type="button" variant="outline">キャンセル</Button>
+          </a>
           <Button type="submit">投稿する</Button>
         </div>
       </form>

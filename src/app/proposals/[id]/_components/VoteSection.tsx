@@ -45,9 +45,9 @@ export function VoteSection({
     return (
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center space-y-3">
         <p className="text-sm text-slate-600 dark:text-slate-400">投票するにはログインが必要です</p>
-        <Button asChild>
-          <a href={`/login?next=/proposals/${proposalId}`}>ログイン</a>
-        </Button>
+        <a href={`/login?next=/proposals/${proposalId}`}>
+          <Button>ログイン</Button>
+        </a>
       </section>
     )
   }
