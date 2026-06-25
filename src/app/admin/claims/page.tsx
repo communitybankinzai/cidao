@@ -21,7 +21,7 @@ export default async function AdminClaimsPage() {
   const { data: claims } = await supabase
     .from('memberships')
     .select(
-      'org_id, member_id, role, status, joined_at, organizations(id, name, type, representative_id), members(display_name, residency_type, self_introduction)',
+      'org_id, member_id, role, status, joined_at, organizations(id, name, type, representative_id, public_flag), members(display_name, residency_type, self_introduction)',
     )
     .eq('status', 'claimed')
     .is('left_at', null)
@@ -65,10 +65,11 @@ export default async function AdminClaimsPage() {
         ) : (
           <ul className="space-y-3">
             {rows.map((c) => {
-              const org = c.organizations as unknown as { id: string; name: string; type: string; representative_id: string | null } | null
+              const org = c.organizations as unknown as { id: string; name: string; type: string; representative_id: string | null; public_flag: boolean } | null
               const m = c.members as unknown as { display_name: string; residency_type: string; self_introduction: string | null } | null
               const hasExistingRep = !!org?.representative_id
               const isRepClaim = c.role === 'representative'
+              const isNewOrg = org ? !org.public_flag : false
               return (
                 <li
                   key={`${c.org_id}:${c.member_id}`}
@@ -88,6 +89,11 @@ export default async function AdminClaimsPage() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {isNewOrg && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 font-semibold">
+                            🆕 新規団体（承認で公開）
+                          </span>
+                        )}
                         <span
                           className={
                             'px-1.5 py-0.5 rounded font-semibold ' +

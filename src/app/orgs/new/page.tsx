@@ -11,13 +11,13 @@ export default async function NewOrgPage() {
   if (!user) redirect('/login?next=/orgs/new')
 
   const { data: member } = await supabase.from('members').select('tier').eq('id', user.id).single()
-  if (!member || member.tier !== 'verified') {
+  if (!member || member.tier === 'light') {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <div className="text-center space-y-3 max-w-md">
-          <h1 className="text-2xl font-bold">住所確認が必要です</h1>
-          <p className="text-slate-600">団体登録には住所確認済 tier が必要です（仕様§3.7.1）</p>
-          <Link href="/me"><Button>マイページへ</Button></Link>
+          <h1 className="text-2xl font-bold">本登録が必要です</h1>
+          <p className="text-slate-600">団体登録にはマイページからの本登録（プロフィール完成）が必要です</p>
+          <Link href="/me/edit"><Button>本登録フォームへ</Button></Link>
         </div>
       </div>
     )
@@ -42,6 +42,10 @@ export default async function NewOrgPage() {
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
         <nav className="text-xs text-slate-500"><Link href="/orgs" className="hover:underline">← 団体一覧</Link></nav>
         <h1 className="text-3xl font-serif font-bold">新しい団体</h1>
+
+        <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
+          登録後、管理者の承認を経て一般公開されます。市民活動団体は「印西市民活動団体登録番号」（例: 08-001）を入力すると審査がスムーズです。
+        </div>
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
           <L label="団体名" req><input name="name" required maxLength={100} className={inp} /></L>
