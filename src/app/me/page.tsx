@@ -1,0 +1,210 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { Button } from '@/components/ui/button'
+import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-summary'
+import { categoryLabel } from '@/lib/categories'
+
+const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
+  light:      { label: 'ライト登録',   weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
+  email_only: { label: '本登録',       weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
+  verified:   { label: '住所確認済',   weight_citizen: '1.0', weight_related: '0.5',  color: 'bg-sky-200 text-sky-900' },
+}
+
+export default async function MyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ updated?: string }>
+}) {
+  const sp = await searchParams
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login?next=/me')
+
+  const { data: member } = await supabase
+    .from('members')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (!member) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>プロフィール取得に失敗しました</p>
+      </div>
+    )
+  }
+
+  const { data: contributions } = await supabase
+    .from('contributions')
+    .select('action_type, pt, created_at')
+    .eq('actor_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  const summary = summarize(contributions ?? [])
+  const badges = evaluateBadges(contributions ?? [], summary.total)
+
+  const { data: myProposals } = await supabase
+    .from('proposals')
+    .select('id, title, status, category, created_at')
+    .eq('proposer_id', user.id)
+    .neq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const tierInfo = TIER_LABEL[member.tier]
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <nav className="text-xs text-slate-500">
+          <Link href="/" className="hover:underline">← ホーム</Link>
+        </nav>
+
+        {sp.updated && (
+          <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-3 rounded text-sm">
+            プロフィールを更新しました
+          </div>
+        )}
+
+        <header className="space-y-2">
+          <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">マイページ</p>
+          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
+            {member.display_name}
+          </h1>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className={`px-2 py-1 rounded ${tierInfo.color}`}>{tierInfo.label}</span>
+            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
+              {member.residency_type === 'citizen' ? '市民' : '関係人口'}
+            </span>
+            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
+              投票重み {member.residency_type === 'citizen' ? tierInfo.weight_citizen : tierInfo.weight_related}
+            </span>
+          </div>
+        </header>
+
+        {/* tier 昇格動線 */}
+        {member.tier === 'light' && (
+          <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              本登録すると提案・拘束的投票・コメントができます
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              プロフィールを完成させて投票重みを上げましょう（市民 0.1 → 0.3）
+            </p>
+            <Link href="/me/edit">
+              <Button size="sm">本登録フォームを開く</Button>
+            </Link>
+          </div>
+        )}
+        {member.tier === 'email_only' && (
+          <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-4 rounded space-y-2">
+            <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">
+              住所確認で投票重みを最大化（市民 0.3 → 1.0）
+            </p>
+            <p className="text-xs text-sky-700 dark:text-sky-300">
+              本人確認ハガキの発送機能は Phase 1 後半で実装予定
+            </p>
+          </div>
+        )}
+
+        {/* 貢献度サマリ */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
+          <div className="flex justify-between items-baseline">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">貢献度</h2>
+            <span className="text-xs text-slate-400">月次上限: 320pt</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <Metric label="累計" value={`${summary.total} pt`} />
+            <Metric label="今月" value={`${summary.monthlyTotal} pt`} />
+            <Metric label="アクション数" value={`${(contributions ?? []).length}`} />
+          </div>
+
+          {Object.keys(summary.byAction).length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-slate-500">アクション内訳</summary>
+              <ul className="mt-2 space-y-1">
+                {Object.entries(summary.byAction)
+                  .sort((a, b) => b[1].pt - a[1].pt)
+                  .map(([key, v]) => (
+                    <li key={key} className="flex justify-between text-xs">
+                      <span>{ACTION_LABELS[key] ?? key}</span>
+                      <span className="font-mono text-slate-600 dark:text-slate-400">
+                        {v.count}回 / {v.pt}pt
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
+        </section>
+
+        {/* バッジ */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
+          <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">達成バッジ</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {badges.map((b) => (
+              <div
+                key={b.key}
+                className={`text-center p-3 rounded border ${
+                  b.achieved
+                    ? 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100'
+                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400'
+                }`}
+                title={b.hint}
+              >
+                <div className="text-xs font-semibold">{b.label}</div>
+                <div className="text-[10px] mt-1">{b.achieved ? '✓ 達成' : '未達成'}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 提案履歴 */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
+          <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">あなたの提案</h2>
+          {!myProposals || myProposals.length === 0 ? (
+            <p className="text-sm text-slate-400">まだ提案はありません</p>
+          ) : (
+            <ul className="space-y-2">
+              {myProposals.map((p) => (
+                <li key={p.id}>
+                  <Link href={`/proposals/${p.id}`} className="block p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <div className="text-sm font-medium">{p.title}</div>
+                    <div className="text-xs text-slate-500">{categoryLabel(p.category)} · {p.status}</div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* 設定リンク */}
+        <section className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+          <span className="text-sm">プロフィール編集・公開範囲設定</span>
+          <Link href="/me/edit">
+            <Button variant="outline" size="sm">編集</Button>
+          </Link>
+        </section>
+
+        {member.ranking_opt_in && (
+          <p className="text-xs text-center">
+            <Link href="/ranking" className="text-slate-500 hover:underline">
+              貢献度ランキングを見る →
+            </Link>
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-center">
+      <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</div>
+      <div className="text-xs text-slate-500 mt-1">{label}</div>
+    </div>
+  )
+}

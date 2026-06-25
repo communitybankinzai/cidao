@@ -60,9 +60,14 @@ export default async function Home() {
             <Button variant="default">提案を見る</Button>
           </Link>
           {userEmail ? (
-            <form action="/auth/sign-out" method="post">
-              <Button type="submit" variant="outline">サインアウト</Button>
-            </form>
+            <>
+              <Link href="/me">
+                <Button variant="outline">マイページ</Button>
+              </Link>
+              <form action="/auth/sign-out" method="post">
+                <Button type="submit" variant="outline">サインアウト</Button>
+              </form>
+            </>
           ) : (
             <Link href="/login">
               <Button variant="outline">ログイン</Button>
