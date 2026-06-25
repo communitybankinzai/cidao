@@ -115,3 +115,61 @@ export async function finalizeVotingIfDue(proposalId: string) {
   await supabase.rpc('finalize_voting', { p_proposal_id: proposalId })
   await supabase.rpc('start_voting_if_due', { p_proposal_id: proposalId })
 }
+
+// ===========================
+// 議論機能 F14
+// ===========================
+
+type CommentInput = {
+  proposalId: string
+  kind: 'question' | 'answer' | 'comment'
+  body: string
+  parentId?: string | null
+  recipientId?: string | null
+}
+
+export async function postComment(input: CommentInput) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // 字数制約（仕様§3.4.1 ポイント加算条件と一致）
+  const trimmed = input.body.trim()
+  if (input.kind === 'question' && trimmed.length < 30) {
+    throw new Error('質問は30字以上で入力してください')
+  }
+  if (input.kind === 'comment' && trimmed.length < 50) {
+    throw new Error('コメントは50字以上で入力してください')
+  }
+  if (input.kind === 'answer' && trimmed.length < 1) {
+    throw new Error('回答を入力してください')
+  }
+
+  const { error } = await supabase.from('comments').insert({
+    proposal_id: input.proposalId,
+    author_id: user.id,
+    kind: input.kind,
+    body: trimmed,
+    parent_id: input.parentId ?? null,
+    recipient_id: input.recipientId ?? null,
+  })
+  if (error) throw new Error(`投稿に失敗: ${error.message}`)
+  revalidatePath(`/proposals/${input.proposalId}`)
+}
+
+export async function likeComment(commentId: string, proposalId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // increment via RPC for atomicity（簡易版：単純な update +1。重複防止は別テーブルが必要だが Phase 1 では省略）
+  const { error } = await supabase.rpc('increment_comment_likes', { p_comment_id: commentId })
+  if (error) {
+    // フォールバック: 直接 update
+    const { data: cur } = await supabase.from('comments').select('likes').eq('id', commentId).single()
+    if (cur) {
+      await supabase.from('comments').update({ likes: (cur.likes ?? 0) + 1 }).eq('id', commentId)
+    }
+  }
+  revalidatePath(`/proposals/${proposalId}`)
+}

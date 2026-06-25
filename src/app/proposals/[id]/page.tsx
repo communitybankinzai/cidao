@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { categoryLabel, budgetLabel, bindingMeta } from '@/lib/categories'
 import { finalizeVotingIfDue } from '../actions'
 import { VoteSection } from './_components/VoteSection'
+import { CommentSection } from './_components/CommentSection'
 
 const STATUS_LABEL: Record<string, string> = {
   discussion: '議論中',
@@ -67,6 +68,35 @@ export default async function ProposalDetailPage({
       .maybeSingle()
     myVote = data
   }
+
+  // コメント・質問・回答（議論 F14）
+  const { data: rawComments } = await supabase
+    .from('comments')
+    .select('id, author_id, kind, parent_id, body, likes, created_at')
+    .eq('proposal_id', id)
+    .order('created_at', { ascending: true })
+
+  // 投稿者名取得
+  const authorIds = Array.from(new Set((rawComments ?? []).map((c) => c.author_id)))
+  const { data: authors } = authorIds.length > 0
+    ? await supabase
+        .from('members')
+        .select('id, display_name')
+        .in('id', authorIds)
+    : { data: [] }
+  const nameOf = new Map((authors ?? []).map((a) => [a.id, a.display_name]))
+
+  const comments = (rawComments ?? []).map((c) => ({
+    id: c.id,
+    author_id: c.author_id,
+    author_name: nameOf.get(c.author_id) ?? '匿名',
+    kind: c.kind as 'question' | 'answer' | 'comment',
+    parent_id: c.parent_id,
+    body: c.body,
+    likes: c.likes ?? 0,
+    created_at: c.created_at,
+    is_proposer: c.author_id === proposal.proposer_id,
+  }))
 
   // 議論残り時間 / 投票残り時間
   const now = Date.now()
@@ -160,6 +190,16 @@ export default async function ProposalDetailPage({
             <LayerBars aggregates={aggregates ?? []} choices={[...meta.choices]} />
           </section>
         )}
+
+        {/* 議論 F14 */}
+        <CommentSection
+          proposalId={id}
+          proposerId={proposal.proposer_id}
+          isLoggedIn={!!user}
+          myUserId={user?.id ?? null}
+          myVoteChoice={myVote && !myVote.retracted_at ? myVote.choice : null}
+          comments={comments}
+        />
       </article>
     </div>
   )
