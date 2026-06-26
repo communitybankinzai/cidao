@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { jstLocalToUtcIso } from '@/lib/datetime'
 
 type CreateInput = {
   title: string
@@ -80,8 +81,8 @@ export async function createEvent(input: CreateInput) {
       title: input.title,
       description: input.description,
       category: input.category,
-      start_at: input.start_at,
-      end_at: input.end_at,
+      start_at: jstLocalToUtcIso(input.start_at),
+      end_at: jstLocalToUtcIso(input.end_at),
       location: input.location ?? null,
       online_flag: input.online_flag,
       capacity: input.capacity ?? null,
@@ -181,8 +182,8 @@ export async function updateEvent(input: UpdateInput) {
       title: input.title,
       description: input.description,
       category: input.category,
-      start_at: input.start_at,
-      end_at: input.end_at,
+      start_at: jstLocalToUtcIso(input.start_at),
+      end_at: jstLocalToUtcIso(input.end_at),
       location: input.location ?? null,
       online_flag: input.online_flag,
       capacity: input.capacity ?? null,

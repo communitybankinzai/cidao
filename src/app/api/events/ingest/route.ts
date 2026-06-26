@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
+import { jstLocalToUtcIso } from '@/lib/datetime'
 
 type IngestPayload = {
   source_id: string            // 外部側の一意 ID（COCoLa の Drive file id 等）
@@ -132,8 +133,8 @@ export async function POST(request: Request) {
       title: body.title.slice(0, 80),
       description: (body.description ?? body.title).slice(0, 4000),
       category: body.category ?? 'other',
-      start_at: body.start_at,
-      end_at,
+      start_at: jstLocalToUtcIso(body.start_at),
+      end_at: jstLocalToUtcIso(end_at),
       location: body.location ?? null,
       online_flag: false,
       organizer_type: 'member',
