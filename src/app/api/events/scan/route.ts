@@ -49,7 +49,29 @@ export async function POST(request: Request) {
 
   const client = new Anthropic({ apiKey })
 
-  const response = await client.messages.create({
+  // チラシ画像を event-flyers バケットに保存（AI 抽出と並列）。
+  // 失敗しても抽出結果は返す（画像保存はベストエフォート）。
+  const ext = ({
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  } as const)[file.type as MediaType]
+  const storagePath = `${user.id}/${crypto.randomUUID()}.${ext}`
+
+  const uploadPromise = (async () => {
+    const { error: upErr } = await supabase.storage
+      .from('event-flyers')
+      .upload(storagePath, buf, { contentType: file.type, cacheControl: '3600' })
+    if (upErr) {
+      console.warn('[events/scan] flyer upload failed:', upErr.message)
+      return null
+    }
+    const { data: pub } = supabase.storage.from('event-flyers').getPublicUrl(storagePath)
+    return pub.publicUrl
+  })()
+
+  const scanPromiseInner = client.messages.create({
     model: 'claude-opus-4-7',
     max_tokens: 1024,
     output_config: {
@@ -115,19 +137,29 @@ export async function POST(request: Request) {
     ],
   })
 
+  const [flyer_image_url, response] = await Promise.all([uploadPromise, scanPromiseInner])
+
   if (response.stop_reason === 'refusal') {
-    return NextResponse.json({ error: 'refused by model' }, { status: 422 })
+    // 画像のアップロードは成功しているかもしれないので URL も返す
+    return NextResponse.json(
+      { error: 'refused by model', flyer_image_url },
+      { status: 422 },
+    )
   }
 
   const textBlock = response.content.find((b) => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') {
-    return NextResponse.json({ error: 'unexpected response shape' }, { status: 502 })
+    return NextResponse.json(
+      { error: 'unexpected response shape', flyer_image_url },
+      { status: 502 },
+    )
   }
 
   const parsed = JSON.parse(textBlock.text)
 
   return NextResponse.json({
     ...parsed,
+    flyer_image_url,
     model: 'claude-opus-4-7',
     usage: response.usage,
   })

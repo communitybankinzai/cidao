@@ -12,32 +12,42 @@ type Extracted = {
   organizer_name?: string | null
   capacity?: number | null
   fee?: number | null
+  flyer_image_url?: string | null
   confidence?: number
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'error'
 
-export function ImageScanField() {
+export function ImageScanField({
+  initialFlyerUrl = null,
+}: {
+  initialFlyerUrl?: string | null
+}) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>('')
+  const [flyerUrl, setFlyerUrl] = useState<string | null>(initialFlyerUrl)
 
   async function handleFile(file: File) {
     setStatus('loading')
-    setMessage(`「${file.name}」を AI で読み取り中…`)
+    setMessage(`「${file.name}」をアップロード + AI 読み取り中…`)
     try {
       const fd = new FormData()
       fd.append('image', file)
       const res = await fetch('/api/events/scan', { method: 'POST', body: fd })
+      const data = (await res.json().catch(() => ({}))) as Extracted & { error?: string }
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(err.error ?? `HTTP ${res.status}`)
+        // 画像アップロード自体は成功している可能性があるので flyer_image_url が来ていれば反映
+        if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
+        throw new Error(data.error ?? `HTTP ${res.status}`)
       }
-      const data = (await res.json()) as Extracted
+      if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
       const filled = fillForm(data)
       setStatus('done')
       const pct = Math.round((data.confidence ?? 0) * 100)
-      setMessage(`読み取り完了（自信度 ${pct}%、${filled}項目に反映）。内容を必ず確認してから登録してください。`)
+      setMessage(
+        `保存完了（自信度 ${pct}%、${filled}項目に反映）。チラシ画像はイベントに添付されました。内容を確認してから登録してください。`,
+      )
     } catch (e) {
       setStatus('error')
       setMessage(e instanceof Error ? e.message : '読み取りに失敗しました')
@@ -48,8 +58,6 @@ export function ImageScanField() {
     const form = inputRef.current?.closest('form')
     if (!form) return 0
     let count = 0
-    // React 19 のコントロールドコンポーネントは el.value 直書きでは内部状態を更新しない。
-    // ネイティブ setter 経由で値を設定し、bubbling change イベントで React onChange を発火させる。
     const setNativeValue = (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) => {
       const proto = Object.getPrototypeOf(el) as object
       const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
@@ -69,7 +77,8 @@ export function ImageScanField() {
       setNativeValue(el, value)
       count++
     }
-    setField('title', d.title)
+    // 「（読み取り失敗）」は反映しない（モデルが意図的に返す sentinel）
+    if (d.title && d.title !== '（読み取り失敗）') setField('title', d.title)
     setField('description', d.description)
     setField('start_at', d.start_at ?? undefined)
     setField('end_at', d.end_at ?? undefined)
@@ -87,7 +96,6 @@ export function ImageScanField() {
     }
 
     if (d.organizer_name) {
-      // 既存登録団体に名前一致するものがあれば、その UUID を選択。なければ __external__ にフォールバック。
       const sel = form.querySelector('select[name="organizer_choice"]') as HTMLSelectElement | null
       const target = d.organizer_name.trim()
       let matched = false
@@ -103,7 +111,6 @@ export function ImageScanField() {
       }
       if (!matched) {
         setField('organizer_choice', '__external__')
-        // __external__ 選択時に表示される organizer_name_text は React の次回レンダー後に出現する
         setTimeout(() => {
           const el = form.querySelector('[name="organizer_name_text"]') as HTMLInputElement | null
           if (el) setNativeValue(el, target)
@@ -112,6 +119,13 @@ export function ImageScanField() {
     }
 
     return count
+  }
+
+  function clearFlyer() {
+    setFlyerUrl(null)
+    setMessage('')
+    setStatus('idle')
+    if (inputRef.current) inputRef.current.value = ''
   }
 
   const statusColor =
@@ -125,10 +139,11 @@ export function ImageScanField() {
 
   return (
     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-2">
+      <input type="hidden" name="flyer_image_url" value={flyerUrl ?? ''} />
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium flex items-center gap-1">
           <span aria-hidden>📷</span>
-          チラシ画像から自動入力（AI）
+          チラシ画像（アップロード + AI 自動入力）
         </label>
         <input
           ref={inputRef}
@@ -141,11 +156,34 @@ export function ImageScanField() {
           }}
           disabled={status === 'loading'}
         />
+        {flyerUrl && (
+          <button
+            type="button"
+            onClick={clearFlyer}
+            className="text-xs text-slate-500 hover:text-rose-600 underline"
+          >
+            画像を外す
+          </button>
+        )}
       </div>
+      {flyerUrl && (
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={flyerUrl}
+            alt="チラシプレビュー"
+            className="max-w-[160px] max-h-[200px] rounded border border-amber-200 dark:border-amber-900 bg-white object-contain"
+          />
+          <p className="text-[10px] text-slate-500 break-all flex-1">
+            添付済み。登録後はイベント詳細ページに大きく表示されます。
+          </p>
+        </div>
+      )}
       {message && <p className={`text-xs ${statusColor}`}>{message}</p>}
       <p className="text-[10px] text-slate-500">
         画像から タイトル / 日時 / 場所 / 主催団体名 などを抽出してフォームに反映します。AI
         の抽出結果には誤りが含まれることがあります。必ず確認・修正してください。
+        画像本体は Supabase Storage に保存され、来訪した市民が詳細ページで閲覧できます。
       </p>
     </div>
   )

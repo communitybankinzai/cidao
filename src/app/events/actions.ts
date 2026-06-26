@@ -17,6 +17,7 @@ type CreateInput = {
   // '__member__' (個人) | '__external__' (未登録) | <organizations.id UUID>
   organizer_choice: string
   organizer_name_text?: string
+  flyer_image_url?: string
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -90,6 +91,7 @@ export async function createEvent(input: CreateInput) {
       organizer_name_text: name_text,
       proxy_registration: isProxy,
       proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
+      flyer_image_url: input.flyer_image_url?.trim() || null,
       status: 'open',
     })
     .select('id')
@@ -121,6 +123,7 @@ type UpdateInput = {
   // '__member__' (個人) | '__external__' (未登録) | <organizations.id UUID>
   organizer_choice: string
   organizer_name_text?: string
+  flyer_image_url?: string | null
 }
 
 export async function updateEvent(input: UpdateInput) {
@@ -189,6 +192,10 @@ export async function updateEvent(input: UpdateInput) {
       organizer_name_text: name_text,
       proxy_registration: isProxy,
       proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
+      // input.flyer_image_url が undefined のときは触らない（"" の場合のみ NULL クリア）
+      ...(input.flyer_image_url === undefined
+        ? {}
+        : { flyer_image_url: input.flyer_image_url?.trim() || null }),
     })
     .eq('id', input.id)
   if (error) throw new Error(`イベント更新失敗: ${error.message}`)

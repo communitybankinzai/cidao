@@ -73,6 +73,17 @@ export default async function EventDetailPage({
           </p>
         </header>
 
+        {event.flyer_image_url && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={event.flyer_image_url}
+              alt={`${event.title} のチラシ`}
+              className="max-h-[600px] max-w-full object-contain rounded"
+            />
+          </div>
+        )}
+
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
           <p className="text-sm text-slate-500 mb-3">
             主催:{' '}

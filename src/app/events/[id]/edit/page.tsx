@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
 import { updateEvent } from '../../actions'
+import { ImageScanField } from '../../new/_components/ImageScanField'
 import { OrganizerPicker, ORGANIZER_EXTERNAL, ORGANIZER_MEMBER } from '../../new/_components/OrganizerPicker'
 
 // JST datetime-local 用の文字列（YYYY-MM-DDTHH:MM）に変換
@@ -83,6 +84,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     const organizer_name_text = organizer_choice === '__external__'
       ? String(formData.get('organizer_name_text') ?? '').trim() || undefined
       : undefined
+    // 編集ページでは hidden input が常に存在する。"" のときは null クリア扱い、
+    // フィールド自体が無い場合のみ undefined（＝触らない）。
+    const flyerRaw = formData.get('flyer_image_url')
+    const flyer_image_url = flyerRaw === null ? undefined : String(flyerRaw)
     await updateEvent({
       id,
       title: String(formData.get('title') ?? ''),
@@ -96,6 +101,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       fee: formData.get('fee') ? Number(formData.get('fee')) : undefined,
       organizer_choice,
       organizer_name_text,
+      flyer_image_url,
     })
   }
 
@@ -106,6 +112,8 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           <Link href={`/events/${id}`} className="hover:underline">← イベント詳細</Link>
         </nav>
         <h1 className="text-3xl font-serif font-bold">イベントを編集</h1>
+
+        <ImageScanField initialFlyerUrl={event.flyer_image_url ?? null} />
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
           <L label="タイトル" req>

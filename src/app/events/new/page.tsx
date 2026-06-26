@@ -58,6 +58,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       fee: formData.get('fee') ? Number(formData.get('fee')) : undefined,
       organizer_choice,
       organizer_name_text,
+      flyer_image_url: (formData.get('flyer_image_url') as string | null) || undefined,
     })
   }
 
