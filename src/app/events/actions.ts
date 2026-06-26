@@ -107,6 +107,97 @@ export async function createEvent(input: CreateInput) {
   redirect(`/events/${data.id}`)
 }
 
+type UpdateInput = {
+  id: string
+  title: string
+  description: string
+  category: string
+  start_at: string
+  end_at: string
+  location?: string
+  online_flag: boolean
+  capacity?: number
+  fee?: number
+  // '__member__' (個人) | '__external__' (未登録) | <organizations.id UUID>
+  organizer_choice: string
+  organizer_name_text?: string
+}
+
+export async function updateEvent(input: UpdateInput) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // organizer 関連の解釈は createEvent と同じロジック
+  let organizer_type: 'member' | 'org'
+  let organizer_id: string
+  let name_text: string | null = null
+  let isProxy = false
+
+  if (input.organizer_choice === '__member__') {
+    organizer_type = 'member'
+    organizer_id = user.id
+  } else if (input.organizer_choice === '__external__') {
+    organizer_type = 'member'
+    organizer_id = user.id
+    name_text = input.organizer_name_text?.trim() || null
+    if (!name_text) throw new Error('未登録団体名を入力してください')
+    isProxy = true
+  } else if (UUID_RE.test(input.organizer_choice)) {
+    const orgId = input.organizer_choice
+    const { data: mem } = await supabase
+      .from('memberships')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('member_id', user.id)
+      .eq('status', 'confirmed')
+      .in('role', ['representative', 'officer'])
+      .maybeSingle()
+    if (mem) {
+      organizer_type = 'org'
+      organizer_id = orgId
+    } else {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', orgId)
+        .maybeSingle()
+      if (!org) throw new Error('指定された団体が見つかりません')
+      organizer_type = 'member'
+      organizer_id = user.id
+      name_text = org.name
+      isProxy = true
+    }
+  } else {
+    throw new Error('主催者の指定が不正です')
+  }
+
+  const { error } = await supabase
+    .from('events')
+    .update({
+      title: input.title,
+      description: input.description,
+      category: input.category,
+      start_at: input.start_at,
+      end_at: input.end_at,
+      location: input.location ?? null,
+      online_flag: input.online_flag,
+      capacity: input.capacity ?? null,
+      fee: input.fee ?? null,
+      organizer_type,
+      organizer_id,
+      organizer_name_text: name_text,
+      proxy_registration: isProxy,
+      proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
+    })
+    .eq('id', input.id)
+  if (error) throw new Error(`イベント更新失敗: ${error.message}`)
+
+  revalidatePath('/events')
+  revalidatePath(`/events/${input.id}`)
+  redirect(`/events/${input.id}`)
+}
+
 export async function joinEvent(eventId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

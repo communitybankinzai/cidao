@@ -3,10 +3,18 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
+import { canUserEditEvent } from '@/lib/event-permissions'
 import { joinEvent, leaveEvent } from '../actions'
 
-export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EventDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string }>
+}) {
   const { id } = await params
+  const sp = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -16,6 +24,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const { data: organizerOrg } = event.organizer_type === 'org'
     ? await supabase.from('organizations').select('id, name').eq('id', event.organizer_id).maybeSingle()
     : { data: null }
+
+  const canEdit = user
+    ? await canUserEditEvent(supabase, event, user.id, user.email ?? null)
+    : false
 
   const { data: participants } = await supabase
     .from('event_participants')
@@ -36,11 +48,24 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       <article className="max-w-3xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500"><Link href="/events" className="hover:underline">← イベント一覧</Link></nav>
 
+        {sp.error === 'forbidden' && (
+          <div className="border-l-4 border-rose-500 bg-rose-50 dark:bg-rose-950/30 px-4 py-2 rounded text-sm text-rose-800 dark:text-rose-200">
+            このイベントを編集する権限がありません（主催者本人・主催団体の役員・関連団体の連絡先メール一致のいずれかが必要）。
+          </div>
+        )}
+
         <header className="space-y-3">
-          <div className="flex gap-2 text-xs">
-            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(event.category)}</span>
-            {event.online_flag && <span className="px-2 py-1 bg-sky-100 dark:bg-sky-900 rounded">オンライン</span>}
-            <span className="px-2 py-1 bg-amber-100 dark:bg-amber-950 rounded">{event.status}</span>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex gap-2 text-xs flex-wrap">
+              <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(event.category)}</span>
+              {event.online_flag && <span className="px-2 py-1 bg-sky-100 dark:bg-sky-900 rounded">オンライン</span>}
+              <span className="px-2 py-1 bg-amber-100 dark:bg-amber-950 rounded">{event.status}</span>
+            </div>
+            {canEdit && (
+              <Link href={`/events/${id}/edit`}>
+                <Button variant="outline" size="sm">編集</Button>
+              </Link>
+            )}
           </div>
           <h1 className="text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">

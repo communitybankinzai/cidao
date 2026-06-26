@@ -11,10 +11,12 @@ export function OrganizerPicker({
   memberOrgs,
   allOrgs,
   initialChoice,
+  initialNameText,
 }: {
   memberOrgs: OrgRef[]
   allOrgs: OrgRef[]
   initialChoice?: string
+  initialNameText?: string
 }) {
   // 所属団体があれば1番目を初期選択。なければ「未登録」を初期選択（個人を回避）。
   const defaultChoice =
@@ -69,6 +71,7 @@ export function OrganizerPicker({
             name="organizer_name_text"
             maxLength={80}
             placeholder="例: 「木下音頭」愛好会"
+            defaultValue={initialNameText ?? ''}
             className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
           />
           <p className="text-xs text-slate-500">
