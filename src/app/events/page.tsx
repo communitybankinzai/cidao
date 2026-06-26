@@ -9,6 +9,12 @@ const hmFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, hour: '2-digit',
 
 function ymdInJst(date: Date): string { return ymdFmt.format(date) }
 
+// JST の指定日（"YYYY-MM-DD"）の正午に対応する UTC ミリ秒（複数日イベントの日跨ぎ展開用）
+function jstDayNoonMs(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return Date.UTC(y, m - 1, d, 3, 0, 0) // JST 12:00 = UTC 03:00
+}
+
 // JST 基準の月初/月末の UTC 境界を返す
 function monthRangeUtc(year: number, month: number): { startUtc: Date; endUtc: Date } {
   // JST = UTC+9。JST の月初 00:00 は UTC で前日 15:00。
@@ -81,8 +87,9 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     .from('events')
     .select('id, title, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url')
     .neq('status', 'draft')
-    .gte('start_at', fetchStart.toISOString())
+    // 表示窓と期間が重なるイベントを取得（複数日イベントが窓外開始でも拾う）
     .lt('start_at', fetchEnd.toISOString())
+    .gt('end_at', fetchStart.toISOString())
     .order('start_at', { ascending: true })
 
   const rows: EventRow[] = (events ?? []) as EventRow[]
@@ -100,13 +107,20 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     return '個人主催'
   }
 
-  // 日付ごとのイベント集約
+  // 日付ごとのイベント集約（複数日イベントは開始日〜終了日の各日に表示、安全のため最大62日）
   const byDate = new Map<string, EventRow[]>()
   for (const r of rows) {
-    const key = ymdInJst(new Date(r.start_at))
-    const list = byDate.get(key) ?? []
-    list.push(r)
-    byDate.set(key, list)
+    const endMs = jstDayNoonMs(ymdInJst(new Date(r.end_at)))
+    let ms = jstDayNoonMs(ymdInJst(new Date(r.start_at)))
+    let guard = 0
+    while (ms <= endMs && guard < 62) {
+      const key = ymdInJst(new Date(ms))
+      const list = byDate.get(key) ?? []
+      list.push(r)
+      byDate.set(key, list)
+      ms += 86_400_000
+      guard++
+    }
   }
 
   const cells = buildCells(y, m)
