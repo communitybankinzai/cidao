@@ -210,6 +210,31 @@ async function enrichOne(org) {
   return { ok: true, data: submit.input, usage, cost }
 }
 
+// ---- URL の生存確認（ハルシネート防止）-----------------------
+// 教訓（2026-06-27）：claude-haiku-4-5 + web_search で
+// 「公式サイト」として `machijuku.info` を返されたが、実体は 404・Wix の
+// "ConnectYourDomain" 空ドメイン。AI のメモには「公式サイトで活動内容が詳しく記載」
+// と書かれていた＝**存在しないページの内容を捏造**していた。
+// → 保存前に必ず実 fetch して、(a) 2xx でないもの、(b) parked domain パターンを
+// マッチするものは null に落とす。
+async function isUrlAlive(url) {
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 10000)
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', signal: ctrl.signal })
+    clearTimeout(t)
+    if (!res.ok) return { alive: false, reason: `http_${res.status}` }
+    const text = await res.text()
+    if (text.length < 200) return { alive: false, reason: 'empty_body' }
+    // parked domain / 工事中 / ドメイン売却ページ等
+    const parked = /ConnectYourDomain|wixErrorPagesApp|This domain may be for sale|Buy this domain|domain.*(expired|for sale)|under construction|coming soon/i
+    if (parked.test(text)) return { alive: false, reason: 'parked_or_placeholder' }
+    return { alive: true }
+  } catch (e) {
+    return { alive: false, reason: `fetch_error: ${e.message.slice(0, 60)}` }
+  }
+}
+
 // ---- DB 更新（空欄のみ補完）----------------------------------
 async function writeBack(org, ext) {
   const cleanUrl = (u) => (typeof u === 'string' && /^https?:\/\//.test(u) ? u : null)
@@ -228,8 +253,27 @@ async function writeBack(org, ext) {
     params.push(val)
   }
 
-  if (!org.website_url && cleanUrl(ext.website_url)) set('website_url', cleanUrl(ext.website_url))
-  if ((!org.sns_links || Object.keys(org.sns_links).length === 0) && Object.keys(snsClean).length > 0) set('sns_links', JSON.stringify(snsClean))
+  // website_url は **必ず実 fetch して生存確認**してから保存（ハルシネート防止）
+  const verifiedNotes = []
+  if (!org.website_url && cleanUrl(ext.website_url)) {
+    const v = await isUrlAlive(ext.website_url)
+    if (v.alive) {
+      set('website_url', cleanUrl(ext.website_url))
+    } else {
+      verifiedNotes.push(`website_url "${ext.website_url}" rejected: ${v.reason}`)
+      console.log(`    ⚠️ website_url 死亡 (${v.reason}) → 保存しない`)
+    }
+  }
+  // sns_links も各URLを fetch（Facebook/X等は基本的に 200 を返すので parked 判定のみ有効）
+  if ((!org.sns_links || Object.keys(org.sns_links).length === 0) && Object.keys(snsClean).length > 0) {
+    const snsVerified = {}
+    for (const [k, u] of Object.entries(snsClean)) {
+      const v = await isUrlAlive(u)
+      if (v.alive) snsVerified[k] = u
+      else verifiedNotes.push(`sns.${k} "${u}" rejected: ${v.reason}`)
+    }
+    if (Object.keys(snsVerified).length > 0) set('sns_links', JSON.stringify(snsVerified))
+  }
   if (ext.activity_detail && ext.activity_detail.length >= 30) set('activity_detail', ext.activity_detail)
   if (ext.activity_area) set('activity_area', ext.activity_area)
   if (ext.contact_email && /@/.test(ext.contact_email)) set('contact_email', ext.contact_email)
@@ -250,6 +294,7 @@ async function writeBack(org, ext) {
       contact_email: ext.contact_email,
       contact_url: ext.contact_url,
     },
+    url_verification: verifiedNotes,
   }))
   set('info_verified', false)
 
