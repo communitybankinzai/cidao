@@ -128,8 +128,7 @@ const SUBMIT_TOOL = {
       },
       sources: {
         type: 'array',
-        description: '抽出に使った主な出典 URL（取得できたページ）。最大 5 件。',
-        maxItems: 5,
+        description: '抽出に使った主な出典 URL（取得できたページ）。最大5件。それ以上見つかっても重要なものから5件のみ。',
         items: {
           type: 'object',
           additionalProperties: false,
