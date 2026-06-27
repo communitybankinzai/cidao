@@ -75,6 +75,13 @@ export default async function MyPage({
     .order('created_at', { ascending: false })
     .limit(10)
 
+  // 人材バンク掲載状態
+  const { data: myPr } = await supabase
+    .from('member_profiles_pr')
+    .select('message_acceptance, public_scope, contributions')
+    .eq('member_id', user.id)
+    .maybeSingle()
+
   const tierInfo = TIER_LABEL[member.tier]
 
   // /me?updated=1（保存直後）かつ興味分野が入っているとき限り、match-orgs を呼ぶ
@@ -277,6 +284,68 @@ export default async function MyPage({
               </div>
             ))}
           </div>
+        </section>
+
+        {/* 人材バンク掲載状態 */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
+          <div className="flex justify-between items-start gap-3">
+            <div>
+              <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">人材バンク掲載</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                印西市内の市民活動団体や主催者があなたを見つけて、活動への声がけが届く仕組みです
+              </p>
+            </div>
+            <Link href="/me/pr">
+              <Button size="sm" variant="outline">{myPr ? 'PRを編集' : 'PRを公開'}</Button>
+            </Link>
+          </div>
+
+          {!myPr ? (
+            <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-3 text-sm space-y-1">
+              <p className="text-slate-700 dark:text-slate-300">
+                まだ人材バンクに掲載されていません
+              </p>
+              <p className="text-xs text-slate-500">
+                資格・できそうな貢献・対応可能時間などを公開すると <Link href="/talent" className="underline">人材バンク一覧</Link> に載り、団体から声がかかる可能性があります。
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-500">声がけ受付：</span>
+                {myPr.message_acceptance === 'open' && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
+                    🟢 誰からでも
+                  </span>
+                )}
+                {myPr.message_acceptance === 'recommended_only' && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-200">
+                    🔵 AI推薦経由のみ
+                  </span>
+                )}
+                {myPr.message_acceptance === 'closed' && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200">
+                    ⛔ 受け付けない
+                  </span>
+                )}
+                <span className="text-xs text-slate-400 ml-2">公開範囲：</span>
+                <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                  {myPr.public_scope === 'public' && '完全公開'}
+                  {myPr.public_scope === 'registered_only' && '登録ユーザーのみ'}
+                  {myPr.public_scope === 'consent_only' && '連携同意者のみ'}
+                </span>
+              </div>
+              {myPr.message_acceptance === 'closed' ? (
+                <p className="text-xs text-rose-700 dark:text-rose-300">
+                  ※ 「受け付けない」設定中は、人材バンク詳細ページからのメッセージ送信ボタンが表示されません。
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  📍 <Link href={`/talent/${user.id}`} className="underline">公開ページを確認する</Link>
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         {/* 提案履歴 */}
