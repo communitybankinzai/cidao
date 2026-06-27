@@ -41,7 +41,6 @@ export default function AvatarUpload({
   const [posSaving, setPosSaving] = useState(false)
   const [posSaved, setPosSaved] = useState(false)
   const previewBoxRef = useRef<HTMLDivElement>(null)
-  const draggingRef = useRef<{ startY: number; startYPercent: number } | null>(null)
   const previewRef = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -222,27 +221,29 @@ export default function AvatarUpload({
   function onPosPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!display) return
     e.preventDefault()
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    draggingRef.current = { startY: e.clientY, startYPercent: yPercent }
-    setPosSaved(false)
-  }
-  function onPosPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    const d = draggingRef.current
-    if (!d) return
+    e.stopPropagation()
     const box = previewBoxRef.current
     if (!box) return
-    const h = box.getBoundingClientRect().height || 120
-    // 下にドラッグすると画像内の上側 (yPercent 小) を見せる感覚（画像を掴んで下に引っ張る）
-    const deltaPx = e.clientY - d.startY
-    const deltaPct = (deltaPx / h) * 100
-    const next = Math.max(0, Math.min(100, d.startYPercent - deltaPct))
-    setYPercent(next)
-  }
-  function onPosPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (draggingRef.current) {
-      ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
-      draggingRef.current = null
+    const h = box.getBoundingClientRect().height || 80
+    const startY = e.clientY
+    const startYPercent = yPercent
+    setPosSaved(false)
+
+    const onMove = (ev: PointerEvent) => {
+      const deltaPx = ev.clientY - startY
+      const deltaPct = (deltaPx / h) * 100
+      // 下にドラッグ → 画像が下に動いて見える（画像内の上側を見せる方向）→ yPercent を減らす
+      const next = Math.max(0, Math.min(100, startYPercent - deltaPct))
+      setYPercent(next)
     }
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
   }
 
   async function savePosition() {
@@ -290,9 +291,7 @@ export default function AvatarUpload({
         <div
           ref={previewBoxRef}
           onPointerDown={onPosPointerDown}
-          onPointerMove={onPosPointerMove}
-          onPointerUp={onPosPointerUp}
-          onPointerCancel={onPosPointerUp}
+          onDragStart={(e) => e.preventDefault()}
           className={'rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 ' + (display ? 'cursor-grab active:cursor-grabbing' : '')}
           style={{ width: '5rem', height: '5rem', touchAction: 'none' }}
           title={display ? 'ドラッグして表示位置を調整' : ''}
@@ -303,7 +302,8 @@ export default function AvatarUpload({
               src={display}
               alt=""
               draggable={false}
-              className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800 select-none"
+              onDragStart={(e) => e.preventDefault()}
+              className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800 select-none pointer-events-none"
               style={{ objectPosition, userSelect: 'none' }}
             />
           ) : (
