@@ -8,6 +8,7 @@ import { categoryLabel } from '@/lib/categories'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { TYPE_LABEL, legalFormLabel } from '@/lib/org-labels'
 import { requestJoinOrg, approveMembership, verifyOrgInfo } from '../actions'
+import { InterestForm } from './_components/InterestForm'
 
 const SNS_LABEL: Record<string, string> = {
   x: 'X', facebook: 'Facebook', instagram: 'Instagram', youtube: 'YouTube',
@@ -82,6 +83,22 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
   const isRepresentative = org.representative_id === user?.id
   const pending = members?.filter((m) => m.status === 'claimed') ?? []
   const confirmed = members?.filter((m) => m.status === 'confirmed') ?? []
+
+  // 人材バンクから既に「活動したい」を送ったか
+  const { data: myInterest } = user
+    ? await supabase
+        .from('org_interests')
+        .select('id, created_at')
+        .eq('org_id', id)
+        .eq('member_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null }
+  // 自分の tier（InterestForm の出し分け用）
+  const { data: myMemberForInterest } = user
+    ? await supabase.from('members').select('tier').eq('id', user.id).single()
+    : { data: null }
 
   // 編集権者か（自動拡充された provisional 情報の確認/修正ボタンの出し分け）
   const canEdit = user
@@ -265,6 +282,16 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
             </details>
           )}
         </section>
+
+        {/* 人材バンクからの応募動線（活動カレンダーと参加/加入の間） */}
+        <InterestForm
+          orgId={id}
+          orgName={org.name}
+          alreadyApplied={!!myInterest}
+          myTier={myMemberForInterest?.tier ?? null}
+          isLoggedIn={!!user}
+          hasOrgEmail={!!org.contact_email}
+        />
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <h2 className="text-sm font-semibold uppercase text-slate-500">参加 / 加入</h2>

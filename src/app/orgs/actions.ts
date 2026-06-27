@@ -84,6 +84,128 @@ export async function createOrganization(input: OrgInput) {
   }
 }
 
+/**
+ * 「人材バンクとしてこの団体で活動したい」というソフトな意思表示。
+ * memberships は作らない（正式加入は別 flow）。
+ * - org_interests に1行 INSERT
+ * - 団体に contact_email があれば Resend で通知
+ * - 本人にも控えメール
+ * メール送信は best-effort（失敗してもDB は INSERT 済みなのでユーザーには成功扱い、err は email_error 列に保存）。
+ */
+export async function expressInterest(orgId: string, message: string, contactOk: boolean) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const trimmed = message.trim()
+  if (trimmed.length < 1 || trimmed.length > 400) {
+    throw new Error('メッセージは 1〜400 字で入力してください')
+  }
+
+  const { data: member } = await supabase
+    .from('members')
+    .select('display_name, tier')
+    .eq('id', user.id)
+    .single()
+  if (!member) throw new Error('メンバー情報が見つかりません')
+  if (member.tier === 'light') {
+    throw new Error('本登録（プロフィール完成）後に応募できます')
+  }
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, name, contact_email')
+    .eq('id', orgId)
+    .single()
+  if (!org) throw new Error('団体が見つかりません')
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('org_interests')
+    .insert({
+      org_id: orgId,
+      member_id: user.id,
+      message: trimmed,
+      contact_ok: contactOk,
+    })
+    .select('id')
+    .single()
+  if (insertErr) throw new Error(`応募の保存に失敗: ${insertErr.message}`)
+
+  let emailSentAt: string | null = null
+  let emailError: string | null = null
+
+  if (org.contact_email && contactOk) {
+    try {
+      const apiKey = process.env.RESEND_API_KEY
+      const from = process.env.MAIL_FROM
+      if (apiKey && from) {
+        const { Resend } = await import('resend')
+        const resend = new Resend(apiKey)
+        const senderEmail = user.email ?? '(連絡先非公開)'
+        const orgUrl = `https://cidao.vercel.app/orgs/${orgId}`
+        const orgInterestsUrl = `https://cidao.vercel.app/orgs/${orgId}#interests`
+
+        const { error: sendErr } = await resend.emails.send({
+          from,
+          to: org.contact_email,
+          subject: `【CiDAO 人材バンク】${member.display_name} さんから「活動に参加したい」との申し出があります`,
+          text: [
+            `${org.name} ご担当者様`,
+            ``,
+            `CiDAO（市民DAO）の人材バンクから、貴団体への参加意思が届きました。`,
+            ``,
+            `─────────────────────────────`,
+            `差出人: ${member.display_name}`,
+            `連絡先: ${senderEmail}`,
+            `─────────────────────────────`,
+            `メッセージ：`,
+            ``,
+            trimmed,
+            ``,
+            `─────────────────────────────`,
+            ``,
+            `団体ページ（CiDAO）: ${orgUrl}`,
+            `応募一覧（要ログイン）: ${orgInterestsUrl}`,
+            ``,
+            `※ このメールは CiDAO の人材バンク機能による自動通知です。`,
+            `※ 受信を停止したい場合は CiDAO サイトの団体編集画面で contact_email を変更してください。`,
+            ``,
+            `Community Bank INZAI (CBI) / CiDAO`,
+          ].join('\n'),
+          replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
+        })
+        if (sendErr) {
+          emailError = sendErr.message ?? 'resend send failed'
+        } else {
+          emailSentAt = new Date().toISOString()
+        }
+      } else {
+        emailError = 'RESEND_API_KEY or MAIL_FROM not configured'
+      }
+    } catch (e) {
+      emailError = e instanceof Error ? e.message : String(e)
+    }
+  } else if (!org.contact_email) {
+    emailError = 'org has no contact_email'
+  }
+
+  // 送信結果を行に書き戻す（best-effort）
+  if (inserted) {
+    await supabase
+      .from('org_interests')
+      .update({ email_sent_at: emailSentAt, email_error: emailError })
+      .eq('id', inserted.id)
+  }
+
+  revalidatePath(`/orgs/${orgId}`)
+  return {
+    ok: true,
+    emailSent: !!emailSentAt,
+    emailError,
+    hasOrgEmail: !!org.contact_email,
+  }
+}
+
 export async function requestJoinOrg(orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
