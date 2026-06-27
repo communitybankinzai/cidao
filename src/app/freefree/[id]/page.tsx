@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { freefreeCategoryLabel } from '@/lib/freefree-categories'
+import { freefreeCategoryLabel, freefreePosterKindMeta, resolveFreefreePosterKind } from '@/lib/freefree-categories'
 import { likeFreefree, commentFreefree } from '../actions'
 
 export default async function FreefreeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +12,19 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
 
   const { data: post } = await supabase.from('freefree_posts').select('*').eq('id', id).single()
   if (!post) notFound()
+
+  // 掲載者情報（org の場合は組織情報も取得）
+  let orgInfo: { name: string; type: 'civic_group' | 'business' | 'government' } | null = null
+  if (post.poster_type === 'org') {
+    const { data: o } = await supabase
+      .from('organizations')
+      .select('name, type')
+      .eq('id', post.poster_id)
+      .single()
+    if (o) orgInfo = { name: o.name, type: o.type as 'civic_group' | 'business' | 'government' }
+  }
+  const posterKind = resolveFreefreePosterKind(post.poster_type, orgInfo?.type)
+  const posterMeta = freefreePosterKindMeta(posterKind)
 
   const { data: supports } = await supabase
     .from('supports')
@@ -34,8 +47,12 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
         <nav className="text-xs text-slate-500"><Link href="/freefree" className="hover:underline">← FreeFree</Link></nav>
 
         <header className="space-y-2">
-          <div className="text-xs text-slate-500">{freefreeCategoryLabel(post.category)}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${posterMeta.badgeClass}`}>{posterMeta.badge}</span>
+            <span className="text-xs text-slate-500">{freefreeCategoryLabel(post.category)}</span>
+          </div>
           <h1 className="text-3xl font-serif font-bold">{post.title}</h1>
+          {orgInfo && <p className="text-sm text-slate-600 dark:text-slate-400">by {orgInfo.name}</p>}
           {post.location && <p className="text-sm text-slate-500">📍 {post.location}</p>}
         </header>
 

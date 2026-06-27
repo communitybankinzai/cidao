@@ -3,10 +3,12 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { periodToDays } from '@/lib/freefree-categories'
+import { canUserEditOrg } from '@/lib/org-permissions'
+import { periodToDays, type FreefreePosterKind } from '@/lib/freefree-categories'
 
 type CreateInput = {
-  poster_type: 'member' | 'individual_business'
+  poster_kind: FreefreePosterKind   // UI論理区分（5択）
+  org_id?: string                   // poster_kind が civic_group/business/government のとき必須
   title: string
   body: string
   category: string
@@ -19,12 +21,36 @@ export async function createFreefreePost(input: CreateInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
+  // 論理区分→DB列にマッピング
+  let dbPosterType: 'member' | 'org' | 'individual_business'
+  let dbPosterId: string
+  if (input.poster_kind === 'member') {
+    dbPosterType = 'member'; dbPosterId = user.id
+  } else if (input.poster_kind === 'individual_business') {
+    dbPosterType = 'individual_business'; dbPosterId = user.id
+  } else {
+    // civic_group / business / government → org として掲載
+    if (!input.org_id) throw new Error('組織を選択してください')
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id, type, name, representative_id, contact_email')
+      .eq('id', input.org_id)
+      .single()
+    if (!org) throw new Error('組織が見つかりません')
+    if (org.type !== input.poster_kind) {
+      throw new Error(`選択した組織の種別 (${org.type}) と掲載区分 (${input.poster_kind}) が一致しません`)
+    }
+    const canEdit = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
+    if (!canEdit) throw new Error('この組織の代表者または編集権者ではないため掲載できません')
+    dbPosterType = 'org'; dbPosterId = org.id
+  }
+
   const expires_at = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
   const { data, error } = await supabase
     .from('freefree_posts')
     .insert({
-      poster_type: input.poster_type,
-      poster_id: user.id,
+      poster_type: dbPosterType,
+      poster_id: dbPosterId,
       title: input.title,
       body: input.body,
       category: input.category,

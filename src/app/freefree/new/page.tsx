@@ -1,19 +1,47 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Button } from '@/components/ui/button'
-import { FREEFREE_CATEGORIES, FREEFREE_PERIODS } from '@/lib/freefree-categories'
+import { FREEFREE_CATEGORIES, FREEFREE_PERIODS, FREEFREE_POSTER_KINDS, type FreefreePosterKind } from '@/lib/freefree-categories'
 import { createFreefreePost } from '../actions'
+import NewFreefreeForm from './_components/NewFreefreeForm'
+
+type EditableOrg = { id: string; name: string; type: 'civic_group' | 'business' | 'government' }
 
 export default async function NewFreefreePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/freefree/new')
 
+  // 自分が代表者 or membership で representative/officer の組織を取得
+  const [{ data: ownedOrgs }, { data: memberOrgs }] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id, name, type')
+      .eq('representative_id', user.id),
+    supabase
+      .from('memberships')
+      .select('org_id, organizations(id, name, type)')
+      .eq('member_id', user.id)
+      .eq('status', 'confirmed')
+      .in('role', ['representative', 'officer'])
+      .is('left_at', null),
+  ])
+
+  const orgMap = new Map<string, EditableOrg>()
+  ;(ownedOrgs ?? []).forEach((o) => orgMap.set(o.id, o as EditableOrg))
+  ;(memberOrgs ?? []).forEach((m) => {
+    const o = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations
+    if (o) orgMap.set(o.id, o as EditableOrg)
+  })
+  const editableOrgs = Array.from(orgMap.values())
+
   async function handleCreate(formData: FormData) {
     'use server'
+    const poster_kind = String(formData.get('poster_kind') ?? 'member') as FreefreePosterKind
+    const org_id = formData.get('org_id') ? String(formData.get('org_id')) : undefined
     await createFreefreePost({
-      poster_type: String(formData.get('poster_type') ?? 'member') as 'member' | 'individual_business',
+      poster_kind,
+      org_id,
       title: String(formData.get('title') ?? ''),
       body: String(formData.get('body') ?? ''),
       category: String(formData.get('category') ?? 'event'),
@@ -24,45 +52,17 @@ export default async function NewFreefreePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
+      <div className="max-w-2xl mx-auto space-y-4">
         <nav className="text-xs text-slate-500"><Link href="/freefree" className="hover:underline">← FreeFree</Link></nav>
         <h1 className="text-3xl font-serif font-bold">新しい掲載</h1>
-
-        <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
-          <L label="掲載者">
-            <select name="poster_type" className={inp}>
-              <option value="member">個人として</option>
-              <option value="individual_business">個人事業として</option>
-            </select>
-          </L>
-          <L label="タイトル（40字）" req><input name="title" required maxLength={40} className={inp} /></L>
-          <L label="本文（1000字、Markdown 可）" req>
-            <textarea name="body" required maxLength={1000} rows={6} className={inp} />
-          </L>
-          <div className="grid md:grid-cols-2 gap-3">
-            <L label="カテゴリ" req>
-              <select name="category" required className={inp}>
-                {FREEFREE_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
-            </L>
-            <L label="掲載期間" req>
-              <select name="period" required className={inp} defaultValue="p_1month">
-                {FREEFREE_PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-              </select>
-            </L>
-          </div>
-          <L label="場所"><input name="location" placeholder="例: 印西市草深" className={inp} /></L>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>
-          <Button type="submit">掲載する</Button>
-        </div>
-      </form>
+        <NewFreefreeForm
+          action={handleCreate}
+          editableOrgs={editableOrgs}
+          posterKinds={FREEFREE_POSTER_KINDS.map(({ key, label, needsOrg }) => ({ key, label, needsOrg }))}
+          categories={FREEFREE_CATEGORIES.map(({ key, label }) => ({ key, label }))}
+          periods={FREEFREE_PERIODS.map(({ key, label }) => ({ key, label }))}
+        />
+      </div>
     </div>
   )
-}
-
-const inp = "w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-function L({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
-  return <div className="space-y-1"><label className="text-sm font-medium">{label}{req && <span className="text-red-500 ml-0.5">*</span>}</label>{children}</div>
 }
