@@ -6,13 +6,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-summary'
 import { categoryLabel } from '@/lib/categories'
 import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
-
-const ORG_TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体',
-  civic: '市民活動団体',
-  company: '企業',
-  government: '行政',
-}
+import { TYPE_LABEL as ORG_TYPE_LABEL } from '@/lib/org-labels'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
   open: {

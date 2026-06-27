@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditOrg } from '@/lib/org-permissions'
+import { TYPE_LABEL, legalFormLabel } from '@/lib/org-labels'
 import { requestJoinOrg, approveMembership, verifyOrgInfo } from '../actions'
 
 const SNS_LABEL: Record<string, string> = {
@@ -16,10 +17,6 @@ const ROLE_LABEL: Record<string, string> = {
   representative: '代表',
   officer: '役員',
   member: '会員',
-}
-
-const TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体', civic: '市民活動団体', company: '企業', government: '行政',
 }
 
 export default async function OrgDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -108,8 +105,23 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
 
         <header className="space-y-3">
           <div className="flex gap-2 text-xs flex-wrap">
-            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">{TYPE_LABEL[org.type]}</span>
-            {org.inzai_registration_number && <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950 rounded">登録 {org.inzai_registration_number}</span>}
+            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">
+              {TYPE_LABEL[org.type] ?? org.type}
+            </span>
+            {org.legal_form && (
+              <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">
+                {legalFormLabel(org.legal_form)}
+              </span>
+            )}
+            {org.inzai_registration_number ? (
+              <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 rounded">
+                印西市登録 {org.inzai_registration_number}
+              </span>
+            ) : (
+              <span className="px-2 py-1 bg-slate-50 dark:bg-slate-900 text-slate-500 rounded border border-dashed border-slate-300 dark:border-slate-700">
+                市登録なし
+              </span>
+            )}
             {cats?.map((c) => (
               <span key={c.category} className={`px-2 py-1 rounded ${c.is_primary ? 'bg-amber-100 dark:bg-amber-950' : 'bg-slate-100 dark:bg-slate-800'}`}>
                 {categoryLabel(c.category)}

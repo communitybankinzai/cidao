@@ -4,15 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PROPOSAL_CATEGORIES, categoryLabel } from '@/lib/categories'
 import { Avatar } from '@/components/ui/avatar'
-
-const TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体',
-  civic: '市民活動団体',
-  company: '企業',
-  government: '行政',
-}
-
-const TYPE_ORDER: Array<keyof typeof TYPE_LABEL> = ['voluntary', 'civic', 'company', 'government']
+import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
 
 const MEMBERS_PREVIEW = 5
 
@@ -29,6 +21,7 @@ type Org = {
   id: string
   name: string
   type: string
+  legal_form?: string | null
   description: string | null
   public_flag: boolean
   inzai_registration_number?: string | null
@@ -47,9 +40,13 @@ const ROLE_LABEL: Record<string, string> = {
   member: '会員',
 }
 
+type RegFilter = 'all' | 'registered' | 'unregistered'
+
 export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [legalFormFilter, setLegalFormFilter] = useState<string | null>(null)
+  const [regFilter, setRegFilter] = useState<RegFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [openOrg, setOpenOrg] = useState<Org | null>(null)
 
@@ -57,6 +54,24 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
     const c: Record<string, number> = {}
     for (const o of orgs) c[o.type] = (c[o.type] ?? 0) + 1
     return c
+  }, [orgs])
+
+  const legalFormCounts = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const o of orgs) {
+      if (o.legal_form) c[o.legal_form] = (c[o.legal_form] ?? 0) + 1
+    }
+    return c
+  }, [orgs])
+
+  const regCounts = useMemo(() => {
+    let registered = 0
+    let unregistered = 0
+    for (const o of orgs) {
+      if (o.inzai_registration_number) registered++
+      else unregistered++
+    }
+    return { registered, unregistered }
   }, [orgs])
 
   const categoryCounts = useMemo(() => {
@@ -73,6 +88,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
     const q = query.trim().toLowerCase()
     return orgs.filter((o) => {
       if (typeFilter && o.type !== typeFilter) return false
+      if (legalFormFilter && o.legal_form !== legalFormFilter) return false
+      if (regFilter === 'registered' && !o.inzai_registration_number) return false
+      if (regFilter === 'unregistered' && o.inzai_registration_number) return false
       if (categoryFilter && !(o.organization_categories ?? []).some((c) => c.category === categoryFilter)) return false
       if (q) {
         const hay = `${o.name} ${o.description ?? ''} ${o.inzai_registration_number ?? ''}`.toLowerCase()
@@ -80,9 +98,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
       }
       return true
     })
-  }, [orgs, query, typeFilter, categoryFilter])
+  }, [orgs, query, typeFilter, legalFormFilter, regFilter, categoryFilter])
 
-  const hasActiveFilter = !!query || !!typeFilter || !!categoryFilter
+  const hasActiveFilter = !!query || !!typeFilter || !!legalFormFilter || regFilter !== 'all' || !!categoryFilter
 
   return (
     <div className="space-y-5">
@@ -106,6 +124,33 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
               return (
                 <FilterChip key={t} active={typeFilter === t} onClick={() => setTypeFilter(typeFilter === t ? null : t)}>
                   {TYPE_LABEL[t]} <span className="text-slate-400">{count}</span>
+                </FilterChip>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <FilterChip active={regFilter === 'all'} onClick={() => setRegFilter('all')}>
+              市登録 不問
+            </FilterChip>
+            <FilterChip active={regFilter === 'registered'} onClick={() => setRegFilter(regFilter === 'registered' ? 'all' : 'registered')}>
+              市登録あり <span className="text-slate-400">{regCounts.registered}</span>
+            </FilterChip>
+            <FilterChip active={regFilter === 'unregistered'} onClick={() => setRegFilter(regFilter === 'unregistered' ? 'all' : 'unregistered')}>
+              市登録なし <span className="text-slate-400">{regCounts.unregistered}</span>
+            </FilterChip>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <FilterChip active={legalFormFilter === null} onClick={() => setLegalFormFilter(null)}>
+              法人格 不問
+            </FilterChip>
+            {LEGAL_FORM_ORDER.map((lf) => {
+              const count = legalFormCounts[lf] ?? 0
+              if (!count) return null
+              return (
+                <FilterChip key={lf} active={legalFormFilter === lf} onClick={() => setLegalFormFilter(legalFormFilter === lf ? null : lf)}>
+                  {LEGAL_FORM_LABEL[lf]} <span className="text-slate-400">{count}</span>
                 </FilterChip>
               )
             })}
@@ -137,7 +182,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
         {hasActiveFilter && (
           <button
             type="button"
-            onClick={() => { setQuery(''); setTypeFilter(null); setCategoryFilter(null) }}
+            onClick={() => { setQuery(''); setTypeFilter(null); setLegalFormFilter(null); setRegFilter('all'); setCategoryFilter(null) }}
             className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
           >
             フィルタを解除
@@ -168,11 +213,18 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                         {TYPE_LABEL[o.type] ?? o.type}
                       </span>
                     </div>
-                    {o.type === 'civic' && o.inzai_registration_number && (
-                      <div className="mb-2">
-                        <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-mono">
-                          印西市登録 {o.inzai_registration_number}
-                        </span>
+                    {(o.inzai_registration_number || o.legal_form) && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {o.inzai_registration_number && (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-mono">
+                            印西市登録 {o.inzai_registration_number}
+                          </span>
+                        )}
+                        {o.legal_form && (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {LEGAL_FORM_LABEL[o.legal_form] ?? o.legal_form}
+                          </span>
+                        )}
                       </div>
                     )}
                     {o.description && (

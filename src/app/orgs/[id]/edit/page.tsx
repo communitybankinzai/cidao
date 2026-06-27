@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { canUserEditOrg } from '@/lib/org-permissions'
+import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER } from '@/lib/org-labels'
 import { updateOrgInfo } from '../../actions'
 
 // 団体情報の編集ページ。
@@ -51,6 +52,8 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
       website_url: formData.get('website_url') as string,
       contact_email: formData.get('contact_email') as string,
       contact_url: formData.get('contact_url') as string,
+      legal_form: formData.get('legal_form') as string,
+      inzai_registration_number: formData.get('inzai_registration_number') as string,
       sns_links: snsOut,
     })
     redirect(`/orgs/${id}?saved=1`)
@@ -100,6 +103,32 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1" htmlFor="legal_form">法人格</label>
+              <select
+                id="legal_form"
+                name="legal_form"
+                defaultValue={org.legal_form ?? ''}
+                className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-slate-800"
+              >
+                <option value="">（選択しない）</option>
+                {LEGAL_FORM_ORDER.map((k) => (
+                  <option key={k} value={k}>{LEGAL_FORM_LABEL[k]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1" htmlFor="inzai_registration_number">
+                印西市市民活動推進条例 第10条登録番号
+              </label>
+              <input
+                id="inzai_registration_number"
+                name="inzai_registration_number"
+                defaultValue={org.inzai_registration_number ?? ''}
+                className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-slate-800"
+                placeholder="例：08-001（未登録なら空欄）"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium mb-1" htmlFor="activity_area">活動エリア</label>
               <input

@@ -7,7 +7,8 @@ import { canUserEditOrg } from '@/lib/org-permissions'
 
 type OrgInput = {
   name: string
-  type: 'voluntary' | 'civic' | 'company' | 'government'
+  type: 'civic_group' | 'business' | 'government'  // 印西市市民活動推進条例 第2条準拠
+  legal_form?: string
   description?: string
   inzai_registration_number?: string
   contact_email?: string
@@ -44,6 +45,7 @@ export async function createOrganization(input: OrgInput) {
     .insert({
       name: input.name,
       type: input.type,
+      legal_form: input.legal_form || null,
       description: input.description ?? null,
       inzai_registration_number: input.inzai_registration_number || null,
       contact_email: input.contact_email || null,
@@ -290,6 +292,8 @@ export type OrgEditInput = {
   activity_area?: string | null
   contact_email?: string | null
   contact_url?: string | null
+  legal_form?: string | null
+  inzai_registration_number?: string | null
 }
 
 export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
@@ -321,6 +325,8 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   if (input.activity_area !== undefined) updates.activity_area = clean(input.activity_area)
   if (input.contact_email !== undefined) updates.contact_email = clean(input.contact_email)
   if (input.contact_url !== undefined) updates.contact_url = clean(input.contact_url)
+  if (input.legal_form !== undefined) updates.legal_form = clean(input.legal_form)
+  if (input.inzai_registration_number !== undefined) updates.inzai_registration_number = clean(input.inzai_registration_number)
   if (input.sns_links !== undefined) {
     if (!input.sns_links) {
       updates.sns_links = {}

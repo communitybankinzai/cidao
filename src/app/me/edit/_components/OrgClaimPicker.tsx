@@ -1,13 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-
-const TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体',
-  civic: '市民活動団体',
-  company: '企業',
-  government: '行政',
-}
+import { TYPE_LABEL } from '@/lib/org-labels'
 
 export type OrgOption = {
   id: string

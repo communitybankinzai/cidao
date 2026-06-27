@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
+import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
 import { createOrganization } from '../actions'
 
 export default async function NewOrgPage() {
@@ -29,7 +30,8 @@ export default async function NewOrgPage() {
     const asRep = formData.get('as_representative') === 'yes'
     await createOrganization({
       name: String(formData.get('name') ?? ''),
-      type: String(formData.get('type') ?? 'voluntary') as 'voluntary' | 'civic' | 'company' | 'government',
+      type: String(formData.get('type') ?? 'civic_group') as 'civic_group' | 'business' | 'government',
+      legal_form: (formData.get('legal_form') as string | null) || undefined,
       description: (formData.get('description') as string | null) ?? undefined,
       inzai_registration_number: (formData.get('inzai_registration_number') as string | null) ?? undefined,
       contact_email: (formData.get('contact_email') as string | null) ?? undefined,
@@ -46,21 +48,35 @@ export default async function NewOrgPage() {
         <h1 className="text-3xl font-serif font-bold">新しい団体</h1>
 
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
-          登録後、管理者の承認を経て一般公開されます。市民活動団体は「印西市民活動団体登録番号」（例: 08-001）を入力すると審査がスムーズです。
+          登録後、管理者の承認を経て一般公開されます。印西市市民活動推進条例 第10条で市に登録した団体は「印西市民活動団体登録番号」（例: 08-001）を入力できます（任意）。
         </div>
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
           <L label="団体名" req><input name="name" required maxLength={100} className={inp} /></L>
-          <L label="種別" req>
-            <select name="type" required className={inp}>
-              <option value="voluntary">任意団体</option>
-              <option value="civic">市民活動団体</option>
-              <option value="company">企業</option>
-              <option value="government">行政</option>
+          <L label="種別（条例第2条）" req>
+            <select name="type" required defaultValue="civic_group" className={inp}>
+              {TYPE_ORDER.map((k) => (
+                <option key={k} value={k}>{TYPE_LABEL[k]}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              市民活動団体: 営利目的でない市民活動を主目的とする団体（NPO法人/任意団体/町内会等の法人格は問わない）。
+              事業者: 営利事業を行うが市民活動も行うもの。
+            </p>
+          </L>
+          <L label="法人格">
+            <select name="legal_form" defaultValue="" className={inp}>
+              <option value="">（選択しない）</option>
+              {LEGAL_FORM_ORDER.map((k) => (
+                <option key={k} value={k}>{LEGAL_FORM_LABEL[k]}</option>
+              ))}
             </select>
           </L>
-          <L label="印西市民活動団体登録番号（市民活動団体のみ）">
+          <L label="印西市市民活動推進条例 第10条登録番号（登録済みの場合のみ）">
             <input name="inzai_registration_number" placeholder="例: 08-001" className={inp} />
+            <p className="text-xs text-slate-500 mt-1">
+              この登録は「協働の機会への参加・提案権」を得るためのもの。登録は任意で、市民活動団体でなくても登録可能。
+            </p>
           </L>
           <L label="説明"><textarea name="description" rows={4} className={inp} /></L>
           <L label="活動分野（複数）" req>

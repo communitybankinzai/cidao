@@ -1071,7 +1071,7 @@ export type Database = {
       membership_role: "representative" | "officer" | "member"
       membership_status: "claimed" | "confirmed"
       message_kind: "request" | "consult" | "thanks" | "outreach"
-      organization_type: "voluntary" | "civic" | "company" | "government"
+      organization_type: "civic_group" | "business" | "government"
       pr_message_acceptance: "open" | "recommended_only" | "closed"
       pr_public_scope: "public" | "registered_only" | "consent_only"
       proposal_status:
@@ -1230,7 +1230,7 @@ export const Constants = {
       membership_role: ["representative", "officer", "member"],
       membership_status: ["claimed", "confirmed"],
       message_kind: ["request", "consult", "thanks", "outreach"],
-      organization_type: ["voluntary", "civic", "company", "government"],
+      organization_type: ["civic_group", "business", "government"],
       pr_message_acceptance: ["open", "recommended_only", "closed"],
       pr_public_scope: ["public", "registered_only", "consent_only"],
       proposal_status: [

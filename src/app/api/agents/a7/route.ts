@@ -5,16 +5,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
+import { TYPE_LABEL } from '@/lib/org-labels'
 
 const MODEL = 'claude-opus-4-7'
 const MAX_TOKENS = 4096
-
-const TYPE_LABEL: Record<string, string> = {
-  voluntary: '任意団体',
-  civic: '市民活動団体',
-  company: '企業',
-  government: '行政',
-}
 
 const A7_PERSONA = `あなたは CiDAO（印西市民 DAO）のマッチングエージェント A7（codename: Match）です。
 役割: 印西市内の市民活動団体と市民をつなぎ、「あなたの出番」をつくる。

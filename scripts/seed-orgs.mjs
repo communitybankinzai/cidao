@@ -98,10 +98,24 @@ function mapCategories(sourceCategory) {
   return map[sourceCategory] ?? ['other']
 }
 
-// organization_type 推定
-function classifyType(name) {
-  if (/^(NPO法人|特定非営利活動法人|一般社団法人|社団法人)/.test(name)) return 'civic'
-  return 'voluntary'
+// organization_type 推定（条例 第2条準拠）
+// 旧 civic/voluntary は両方とも civic_group に統合（条例上区別なし）。
+// 法人格は別途 legal_form で表現する。
+function classifyType(_name) {
+  return 'civic_group'
+}
+
+// 法人格推定（name のプレフィックスから）
+function classifyLegalForm(name) {
+  if (/^(特定非営利活動法人|NPO法人)/.test(name)) return 'npo_corp'
+  if (/^一般社団法人/.test(name)) return 'general_incorporated_association'
+  if (/^一般財団法人/.test(name)) return 'general_incorporated_foundation'
+  if (/^公益社団法人/.test(name)) return 'public_interest_incorporated_association'
+  if (/^公益財団法人/.test(name)) return 'public_interest_incorporated_foundation'
+  if (/^社会福祉法人/.test(name)) return 'social_welfare_corporation'
+  if (/(自治会|町内会|区会)/.test(name)) return 'nintei_chien_dantai_or_unincorp'
+  if (/(株式会社|合同会社|有限会社)/.test(name)) return 'kabushiki_kaisha'
+  return 'unincorporated'
 }
 
 // description 生成（元情報 + claim 案内）
@@ -181,18 +195,19 @@ async function main() {
 
   // カテゴリ分布表示
   const categoryDist = {}
-  const typeDist = { voluntary: 0, civic: 0 }
+  const legalFormDist = {}
   for (const org of data.orgs) {
     const cats = mapCategories(org.sourceCategory)
     for (const c of cats) categoryDist[c] = (categoryDist[c] ?? 0) + 1
-    typeDist[classifyType(org.name)]++
+    const lf = classifyLegalForm(org.name)
+    legalFormDist[lf] = (legalFormDist[lf] ?? 0) + 1
   }
   console.log('cidao カテゴリ分布:')
   for (const [c, n] of Object.entries(categoryDist).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${c}: ${n}`)
   }
-  console.log('type 分布:')
-  for (const [t, n] of Object.entries(typeDist)) {
+  console.log('legal_form 分布 (type は全て civic_group):')
+  for (const [t, n] of Object.entries(legalFormDist).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${t}: ${n}`)
   }
   console.log('')
@@ -216,6 +231,7 @@ async function main() {
   for (const org of data.orgs) {
     const cats = mapCategories(org.sourceCategory)
     const type = classifyType(org.name)
+    const legalForm = classifyLegalForm(org.name)
     const description = buildDescription(org.shortDescription, org.sourceCategory)
 
     if (APPLY) {
@@ -231,10 +247,10 @@ async function main() {
         }
 
         const ins = await pgClient.query(
-          `INSERT INTO public.organizations (name, type, description, representative_id, accept_messages, public_flag, recruitment_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO public.organizations (name, type, legal_form, description, representative_id, accept_messages, public_flag, recruitment_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
-          [org.name, type, description, systemMemberId, false, true, 'unknown'],
+          [org.name, type, legalForm, description, systemMemberId, false, true, 'unknown'],
         )
         const orgId = ins.rows[0].id
 
