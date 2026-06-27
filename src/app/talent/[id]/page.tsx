@@ -30,7 +30,7 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <article className="max-w-2xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/talent" className="hover:underline">← 人材バンク</Link></nav>
+        <nav className="text-xs text-slate-500"><Link href="/talent" className="hover:underline">← 登録メンバー</Link></nav>
         <header className="flex items-center gap-4">
           <Avatar
             src={member.avatar_url}

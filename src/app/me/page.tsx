@@ -290,7 +290,7 @@ export default async function MyPage({
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
           <div className="flex justify-between items-start gap-3">
             <div>
-              <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">人材バンク掲載</h2>
+              <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">登録メンバー掲載</h2>
               <p className="text-xs text-slate-500 mt-1">
                 印西市内の市民活動団体や主催者があなたを見つけて、活動への声がけが届く仕組みです
               </p>
@@ -303,10 +303,10 @@ export default async function MyPage({
           {!myPr ? (
             <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-3 text-sm space-y-1">
               <p className="text-slate-700 dark:text-slate-300">
-                まだ人材バンクに掲載されていません
+                まだ登録メンバーとして掲載されていません
               </p>
               <p className="text-xs text-slate-500">
-                資格・できそうな貢献・対応可能時間などを公開すると <Link href="/talent" className="underline">人材バンク一覧</Link> に載り、団体から声がかかる可能性があります。
+                資格・できそうな貢献・対応可能時間などを公開すると <Link href="/talent" className="underline">登録メンバー一覧</Link> に載り、団体から声がかかる可能性があります。
               </p>
             </div>
           ) : (
@@ -337,7 +337,7 @@ export default async function MyPage({
               </div>
               {myPr.message_acceptance === 'closed' ? (
                 <p className="text-xs text-rose-700 dark:text-rose-300">
-                  ※ 「受け付けない」設定中は、人材バンク詳細ページからのメッセージ送信ボタンが表示されません。
+                  ※ 「受け付けない」設定中は、登録メンバー詳細ページからのメッセージ送信ボタンが表示されません。
                 </p>
               ) : (
                 <p className="text-xs text-slate-500">

@@ -148,11 +148,11 @@ export async function expressInterest(orgId: string, message: string, contactOk:
         const { error: sendErr } = await resend.emails.send({
           from,
           to: org.contact_email,
-          subject: `【CiDAO 人材バンク】${member.display_name} さんから「活動に参加したい」との申し出があります`,
+          subject: `【CiDAO 登録メンバー】${member.display_name} さんから「活動に参加したい」との申し出があります`,
           text: [
             `${org.name} ご担当者様`,
             ``,
-            `CiDAO（市民DAO）の人材バンクから、貴団体への参加意思が届きました。`,
+            `CiDAO（市民DAO）の登録メンバーから、貴団体への参加意思が届きました。`,
             ``,
             `─────────────────────────────`,
             `差出人: ${member.display_name}`,
@@ -167,7 +167,7 @@ export async function expressInterest(orgId: string, message: string, contactOk:
             `団体ページ（CiDAO）: ${orgUrl}`,
             `応募一覧（要ログイン）: ${orgInterestsUrl}`,
             ``,
-            `※ このメールは CiDAO の人材バンク機能による自動通知です。`,
+            `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
             `※ 受信を停止したい場合は CiDAO サイトの団体編集画面で contact_email を変更してください。`,
             ``,
             `Community Bank INZAI (CBI) / CiDAO`,

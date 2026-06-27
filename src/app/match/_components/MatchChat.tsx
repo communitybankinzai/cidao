@@ -5,19 +5,48 @@ import { Button } from '@/components/ui/button'
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
-const INITIAL_SUGGESTIONS = [
-  '平日の昼間に1〜2時間だけ動けます。何ができそう？',
-  '子ども向けの活動を手伝える団体はある？',
-  '環境保全・里山に関わる団体を教えて',
-  'ボーイスカウト印西第1団について教えて',
-]
+export type MatchMode = 'orgs' | 'members'
 
-function linkifyOrgPaths(text: string): React.ReactNode[] {
+const CONFIG: Record<MatchMode, {
+  apiPath: string
+  placeholder: string
+  suggestions: string[]
+  linkRegex: RegExp
+  footerNote: string
+}> = {
+  orgs: {
+    apiPath: '/api/agents/a7',
+    placeholder: 'A7（団体マッチング）に質問する…',
+    suggestions: [
+      '平日の昼間に1〜2時間だけ動けます。何ができそう？',
+      '子ども向けの活動を手伝える団体はある？',
+      '環境保全・里山に関わる団体を教えて',
+      'ボーイスカウト印西第1団について教えて',
+    ],
+    linkRegex: /\/orgs\/([0-9a-f-]{8,})/g,
+    footerNote: 'A7 は印西市内 219 団体の概要のみを根拠に回答します。詳しい連絡先や直近の予定は各団体ページ・公式 SNS をご確認ください。',
+  },
+  members: {
+    apiPath: '/api/agents/a7-members',
+    placeholder: 'A7（メンバーマッチング）に質問する…',
+    suggestions: [
+      'Webサイト制作を手伝ってくれる人はいますか？',
+      '子育て支援イベントに協力できる人を探しています',
+      '広報・SNS運用が得意な人とつながりたい',
+      '休日の地域活動に参加したい人と会いたい',
+    ],
+    linkRegex: /\/talent\/([0-9a-f-]{8,})/g,
+    footerNote: 'A7 は CiDAO に登録され公開を許可しているメンバーのプロフィールのみを根拠に回答します。具体的な連絡は各メンバーのページから「声がけ」ボタンでお願いします。',
+  },
+}
+
+function linkify(text: string, re: RegExp): React.ReactNode[] {
   const parts: React.ReactNode[] = []
-  const re = /\/orgs\/([0-9a-f-]{8,})/g
   let last = 0
   let m: RegExpExecArray | null
   let i = 0
+  // 各 send 毎に新規 regex を使うため lastIndex を 0 に
+  re.lastIndex = 0
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index))
     parts.push(
@@ -31,7 +60,8 @@ function linkifyOrgPaths(text: string): React.ReactNode[] {
   return parts
 }
 
-export default function MatchChat() {
+export default function MatchChat({ mode = 'orgs' }: { mode?: MatchMode }) {
+  const config = CONFIG[mode]
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -42,6 +72,12 @@ export default function MatchChat() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // モード切替時は会話をリセット
+  useEffect(() => {
+    setMessages([])
+    setError(null)
+  }, [mode])
 
   async function send(content: string) {
     if (!content.trim() || streaming) return
@@ -55,7 +91,7 @@ export default function MatchChat() {
     abortRef.current = ac
 
     try {
-      const res = await fetch('/api/agents/a7', {
+      const res = await fetch(config.apiPath, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ messages: next }),
@@ -111,7 +147,7 @@ export default function MatchChat() {
           <div className="text-sm text-slate-500 space-y-2">
             <p>例えばこんな質問から始められます:</p>
             <ul className="space-y-1.5">
-              {INITIAL_SUGGESTIONS.map((s) => (
+              {config.suggestions.map((s) => (
                 <li key={s}>
                   <button
                     type="button"
@@ -135,7 +171,7 @@ export default function MatchChat() {
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100')
                 }
               >
-                {m.role === 'assistant' ? linkifyOrgPaths(m.content || (streaming ? '...' : '')) : m.content}
+                {m.role === 'assistant' ? linkify(m.content || (streaming ? '...' : ''), config.linkRegex) : m.content}
               </div>
             </div>
           ))
@@ -160,7 +196,7 @@ export default function MatchChat() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="A7（Match）に質問する…"
+          placeholder={config.placeholder}
           disabled={streaming}
           className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
         />
@@ -175,7 +211,7 @@ export default function MatchChat() {
       </form>
 
       <p className="text-[11px] text-slate-400">
-        A7 は印西市内 219 団体の概要のみを根拠に回答します。詳しい連絡先や直近の予定は各団体ページ・公式 SNS をご確認ください。
+        {config.footerNote}
       </p>
     </div>
   )

@@ -95,11 +95,11 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
         const { error: sendErr } = await resend.emails.send({
           from,
           to: targetEmail,
-          subject: `【CiDAO 人材バンク】${senderMember.display_name} さんから「活動の声がけ」が届いています`,
+          subject: `【CiDAO 登録メンバー】${senderMember.display_name} さんから「活動の声がけ」が届いています`,
           text: [
             `${targetMember.display_name} 様`,
             ``,
-            `CiDAO の人材バンクのプロフィールをご覧になった ${senderMember.display_name} さんから、活動への声がけが届いています。`,
+            `CiDAO の登録メンバーのプロフィールをご覧になった ${senderMember.display_name} さんから、活動への声がけが届いています。`,
             ``,
             `─────────────────────────────`,
             `差出人: ${senderMember.display_name}`,
@@ -113,7 +113,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
             ``,
             `あなたのプロフィール: ${profileUrl}`,
             ``,
-            `※ このメールは CiDAO の人材バンク機能による自動通知です。`,
+            `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
             `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
             `※ メッセージを今後受け取りたくない場合は CiDAO の /me/pr で『メッセージ受付』を『受け付けない』に変更してください。`,
             ``,

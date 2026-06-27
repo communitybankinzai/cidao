@@ -21,8 +21,8 @@ export default async function TalentPage() {
         <header className="flex items-end justify-between">
           <div>
             <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-            <h1 className="text-3xl font-serif font-bold">人材バンク</h1>
-            <p className="text-sm text-slate-500 mt-2">スキル・経験を活かしたい人と募集する人をつなぐ</p>
+            <h1 className="text-3xl font-serif font-bold">登録メンバー</h1>
+            <p className="text-sm text-slate-500 mt-2">スキル・経験を活かしたい人と募集する人をつなぐ。AI と会話で探したい場合は <Link href="/match?mode=members" className="underline hover:text-slate-700 dark:hover:text-slate-300">マッチング相談</Link> をご利用ください。</p>
           </div>
           {user && (
             <Link href="/me/pr"><Button variant="outline">自分のPRを編集</Button></Link>

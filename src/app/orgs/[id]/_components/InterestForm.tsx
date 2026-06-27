@@ -33,13 +33,13 @@ export function InterestForm({
           <span className="font-semibold">この団体で活動したい人を募集しています</span>
         </p>
         <p className="text-xs text-slate-500">
-          人材バンクに登録すると、このような団体に「活動に参加したい」と申し出ることができます。
+          登録メンバーになると、このような団体に「活動に参加したい」と申し出ることができます。
         </p>
         <a
           href={`/login?next=/orgs/${orgId}`}
           className="inline-block text-sm bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-medium"
         >
-          ログインして人材バンクに登録
+          ログインして登録メンバーになる
         </a>
       </div>
     )
@@ -49,7 +49,7 @@ export function InterestForm({
     return (
       <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded text-sm space-y-2">
         <p className="font-semibold text-amber-900 dark:text-amber-100">
-          本登録（人材バンク登録）すると、この団体に参加意思を伝えられます
+          本登録（登録メンバー化）すると、この団体に参加意思を伝えられます
         </p>
         <p className="text-xs text-amber-700 dark:text-amber-300">
           /me/edit で興味分野と自己紹介を入力すると、応募できるようになります。

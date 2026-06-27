@@ -55,27 +55,50 @@ export default async function Home() {
           </dl>
         </section>
 
-        <Link
-          href="/match"
-          className="block bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950 dark:to-sky-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-5 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
-        >
-          <div className="flex items-center justify-between gap-3">
+        <section className="bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950 dark:to-sky-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-5 space-y-3">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs tracking-[0.2em] text-emerald-700 dark:text-emerald-300 uppercase">Agent A7 · Match</div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-0.5">マッチング相談</h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                印西市内 219 団体を把握した AI と会話して、あなたに合う活動を見つける
+                AI と会話して、あなたに合う活動先や仲間を見つける
               </p>
             </div>
-            <span className="text-2xl shrink-0">💬</span>
+            <span className="text-2xl shrink-0" aria-hidden>💬</span>
           </div>
-        </Link>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <Link
+              href="/match"
+              className="block bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60 rounded-md p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg" aria-hidden>🏛️</span>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">団体を探す</h4>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                印西市内 219 団体から、活動可能な時間・関心に合う団体を AI が提案します。
+              </p>
+            </Link>
+            <Link
+              href="/match?mode=members"
+              className="block bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60 rounded-md p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg" aria-hidden>🤝</span>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">メンバーを探す</h4>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                登録メンバーの中から、声をかけたい人を AI が提案します。
+              </p>
+            </Link>
+          </div>
+        </section>
 
         <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <NavCard href="/proposals" label="提案・投票" desc="F1-F3" />
           <NavCard href="/events"    label="イベント"   desc="F7" />
           <NavCard href="/orgs"      label="団体"       desc="F10" />
-          <NavCard href="/talent"    label="人材バンク" desc="F13" />
+          <NavCard href="/talent"    label="登録メンバー" desc="F13" />
           <NavCard href="/freefree"  label="FreeFree"   desc="F15" />
           <NavCard href="/ranking"   label="ランキング" desc="F4" />
         </section>
