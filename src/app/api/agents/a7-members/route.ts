@@ -34,7 +34,7 @@ type MemberRow = {
   member_id: string
   qualifications: string | null
   contributions: string | null
-  available_times: string | null
+  available_times: string[] | null
   message_acceptance: string
   members: {
     display_name: string
@@ -58,7 +58,7 @@ function buildMembersBlock(rows: MemberRow[]): string {
       const interests = (m.interests ?? []).join(', ') || '（未登録）'
       const quals = (r.qualifications ?? '').replace(/\s+/g, ' ').slice(0, 160) || '-'
       const contribs = (r.contributions ?? '').replace(/\s+/g, ' ').slice(0, 240) || '-'
-      const times = (r.available_times ?? '').replace(/\s+/g, ' ').slice(0, 120) || '-'
+      const times = (r.available_times ?? []).join(', ').slice(0, 120) || '-'
       return [
         `[${r.member_id}] ${name}`,
         `  スキル: ${skills}`,
