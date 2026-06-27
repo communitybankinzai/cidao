@@ -82,6 +82,18 @@ export default async function MyPage({
     .eq('member_id', user.id)
     .maybeSingle()
 
+  // ログインメアドが org.contact_email と一致する団体（団体メアドでログインしてないかチェック）
+  const userEmail = user.email ?? null
+  let collidingOrgs: { id: string; name: string }[] = []
+  if (userEmail) {
+    const { data } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .ilike('contact_email', userEmail)
+      .limit(5)
+    collidingOrgs = data ?? []
+  }
+
   const tierInfo = TIER_LABEL[member.tier]
 
   // /me?updated=1（保存直後）かつ興味分野が入っているとき限り、match-orgs を呼ぶ
@@ -208,6 +220,21 @@ export default async function MyPage({
             </div>
           </div>
         </header>
+
+        {/* 団体メアドでログイン中の警告 */}
+        {collidingOrgs.length > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              ⚠ このメアド ({user.email}) は団体の連絡先と一致しています
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              一致する団体: {collidingOrgs.map((o) => o.name).join(' / ')}
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              CiDAO アカウントは「1人1メアド」が原則です。団体メアドで登録すると、後任の代表に引き継ぐ際に履歴・投票・admin 権限がすべて旧代表のものとして残ります。<strong>個人のメアドで登録し直すことを推奨</strong>します（団体への投稿はログイン後に「団体として」を選択する形なので、個人メアドのままで全機能利用可能）。
+            </p>
+          </div>
+        )}
 
         {/* tier 昇格動線 */}
         {member.tier === 'light' && (

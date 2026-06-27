@@ -50,9 +50,12 @@ export default function NewFreefreeForm({
           </select>
           {needsOrg && (
             orgsForCurrentKind.length > 0 ? (
-              <select name="org_id" required className={`${inp} mt-2`}>
-                {orgsForCurrentKind.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
+              <>
+                <select name="org_id" required className={`${inp} mt-2`}>
+                  {orgsForCurrentKind.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">あなた個人のアカウントから「団体として」投稿します（団体メアドへの切替は不要）</p>
+              </>
             ) : (
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded p-2">
                 該当する組織の代表者・編集権者として登録されていません。<br />

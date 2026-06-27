@@ -75,6 +75,7 @@ export default function LoginPage() {
                 送信前にご確認ください
               </p>
               <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside leading-relaxed">
+                <li><strong>ログインメアドは「あなた個人のメアド」を推奨</strong>します。団体メアド（info@... 等）でも登録可ですが、団体への投稿はログイン後に「団体として」を選択する形なので、個人メアドのままで全機能利用できます</li>
                 <li>ログインリンクは数分以内にメールで届きます（迷惑メールフォルダもご確認ください）</li>
                 <li>同じメールアドレスへの送信は<strong>1時間に2通まで</strong>に制限されています。ボタンを連打せず、まず受信トレイをご確認ください</li>
                 <li>すでに届いているリンクが未使用なら、そちらをそのままお使いいただけます</li>
