@@ -170,7 +170,12 @@ export default async function MyPage({
         <header className="space-y-3">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">マイページ</p>
           <div className="flex items-center gap-4">
-            <Avatar src={member.avatar_url} name={member.display_name} size="xl" />
+            <Avatar
+              src={member.avatar_url}
+              name={member.display_name}
+              size="xl"
+              objectPosition="center 70%"
+            />
             <div className="flex-1 min-w-0 space-y-2">
               <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 truncate">
                 {member.display_name}

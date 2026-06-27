@@ -23,11 +23,15 @@ export function Avatar({
   name,
   size = 'md',
   className,
+  objectPosition,
 }: {
   src?: string | null
   name: string
   size?: Size
   className?: string
+  /** CSS object-position 値（例: 'center 30%' で画像の上寄りを見せる）。
+   *  デフォルトは 'center' で画像中央。プロフィール写真の構図に応じて調整可能。 */
+  objectPosition?: string
 }) {
   const base = cn(
     'inline-flex items-center justify-center rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700',
@@ -42,6 +46,7 @@ export function Avatar({
         src={src}
         alt=""
         className={cn(base, 'object-cover bg-slate-100 dark:bg-slate-800')}
+        style={objectPosition ? { objectPosition } : undefined}
       />
     )
   }
