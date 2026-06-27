@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 
 export default async function TalentPage() {
   const supabase = await createClient()
@@ -9,7 +10,7 @@ export default async function TalentPage() {
   // RLS により公開範囲に応じてフィルタされる
   const { data: profiles } = await supabase
     .from('member_profiles_pr')
-    .select('member_id, qualifications, contributions, available_times, message_acceptance, members(display_name, skills_text)')
+    .select('member_id, qualifications, contributions, available_times, message_acceptance, members(display_name, skills_text, avatar_url, avatar_position, avatar_zoom)')
     .neq('message_acceptance', 'closed')
     .limit(50)
 
@@ -33,13 +34,27 @@ export default async function TalentPage() {
         ) : (
           <ul className="grid md:grid-cols-2 gap-3">
             {profiles.map((p) => {
-              const mem = Array.isArray(p.members) ? p.members[0] : p.members
+              const mem = (Array.isArray(p.members) ? p.members[0] : p.members) as
+                | { display_name: string; skills_text: string | null; avatar_url: string | null; avatar_position: string | null; avatar_zoom: number | null }
+                | null
+              const name = mem?.display_name ?? '匿名'
               return (
                 <li key={p.member_id}>
                   <Link href={`/talent/${p.member_id}`} className="block bg-white dark:bg-slate-900 border rounded-lg p-4 hover:border-slate-400">
-                    <div className="font-semibold mb-1">{mem?.display_name ?? '匿名'}</div>
-                    {mem?.skills_text && <div className="text-xs text-slate-500 mb-2">{mem.skills_text}</div>}
-                    {p.contributions && <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-3">{p.contributions}</p>}
+                    <div className="flex items-start gap-3">
+                      <Avatar
+                        src={mem?.avatar_url ?? null}
+                        name={name}
+                        size="lg"
+                        objectPosition={mem?.avatar_position ?? undefined}
+                        zoom={mem?.avatar_zoom ?? undefined}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold mb-1 truncate">{name}</div>
+                        {mem?.skills_text && <div className="text-xs text-slate-500 mb-2 line-clamp-2">{mem.skills_text}</div>}
+                        {p.contributions && <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-3">{p.contributions}</p>}
+                      </div>
+                    </div>
                   </Link>
                 </li>
               )

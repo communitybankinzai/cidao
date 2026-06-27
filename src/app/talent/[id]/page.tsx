@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 
 export default async function TalentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -10,7 +11,7 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
 
   const { data: member } = await supabase
     .from('members')
-    .select('display_name, skills_text, self_introduction')
+    .select('display_name, skills_text, self_introduction, avatar_url, avatar_position, avatar_zoom')
     .eq('id', id)
     .single()
   if (!member) notFound()
@@ -25,7 +26,14 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <article className="max-w-2xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500"><Link href="/talent" className="hover:underline">← 人材バンク</Link></nav>
-        <header>
+        <header className="flex items-center gap-4">
+          <Avatar
+            src={member.avatar_url}
+            name={member.display_name}
+            size="xl"
+            objectPosition={member.avatar_position ?? undefined}
+            zoom={member.avatar_zoom ?? undefined}
+          />
           <h1 className="text-3xl font-serif font-bold">{member.display_name}</h1>
         </header>
 
