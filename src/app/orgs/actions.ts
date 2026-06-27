@@ -294,6 +294,7 @@ export type OrgEditInput = {
   contact_url?: string | null
   legal_form?: string | null
   inzai_registration_number?: string | null
+  logo_url?: string | null
 }
 
 export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
@@ -327,6 +328,7 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   if (input.contact_url !== undefined) updates.contact_url = clean(input.contact_url)
   if (input.legal_form !== undefined) updates.legal_form = clean(input.legal_form)
   if (input.inzai_registration_number !== undefined) updates.inzai_registration_number = clean(input.inzai_registration_number)
+  if (input.logo_url !== undefined) updates.logo_url = clean(input.logo_url)
   if (input.sns_links !== undefined) {
     if (!input.sns_links) {
       updates.sns_links = {}

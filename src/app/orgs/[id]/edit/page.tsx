@@ -1,7 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
+import { OrgLogo } from '@/components/ui/org-logo'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER } from '@/lib/org-labels'
 import { updateOrgInfo } from '../../actions'
@@ -45,6 +47,33 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
       const v = formData.get(`sns_${f.key}`)
       if (typeof v === 'string' && v.trim()) snsOut[f.key] = v.trim()
     }
+
+    // ロゴアップロード（あれば）
+    let newLogoUrl: string | undefined
+    const logoFile = formData.get('logo') as File | null
+    const removeLogo = formData.get('remove_logo') === '1'
+    if (removeLogo) {
+      newLogoUrl = ''  // 空文字で送って clean() が NULL に変換
+    } else if (logoFile && logoFile.size > 0) {
+      const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      if (supaUrl && serviceKey) {
+        const admin = createSupabaseClient(supaUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const ext = (logoFile.name.split('.').pop() ?? 'png').toLowerCase().slice(0, 4)
+        const path = `org-${id}-${Date.now()}.${ext}`
+        const buf = Buffer.from(await logoFile.arrayBuffer())
+        const { error: upErr } = await admin.storage
+          .from('org-logos')
+          .upload(path, buf, { contentType: logoFile.type || 'image/png', upsert: true })
+        if (!upErr) {
+          const { data: pub } = admin.storage.from('org-logos').getPublicUrl(path)
+          newLogoUrl = pub.publicUrl
+        }
+      }
+    }
+
     await updateOrgInfo(id, {
       description: formData.get('description') as string,
       activity_detail: formData.get('activity_detail') as string,
@@ -55,6 +84,7 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
       legal_form: formData.get('legal_form') as string,
       inzai_registration_number: formData.get('inzai_registration_number') as string,
       sns_links: snsOut,
+      ...(newLogoUrl !== undefined && { logo_url: newLogoUrl }),
     })
     redirect(`/orgs/${id}?saved=1`)
   }
@@ -77,6 +107,26 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
         </header>
 
         <form action={save} className="space-y-5 bg-white dark:bg-slate-900 border rounded-lg p-6">
+          <div className="flex items-center gap-4">
+            <OrgLogo src={org.logo_url} name={org.name} size="xl" />
+            <div className="flex-1 space-y-2">
+              <label className="block text-sm font-medium" htmlFor="logo">団体ロゴ（5MB以下、png/jpg/webp/gif/svg）</label>
+              <input
+                id="logo"
+                name="logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-slate-100 dark:file:bg-slate-700 file:text-sm hover:file:bg-slate-200 dark:hover:file:bg-slate-600"
+              />
+              {org.logo_url && (
+                <label className="flex items-center gap-2 text-xs text-slate-500">
+                  <input type="checkbox" name="remove_logo" value="1" /> 既存ロゴを削除する
+                </label>
+              )}
+              <p className="text-xs text-slate-500">未選択なら既存ロゴをそのまま維持</p>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="activity_detail">活動詳細</label>
             <textarea

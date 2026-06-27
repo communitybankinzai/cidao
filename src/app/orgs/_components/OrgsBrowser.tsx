@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PROPOSAL_CATEGORIES, categoryLabel } from '@/lib/categories'
 import { Avatar } from '@/components/ui/avatar'
+import { OrgLogo } from '@/components/ui/org-logo'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
 
 const MEMBERS_PREVIEW = 5
@@ -22,6 +23,7 @@ type Org = {
   name: string
   type: string
   legal_form?: string | null
+  logo_url?: string | null
   description: string | null
   public_flag: boolean
   inzai_registration_number?: string | null
@@ -207,11 +209,14 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
               <li key={o.id}>
                 <div className="flex h-full flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 dark:hover:border-slate-600 transition">
                   <Link href={`/orgs/${o.id}`} className="block">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h2 className="text-base font-semibold leading-snug">{o.name}</h2>
-                      <span className="shrink-0 text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
-                        {TYPE_LABEL[o.type] ?? o.type}
-                      </span>
+                    <div className="flex items-start gap-3 mb-2">
+                      <OrgLogo src={o.logo_url} name={o.name} size="md" />
+                      <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
+                        <h2 className="text-base font-semibold leading-snug">{o.name}</h2>
+                        <span className="shrink-0 text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
+                          {TYPE_LABEL[o.type] ?? o.type}
+                        </span>
+                      </div>
                     </div>
                     {(o.inzai_registration_number || o.legal_form) && (
                       <div className="mb-2 flex flex-wrap gap-1">

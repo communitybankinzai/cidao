@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { OrgLogo } from '@/components/ui/org-logo'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { TYPE_LABEL, legalFormLabel } from '@/lib/org-labels'
@@ -104,6 +105,9 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
         <nav className="text-xs text-slate-500"><Link href="/orgs" className="hover:underline">← 団体一覧</Link></nav>
 
         <header className="space-y-3">
+          <div className="flex items-start gap-4">
+            <OrgLogo src={org.logo_url} name={org.name} size="xl" />
+            <div className="flex-1 min-w-0 space-y-3">
           <div className="flex gap-2 text-xs flex-wrap">
             <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">
               {TYPE_LABEL[org.type] ?? org.type}
@@ -129,6 +133,8 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
             ))}
           </div>
           <h1 className="text-3xl font-serif font-bold">{org.name}</h1>
+            </div>
+          </div>
         </header>
 
         {(org.description || org.activity_detail) && (
