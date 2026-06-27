@@ -287,7 +287,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
         <InterestForm
           orgId={id}
           orgName={org.name}
-          alreadyApplied={!!myInterest}
+          lastAppliedAt={myInterest?.created_at ?? null}
           myTier={myMemberForInterest?.tier ?? null}
           isLoggedIn={!!user}
           hasOrgEmail={!!org.contact_email}

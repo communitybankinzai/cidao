@@ -7,14 +7,14 @@ import { expressInterest } from '../../actions'
 export function InterestForm({
   orgId,
   orgName,
-  alreadyApplied,
+  lastAppliedAt,
   myTier,
   isLoggedIn,
   hasOrgEmail,
 }: {
   orgId: string
   orgName: string
-  alreadyApplied: boolean
+  lastAppliedAt: string | null
   myTier: string | null
   isLoggedIn: boolean
   hasOrgEmail: boolean
@@ -64,27 +64,53 @@ export function InterestForm({
     )
   }
 
-  if (alreadyApplied || result) {
+  // 直近の送信結果（このセッションでの送信）
+  if (result) {
     return (
-      <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm space-y-1">
+      <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm space-y-2">
         <p className="font-semibold text-emerald-900 dark:text-emerald-100">
           ✓ 「活動に参加したい」を送信しました
         </p>
-        {result && result.emailSent && (
+        {result.emailSent && (
           <p className="text-xs text-emerald-700 dark:text-emerald-300">
             {orgName} の連絡先メールに通知が送信されました。返事は団体から直接届きます。
           </p>
         )}
-        {result && !result.emailSent && hasOrgEmail && (
+        {!result.emailSent && hasOrgEmail && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
             記録は保存されました。ただし通知メールは送信できませんでした（{result.emailError ?? 'unknown'}）。
           </p>
         )}
-        {result && !hasOrgEmail && (
+        {!result.hasOrgEmail && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
             記録は保存されましたが、この団体には連絡先メールが登録されていないため、直接の通知は届いていません。
           </p>
         )}
+        <button
+          type="button"
+          onClick={() => { setResult(null); setMessage(''); setOpen(true) }}
+          className="text-xs text-emerald-700 dark:text-emerald-300 underline hover:no-underline"
+        >
+          もう一度送信する
+        </button>
+      </div>
+    )
+  }
+
+  // 過去に応募したことがある（別セッション・前回送信）
+  if (lastAppliedAt && !open) {
+    const dateStr = new Date(lastAppliedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    return (
+      <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm space-y-2">
+        <p className="font-semibold text-emerald-900 dark:text-emerald-100">
+          ✓ {orgName} には {dateStr} に応募済み
+        </p>
+        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          団体からの返事が届いていない場合や、追加で伝えたいことがある場合は再度メッセージを送れます。
+        </p>
+        <Button onClick={() => setOpen(true)} size="sm" variant="outline">
+          もう一度送信する
+        </Button>
       </div>
     )
   }
