@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { ContactForm } from './_components/ContactForm'
 
 export default async function TalentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -21,6 +21,11 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
     .select('*')
     .eq('member_id', id)
     .single()
+
+  const { data: myTierRow } = user
+    ? await supabase.from('members').select('tier').eq('id', user.id).single()
+    : { data: null }
+  const myTier = myTierRow?.tier ?? null
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -74,10 +79,18 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
           </div>
         )}
 
-        {user && user.id !== id && pr?.message_acceptance !== 'closed' && (
-          <div className="bg-sky-50 dark:bg-sky-950 border rounded-lg p-6 text-center">
-            <p className="text-sm mb-3">メッセージ送信機能は Step 11 で実装予定</p>
-            <Button disabled>メッセージを送る（未実装）</Button>
+        {user?.id !== id && pr?.message_acceptance !== 'closed' && (
+          <ContactForm
+            targetMemberId={id}
+            targetName={member.display_name}
+            isLoggedIn={!!user}
+            myTier={myTier}
+            acceptanceMode={pr?.message_acceptance ?? null}
+          />
+        )}
+        {user?.id !== id && pr?.message_acceptance === 'closed' && (
+          <div className="bg-slate-50 dark:bg-slate-900 border rounded-lg p-4 text-center text-sm text-slate-500">
+            このメンバーは現在メッセージを受け付けていません
           </div>
         )}
       </article>

@@ -53,6 +53,7 @@ export default async function TalentPage() {
                         <div className="font-semibold mb-1 truncate">{name}</div>
                         {mem?.skills_text && <div className="text-xs text-slate-500 mb-2 line-clamp-2">{mem.skills_text}</div>}
                         {p.contributions && <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-3">{p.contributions}</p>}
+                        <p className="text-[11px] text-sky-600 dark:text-sky-400 mt-2">詳細を見て声をかける →</p>
                       </div>
                     </div>
                   </Link>
