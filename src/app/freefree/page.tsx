@@ -10,7 +10,7 @@ export default async function FreefreePage() {
 
   const { data: posts } = await supabase
     .from('freefree_posts')
-    .select('id, title, body, category, location, created_at, expires_at, poster_type, poster_id')
+    .select('id, title, body, category, location, created_at, expires_at, poster_type, poster_id, images')
     .eq('status', 'active')
     .order('created_at', { ascending: false })
     .limit(100)
@@ -38,6 +38,7 @@ export default async function FreefreePage() {
       expires_at: p.expires_at,
       posterKind: resolveFreefreePosterKind(p.poster_type, org?.type),
       orgName: org?.name ?? null,
+      images: p.images ?? null,
     }
   })
 

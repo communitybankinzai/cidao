@@ -20,6 +20,7 @@ export type FreefreeRow = {
   expires_at: string | null
   posterKind: FreefreePosterKind
   orgName: string | null
+  images: string[] | null
 }
 
 type SortKey = 'newest' | 'expiring_soon'
@@ -131,21 +132,27 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
             const expiringSoon = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0
             return (
               <li key={p.id}>
-                <Link href={`/freefree/${p.id}`} className="block bg-white dark:bg-slate-900 border rounded-lg p-4 hover:border-slate-400 dark:hover:border-slate-600 transition">
-                  <div className="flex items-center justify-between mb-2 gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${meta.badgeClass}`}>{meta.badge}</span>
-                    <span className="text-xs text-slate-500">{freefreeCategoryLabel(p.category)}</span>
-                  </div>
-                  <div className="font-semibold mb-1">{p.title}</div>
-                  {p.orgName && <div className="text-xs text-slate-500 mb-1">by {p.orgName}</div>}
-                  <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{p.body}</p>
-                  <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-                    {p.location ? <span>📍 {p.location}</span> : <span />}
-                    {expiringSoon && (
-                      <span className="text-amber-600 dark:text-amber-400 font-medium">
-                        ⏰ あと{daysLeft === 0 ? '本日まで' : `${daysLeft}日`}
-                      </span>
-                    )}
+                <Link href={`/freefree/${p.id}`} className="block bg-white dark:bg-slate-900 border rounded-lg overflow-hidden hover:border-slate-400 dark:hover:border-slate-600 transition">
+                  {p.images && p.images.length > 0 && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={p.images[0]} alt={p.title} className="w-full h-32 object-cover" />
+                  )}
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-2 gap-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${meta.badgeClass}`}>{meta.badge}</span>
+                      <span className="text-xs text-slate-500">{freefreeCategoryLabel(p.category)}</span>
+                    </div>
+                    <div className="font-semibold mb-1">{p.title}</div>
+                    {p.orgName && <div className="text-xs text-slate-500 mb-1">by {p.orgName}</div>}
+                    <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{p.body}</p>
+                    <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+                      {p.location ? <span>📍 {p.location}</span> : <span />}
+                      {expiringSoon && (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">
+                          ⏰ あと{daysLeft === 0 ? '本日まで' : `${daysLeft}日`}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </Link>
               </li>

@@ -56,6 +56,17 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
           {post.location && <p className="text-sm text-slate-500">📍 {post.location}</p>}
         </header>
 
+        {post.images && post.images.length > 0 && (
+          <div className={post.images.length === 1 ? '' : 'grid grid-cols-2 md:grid-cols-3 gap-2'}>
+            {post.images.map((url: string, i: number) => (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                <img src={url} alt={`画像 ${i + 1}`} className={post.images.length === 1 ? 'w-full max-h-96 object-cover rounded-lg border border-slate-200 dark:border-slate-700' : 'w-full aspect-square object-cover rounded-lg border border-slate-200 dark:border-slate-700'} />
+              </a>
+            ))}
+          </div>
+        )}
+
         <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
           <p className="whitespace-pre-wrap">{post.body}</p>
         </div>

@@ -75,6 +75,54 @@ export async function resizeImageToSquare(file: File, opts: ResizeOptions = {}):
   }
 }
 
+// 縦横比を保ったまま長辺を maxEdge に縮小（拡大はしない）。FreeFree 等の自由縦横画像用。
+export async function resizeImagePreserveAspect(file: File, opts: { maxEdge?: number; quality?: number; preferWebp?: boolean } = {}): Promise<ResizeResult> {
+  const maxEdge = Math.max(64, Math.floor(opts.maxEdge ?? 1200))
+  const quality = Math.min(1, Math.max(0.1, opts.quality ?? 0.82))
+  const preferWebp = opts.preferWebp ?? true
+
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  } catch {
+    bitmap = await loadViaImage(file)
+  }
+
+  try {
+    const srcW = bitmap.width
+    const srcH = bitmap.height
+    const longEdge = Math.max(srcW, srcH)
+    const scale = longEdge > maxEdge ? maxEdge / longEdge : 1
+    const outW = Math.round(srcW * scale)
+    const outH = Math.round(srcH * scale)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas 2d context が取得できません')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bitmap, 0, 0, srcW, srcH, 0, 0, outW, outH)
+
+    let blob: Blob | null = null
+    let extension: 'webp' | 'jpg' = 'jpg'
+    if (preferWebp) {
+      blob = await canvasToBlob(canvas, 'image/webp', quality)
+      if (blob) extension = 'webp'
+    }
+    if (!blob) {
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+      extension = 'jpg'
+    }
+    if (!blob) throw new Error('画像の変換に失敗しました')
+
+    return { blob, extension, width: outW, height: outH, originalBytes: file.size, outputBytes: blob.size }
+  } finally {
+    if ('close' in bitmap) bitmap.close()
+  }
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), type, quality))
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import FreefreeImagesUpload from './FreefreeImagesUpload'
 
 type PosterKindOpt = { key: string; label: string; needsOrg: boolean }
 type EditableOrg = { id: string; name: string; type: 'civic_group' | 'business' | 'government' }
@@ -10,12 +11,14 @@ type Opt = { key: string; label: string }
 
 export default function NewFreefreeForm({
   action,
+  userId,
   editableOrgs,
   posterKinds,
   categories,
   periods,
 }: {
   action: (formData: FormData) => Promise<void>
+  userId: string
   editableOrgs: EditableOrg[]
   posterKinds: PosterKindOpt[]
   categories: Opt[]
@@ -74,6 +77,7 @@ export default function NewFreefreeForm({
           </L>
         </div>
         <L label="場所"><input name="location" placeholder="例: 印西市草深" className={inp} /></L>
+        <FreefreeImagesUpload userId={userId} />
       </div>
       <div className="flex justify-end gap-2">
         <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>

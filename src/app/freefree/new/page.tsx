@@ -39,6 +39,7 @@ export default async function NewFreefreePage() {
     'use server'
     const poster_kind = String(formData.get('poster_kind') ?? 'member') as FreefreePosterKind
     const org_id = formData.get('org_id') ? String(formData.get('org_id')) : undefined
+    const images = (formData.getAll('images') as string[]).filter((u) => u.length > 0).slice(0, 3)
     await createFreefreePost({
       poster_kind,
       org_id,
@@ -47,6 +48,7 @@ export default async function NewFreefreePage() {
       category: String(formData.get('category') ?? 'event'),
       location: (formData.get('location') as string | null) || undefined,
       period: String(formData.get('period') ?? 'p_1month') as 'p_1week' | 'p_1month' | 'p_3months',
+      images,
     })
   }
 
@@ -57,6 +59,7 @@ export default async function NewFreefreePage() {
         <h1 className="text-3xl font-serif font-bold">新しい掲載</h1>
         <NewFreefreeForm
           action={handleCreate}
+          userId={user.id}
           editableOrgs={editableOrgs}
           posterKinds={FREEFREE_POSTER_KINDS.map(({ key, label, needsOrg }) => ({ key, label, needsOrg }))}
           categories={FREEFREE_CATEGORIES.map(({ key, label }) => ({ key, label }))}

@@ -24,10 +24,21 @@ export default function LoginPage() {
 
     if (error) {
       setStatus('error')
-      setError(error.message)
+      setError(translateAuthError(error.message))
     } else {
       setStatus('sent')
     }
+  }
+
+  function translateAuthError(message: string): string {
+    const lower = message.toLowerCase()
+    if (lower.includes('rate limit')) {
+      return 'メール送信が一時的に制限されています。直近で届いたログインリンクが残っていればそれをご利用ください。新しいリンクが必要な場合は1時間ほどおいてから再度お試しください。'
+    }
+    if (lower.includes('invalid') && lower.includes('email')) {
+      return 'メールアドレスの形式が正しくありません。'
+    }
+    return message
   }
 
   return (
@@ -59,6 +70,17 @@ export default function LoginPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+            <div className="rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                送信前にご確認ください
+              </p>
+              <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside leading-relaxed">
+                <li>ログインリンクは数分以内にメールで届きます（迷惑メールフォルダもご確認ください）</li>
+                <li>同じメールアドレスへの送信は<strong>1時間に2通まで</strong>に制限されています。ボタンを連打せず、まず受信トレイをご確認ください</li>
+                <li>すでに届いているリンクが未使用なら、そちらをそのままお使いいただけます</li>
+              </ul>
+            </div>
+
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                 メールアドレス

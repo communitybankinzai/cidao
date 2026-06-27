@@ -14,6 +14,7 @@ type CreateInput = {
   category: string
   location?: string
   period: 'p_1week' | 'p_1month' | 'p_3months'
+  images?: string[]                 // public URL 最大3つ（client がアップロード済み）
 }
 
 export async function createFreefreePost(input: CreateInput) {
@@ -46,6 +47,7 @@ export async function createFreefreePost(input: CreateInput) {
   }
 
   const expires_at = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
+  const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
   const { data, error } = await supabase
     .from('freefree_posts')
     .insert({
@@ -58,6 +60,7 @@ export async function createFreefreePost(input: CreateInput) {
       period: input.period,
       status: 'active',
       expires_at,
+      images: images.length > 0 ? images : null,
     })
     .select('id')
     .single()
