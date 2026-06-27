@@ -40,6 +40,15 @@ export default async function NewFreefreePage() {
     const poster_kind = String(formData.get('poster_kind') ?? 'member') as FreefreePosterKind
     const org_id = formData.get('org_id') ? String(formData.get('org_id')) : undefined
     const images = (formData.getAll('images') as string[]).filter((u) => u.length > 0).slice(0, 3)
+    const couponContent = String(formData.get('coupon_content') ?? '').trim()
+    const usageLimitRaw = formData.get('coupon_usage_limit')
+    const coupon = couponContent
+      ? {
+          content: couponContent,
+          conditions: String(formData.get('coupon_conditions') ?? '').trim() || undefined,
+          usage_limit: usageLimitRaw ? Number(usageLimitRaw) : undefined,
+        }
+      : undefined
     await createFreefreePost({
       poster_kind,
       org_id,
@@ -49,6 +58,7 @@ export default async function NewFreefreePage() {
       location: (formData.get('location') as string | null) || undefined,
       period: String(formData.get('period') ?? 'p_1month') as 'p_1week' | 'p_1month' | 'p_3months',
       images,
+      coupon,
     })
   }
 

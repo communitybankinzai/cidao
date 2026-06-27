@@ -249,7 +249,13 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
 
       {/* ビュー本体 */}
       {view === 'calendar' ? (
-        <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
+        <>
+          <p className="md:hidden text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 -mt-1">
+            <span aria-hidden>📱</span>
+            <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
+          </p>
+          <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
+        </>
       ) : (
         <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} />
       )}

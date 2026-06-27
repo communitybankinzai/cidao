@@ -25,6 +25,7 @@ export default function NewFreefreeForm({
   periods: Opt[]
 }) {
   const [posterKind, setPosterKind] = useState<string>('member')
+  const [couponEnabled, setCouponEnabled] = useState(false)
   const currentKindMeta = posterKinds.find((k) => k.key === posterKind)
   const needsOrg = !!currentKindMeta?.needsOrg
 
@@ -78,6 +79,50 @@ export default function NewFreefreeForm({
         </div>
         <L label="場所"><input name="location" placeholder="例: 印西市草深" className={inp} /></L>
         <FreefreeImagesUpload userId={userId} />
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={couponEnabled}
+            onChange={(e) => setCouponEnabled(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm font-medium">🎟 クーポンを同時に発行する</span>
+        </label>
+        {couponEnabled && (
+          <div className="space-y-3 pl-6 border-l-2 border-amber-200 dark:border-amber-800">
+            <L label="クーポン内容（80字）" req={couponEnabled}>
+              <input
+                name="coupon_content"
+                placeholder="例: ドリンク1杯無料 / 全品10%オフ"
+                maxLength={80}
+                required={couponEnabled}
+                className={inp}
+              />
+            </L>
+            <L label="使用条件（200字、任意）">
+              <textarea
+                name="coupon_conditions"
+                placeholder="例: 平日のみ / 1人1回まで / 提示で利用可能"
+                maxLength={200}
+                rows={2}
+                className={inp}
+              />
+            </L>
+            <L label="使用上限（空白=無制限）">
+              <input
+                name="coupon_usage_limit"
+                type="number"
+                min={1}
+                placeholder="例: 50"
+                className={inp}
+              />
+            </L>
+            <p className="text-xs text-slate-500">有効期限は掲載期間と同じになります</p>
+          </div>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>

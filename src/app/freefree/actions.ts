@@ -6,6 +6,12 @@ import { createClient } from '@/lib/supabase/server'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { periodToDays, type FreefreePosterKind } from '@/lib/freefree-categories'
 
+type CouponInput = {
+  content: string
+  conditions?: string
+  usage_limit?: number              // null/undefined = 無制限
+}
+
 type CreateInput = {
   poster_kind: FreefreePosterKind   // UI論理区分（5択）
   org_id?: string                   // poster_kind が civic_group/business/government のとき必須
@@ -15,6 +21,7 @@ type CreateInput = {
   location?: string
   period: 'p_1week' | 'p_1month' | 'p_3months'
   images?: string[]                 // public URL 最大3つ（client がアップロード済み）
+  coupon?: CouponInput              // 任意のクーポン同時作成
 }
 
 export async function createFreefreePost(input: CreateInput) {
@@ -65,8 +72,37 @@ export async function createFreefreePost(input: CreateInput) {
     .select('id')
     .single()
   if (error) throw new Error(`掲載失敗: ${error.message}`)
+
+  // 任意でクーポン同時作成（best-effort、失敗しても投稿は成立）
+  if (input.coupon && input.coupon.content.trim()) {
+    const couponExpires = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
+    await supabase.from('coupons').insert({
+      post_id: data.id,
+      content: input.coupon.content.trim(),
+      conditions: input.coupon.conditions?.trim() || null,
+      usage_limit: input.coupon.usage_limit ?? null,
+      expires_at: couponExpires,
+    })
+  }
+
   revalidatePath('/freefree')
   redirect(`/freefree/${data.id}`)
+}
+
+export async function useCoupon(couponId: string, postId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+  const { error } = await supabase
+    .from('coupon_uses')
+    .insert({ coupon_id: couponId, member_id: user.id })
+  if (error) {
+    if (error.message.includes('duplicate') || error.message.includes('unique')) {
+      throw new Error('このクーポンは既に使用済みです')
+    }
+    throw new Error(`使用失敗: ${error.message}`)
+  }
+  revalidatePath(`/freefree/${postId}`)
 }
 
 export async function likeFreefree(postId: string) {

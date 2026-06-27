@@ -15,6 +15,18 @@ export default async function FreefreePage() {
     .order('created_at', { ascending: false })
     .limit(100)
 
+  // クーポン保有 post_id セット
+  const postIds = (posts ?? []).map((p) => p.id)
+  const couponPostIds = new Set<string>()
+  if (postIds.length > 0) {
+    const { data: cs } = await supabase
+      .from('coupons')
+      .select('post_id')
+      .in('post_id', postIds)
+      .gt('expires_at', new Date().toISOString())
+    ;(cs ?? []).forEach((c) => couponPostIds.add(c.post_id))
+  }
+
   // org poster の場合、organizations.type と name を一括取得
   const orgIds = (posts ?? []).filter((p) => p.poster_type === 'org').map((p) => p.poster_id)
   const orgMap = new Map<string, { name: string; type: 'civic_group' | 'business' | 'government' }>()
@@ -39,6 +51,7 @@ export default async function FreefreePage() {
       posterKind: resolveFreefreePosterKind(p.poster_type, org?.type),
       orgName: org?.name ?? null,
       images: p.images ?? null,
+      hasCoupon: couponPostIds.has(p.id),
     }
   })
 

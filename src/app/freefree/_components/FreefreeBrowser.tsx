@@ -21,6 +21,7 @@ export type FreefreeRow = {
   posterKind: FreefreePosterKind
   orgName: string | null
   images: string[] | null
+  hasCoupon: boolean
 }
 
 type SortKey = 'newest' | 'expiring_soon'
@@ -139,7 +140,12 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
                   )}
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-2 gap-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${meta.badgeClass}`}>{meta.badge}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${meta.badgeClass}`}>{meta.badge}</span>
+                        {p.hasCoupon && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🎟 クーポン</span>
+                        )}
+                      </div>
                       <span className="text-xs text-slate-500">{freefreeCategoryLabel(p.category)}</span>
                     </div>
                     <div className="font-semibold mb-1">{p.title}</div>

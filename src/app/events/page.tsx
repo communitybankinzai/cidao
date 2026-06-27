@@ -79,16 +79,30 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         <nav className="text-xs text-slate-500">
           <Link href="/" className="hover:underline">← ホーム</Link>
         </nav>
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">イベント</h1>
+        <header className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
+              <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
+                印西市のイベント・活動カレンダー
+              </h1>
+            </div>
+            {user && (
+              <Link href="/events/new">
+                <Button>イベント登録</Button>
+              </Link>
+            )}
           </div>
-          {user && (
-            <Link href="/events/new">
-              <Button>イベント登録</Button>
-            </Link>
-          )}
+          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+            印西市内で活動する<strong className="text-slate-800 dark:text-slate-200">市民団体・企業・行政・個人</strong>が主催するイベントをまとめて掲載しています。各イベントをタップすると詳細・参加方法をご覧いただけます。
+            {!user && (
+              <>
+                {' '}
+                <Link href="/login" className="underline hover:text-slate-900 dark:hover:text-slate-100">ログイン</Link>
+                すると、ご自身のイベントを登録できます。
+              </>
+            )}
+          </p>
         </header>
 
         <EventsBrowser

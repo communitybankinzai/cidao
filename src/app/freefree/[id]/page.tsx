@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { freefreeCategoryLabel, freefreePosterKindMeta, resolveFreefreePosterKind } from '@/lib/freefree-categories'
-import { likeFreefree, commentFreefree } from '../actions'
+import { likeFreefree, commentFreefree, useCoupon } from '../actions'
 
 export default async function FreefreeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,10 +35,39 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
   const likes = supports?.filter((s) => s.kind === 'like') ?? []
   const comments = supports?.filter((s) => s.kind === 'comment') ?? []
 
+  // クーポン取得（有効期限内のみ）
+  const nowIso = new Date().toISOString()
+  const { data: coupons } = await supabase
+    .from('coupons')
+    .select('id, content, conditions, usage_limit, expires_at, created_at')
+    .eq('post_id', id)
+    .gt('expires_at', nowIso)
+    .order('created_at', { ascending: false })
+
+  // クーポンごとの使用回数 + 自分が使ったか
+  const couponIds = (coupons ?? []).map((c) => c.id)
+  const usesByCoupon = new Map<string, { total: number; usedBySelf: boolean }>()
+  if (couponIds.length > 0) {
+    const { data: allUses } = await supabase
+      .from('coupon_uses')
+      .select('coupon_id, member_id')
+      .in('coupon_id', couponIds)
+    ;(allUses ?? []).forEach((u) => {
+      const cur = usesByCoupon.get(u.coupon_id) ?? { total: 0, usedBySelf: false }
+      cur.total += 1
+      if (user && u.member_id === user.id) cur.usedBySelf = true
+      usesByCoupon.set(u.coupon_id, cur)
+    })
+  }
+
   async function handleLike() { 'use server'; await likeFreefree(id) }
   async function handleComment(formData: FormData) {
     'use server'
     await commentFreefree(id, String(formData.get('body') ?? ''))
+  }
+  async function handleUseCoupon(formData: FormData) {
+    'use server'
+    await useCoupon(String(formData.get('coupon_id') ?? ''), id)
   }
 
   return (
@@ -70,6 +99,48 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
         <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
           <p className="whitespace-pre-wrap">{post.body}</p>
         </div>
+
+        {coupons && coupons.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">🎟 利用できるクーポン</h2>
+            {coupons.map((c) => {
+              const uses = usesByCoupon.get(c.id) ?? { total: 0, usedBySelf: false }
+              const full = c.usage_limit !== null && uses.total >= c.usage_limit
+              const daysLeft = Math.max(0, Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / 86400_000))
+              return (
+                <div key={c.id} className="bg-amber-50 dark:bg-amber-900/20 border-2 border-dashed border-amber-300 dark:border-amber-700 rounded-lg p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="text-base font-bold text-amber-900 dark:text-amber-200">{c.content}</div>
+                    <div className="text-xs text-amber-700 dark:text-amber-400">
+                      {c.usage_limit !== null ? `${uses.total} / ${c.usage_limit} 使用済` : `${uses.total} 使用済`}
+                      <span className="mx-1">·</span>
+                      あと{daysLeft}日
+                    </div>
+                  </div>
+                  {c.conditions && <div className="text-xs text-amber-800 dark:text-amber-300">条件: {c.conditions}</div>}
+                  <div className="flex items-center gap-2 pt-1">
+                    {user ? (
+                      uses.usedBySelf ? (
+                        <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">✓ あなたは使用済みです</span>
+                      ) : full ? (
+                        <span className="text-xs text-slate-500">使用上限に達しました</span>
+                      ) : (
+                        <form action={handleUseCoupon}>
+                          <input type="hidden" name="coupon_id" value={c.id} />
+                          <Button type="submit" size="sm" variant="outline">このクーポンを使う</Button>
+                        </form>
+                      )
+                    ) : (
+                      <Link href={`/login?next=/freefree/${id}`} className="text-xs text-amber-700 dark:text-amber-400 underline">
+                        ログインして使う
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </section>
+        )}
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <div className="flex justify-between items-center">
