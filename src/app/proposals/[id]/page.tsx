@@ -5,6 +5,7 @@ import { categoryLabel, budgetLabel, bindingMeta } from '@/lib/categories'
 import { finalizeVotingIfDue } from '../actions'
 import { VoteSection } from './_components/VoteSection'
 import { CommentSection } from './_components/CommentSection'
+import { LiveLayerBars } from './_components/LiveLayerBars'
 
 const STATUS_LABEL: Record<string, string> = {
   discussion: '議論中',
@@ -13,12 +14,6 @@ const STATUS_LABEL: Record<string, string> = {
   rejected:   '否決',
   closed:     '集計済（諮問）',
   draft:      '下書き',
-}
-
-const TIER_LABEL: Record<string, string> = {
-  light: 'ライト登録',
-  email_only: 'メール登録',
-  verified: '住所確認済',
 }
 
 export default async function ProposalDetailPage({
@@ -187,7 +182,12 @@ export default async function ProposalDetailPage({
         {meta && (proposal.status === 'voting' || proposal.status === 'passed' || proposal.status === 'rejected' || proposal.status === 'closed') && (
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
             <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase mb-4">層別投票状況</h2>
-            <LayerBars aggregates={aggregates ?? []} choices={[...meta.choices]} />
+            <LiveLayerBars
+              proposalId={id}
+              initialAggregates={aggregates ?? []}
+              choices={[...meta.choices]}
+              liveEnabled={proposal.status === 'voting'}
+            />
           </section>
         )}
 
@@ -205,61 +205,3 @@ export default async function ProposalDetailPage({
   )
 }
 
-function LayerBars({
-  aggregates,
-  choices,
-}: {
-  aggregates: { tier: string; choice: string; count: number; weight_total: number }[]
-  choices: string[]
-}) {
-  const tiers = ['verified', 'email_only', 'light'] as const
-  const choiceColors: Record<string, string> = {
-    '賛成': 'bg-emerald-500',
-    '反対': 'bg-rose-500',
-    '保留': 'bg-slate-400',
-    '協力できる': 'bg-emerald-500',
-    '難しい': 'bg-rose-500',
-    'わからない': 'bg-slate-400',
-  }
-
-  return (
-    <div className="space-y-3">
-      {tiers.map((tier) => {
-        const tierAggs = aggregates.filter((a) => a.tier === tier)
-        const totalCount = tierAggs.reduce((s, a) => s + a.count, 0)
-        const totalWeight = tierAggs.reduce((s, a) => s + Number(a.weight_total), 0)
-
-        // 5名未満は数値非表示（仕様§3.2.3）
-        const hide = totalCount > 0 && totalCount < 5
-
-        return (
-          <div key={tier} className="space-y-1">
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>{TIER_LABEL[tier]}</span>
-              <span>
-                {totalCount === 0 ? '票なし' : hide ? '-（5名未満）' : `${totalCount}名 / 重み${totalWeight.toFixed(1)}`}
-              </span>
-            </div>
-            <div className="flex h-6 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
-              {!hide && totalWeight > 0 && choices.map((choice) => {
-                const agg = tierAggs.find((a) => a.choice === choice)
-                const pct = agg ? (Number(agg.weight_total) / totalWeight) * 100 : 0
-                if (pct === 0) return null
-                return (
-                  <div
-                    key={choice}
-                    className={`${choiceColors[choice] ?? 'bg-slate-500'} text-xs text-white flex items-center justify-center`}
-                    style={{ width: `${pct}%` }}
-                    title={`${choice}: ${pct.toFixed(0)}%`}
-                  >
-                    {pct > 10 ? choice : ''}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}

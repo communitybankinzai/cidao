@@ -1,15 +1,36 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { categoryLabel, budgetLabel, bindingMeta } from '@/lib/categories'
+import { bindingMeta } from '@/lib/categories'
+import { ProposalsBrowser, type ProposalSummary } from './_components/ProposalsBrowser'
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  discussion: { label: '議論中', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' },
-  voting:     { label: '投票中', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' },
-  passed:     { label: '可決',   color: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200' },
-  rejected:   { label: '否決',   color: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200' },
-  closed:     { label: '集計済', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
-  draft:      { label: '下書き', color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+type AggRow = {
+  proposal_id: string
+  tier: string
+  choice: string
+  count: number
+  weight_total: number | string
+}
+
+function snapshotFor(bindingType: string, aggs: AggRow[]): ProposalSummary['snapshot'] {
+  const meta = bindingMeta(bindingType)
+  if (!meta) return { yesPct: null, noPct: null, holdPct: null, totalVotes: 0 }
+  const [yesC, noC, holdC] = meta.choices
+  const totalVotes = aggs.reduce((s, a) => s + (a.count ?? 0), 0)
+  const totalWeight = aggs.reduce((s, a) => s + Number(a.weight_total ?? 0), 0)
+  if (totalWeight === 0) {
+    return { yesPct: null, noPct: null, holdPct: null, totalVotes }
+  }
+  const pctFor = (choice: string) => {
+    const w = aggs.filter((a) => a.choice === choice).reduce((s, a) => s + Number(a.weight_total ?? 0), 0)
+    return (w / totalWeight) * 100
+  }
+  return {
+    yesPct: pctFor(yesC),
+    noPct: pctFor(noC),
+    holdPct: pctFor(holdC),
+    totalVotes,
+  }
 }
 
 export default async function ProposalsPage() {
@@ -18,18 +39,48 @@ export default async function ProposalsPage() {
 
   const { data: proposals } = await supabase
     .from('proposals')
-    .select('id, title, category, binding_type, budget_size, status, discussion_start_at, voting_end_at, created_at')
+    .select('id, title, category, binding_type, budget_size, status, discussion_start_at, voting_start_at, voting_end_at, created_at')
     .neq('status', 'draft')
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(100)
+
+  const proposalIds = (proposals ?? []).map((p) => p.id)
+  const { data: aggregates } = proposalIds.length > 0
+    ? await supabase
+        .from('vote_aggregates')
+        .select('proposal_id, tier, choice, count, weight_total')
+        .in('proposal_id', proposalIds)
+    : { data: [] as AggRow[] }
+
+  const aggsByProposal = new Map<string, AggRow[]>()
+  for (const a of (aggregates ?? []) as AggRow[]) {
+    const list = aggsByProposal.get(a.proposal_id) ?? []
+    list.push(a)
+    aggsByProposal.set(a.proposal_id, list)
+  }
+
+  const summaries: ProposalSummary[] = (proposals ?? []).map((p) => ({
+    id: p.id,
+    title: p.title,
+    category: p.category,
+    binding_type: p.binding_type,
+    budget_size: p.budget_size,
+    status: p.status,
+    discussion_start_at: p.discussion_start_at,
+    voting_start_at: p.voting_start_at,
+    voting_end_at: p.voting_end_at,
+    created_at: p.created_at,
+    snapshot: snapshotFor(p.binding_type, aggsByProposal.get(p.id) ?? []),
+  }))
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-4xl mx-auto space-y-6">
-        <header className="flex items-end justify-between">
+        <header className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
             <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">提案一覧</h1>
+            <p className="text-xs text-slate-500 mt-1">市民から寄せられた {summaries.length} 件の提案</p>
           </div>
           {user ? (
             <Link href="/proposals/new">
@@ -42,44 +93,7 @@ export default async function ProposalsPage() {
           )}
         </header>
 
-        {!proposals || proposals.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-lg p-12 text-center border border-slate-200 dark:border-slate-800">
-            <p className="text-slate-500">まだ提案はありません。</p>
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {proposals.map((p) => {
-              const s = STATUS_LABELS[p.status] ?? STATUS_LABELS.draft
-              const b = bindingMeta(p.binding_type)
-              return (
-                <li key={p.id}>
-                  <Link href={`/proposals/${p.id}`} className="block bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 leading-tight">
-                        {p.title}
-                      </h2>
-                      <span className={`shrink-0 text-xs px-2 py-1 rounded ${s.color}`}>
-                        {s.label}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(p.category)}</span>
-                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{budgetLabel(p.budget_size)}</span>
-                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
-                        {b?.key === 'external' ? '諮問' : '拘束'}
-                      </span>
-                      {p.voting_end_at && p.status === 'voting' && (
-                        <span className="ml-auto text-slate-400">
-                          〜 {new Date(p.voting_end_at).toLocaleDateString('ja-JP')}
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        )}
+        <ProposalsBrowser proposals={summaries} isLoggedIn={!!user} />
 
         <p className="text-xs text-slate-400 text-center pt-4">
           <Link href="/" className="hover:underline">← ホーム</Link>
