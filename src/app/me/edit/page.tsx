@@ -109,6 +109,7 @@ export default async function EditProfilePage() {
               userId={user.id}
               initialUrl={member.avatar_url ?? null}
               initialPosition={member.avatar_position ?? null}
+              initialZoom={member.avatar_zoom ?? null}
               displayName={member.display_name}
             />
           </Field>

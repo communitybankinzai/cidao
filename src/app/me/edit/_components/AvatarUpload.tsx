@@ -18,15 +18,25 @@ function parseYPercent(pos: string | null | undefined): number {
   return 50
 }
 
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 3.0
+const ZOOM_STEP = 0.05
+function clampZoom(z: number): number {
+  if (!Number.isFinite(z)) return 1
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z))
+}
+
 export default function AvatarUpload({
   userId,
   initialUrl,
   initialPosition,
+  initialZoom,
   displayName,
 }: {
   userId: string
   initialUrl: string | null
   initialPosition: string | null
+  initialZoom: number | null
   displayName: string
 }) {
   const [url, setUrl] = useState<string | null>(initialUrl)
@@ -38,6 +48,9 @@ export default function AvatarUpload({
   // 位置調整：画像の縦方向のクロップ位置（0=画像の上端, 100=画像の下端 を円中央に）
   const [yPercent, setYPercent] = useState<number>(parseYPercent(initialPosition))
   const [savedYPercent, setSavedYPercent] = useState<number>(parseYPercent(initialPosition))
+  // 拡大率
+  const [zoom, setZoom] = useState<number>(clampZoom(initialZoom ?? 1))
+  const [savedZoom, setSavedZoom] = useState<number>(clampZoom(initialZoom ?? 1))
   const [posSaving, setPosSaving] = useState(false)
   const [posSaved, setPosSaved] = useState(false)
   const previewBoxRef = useRef<HTMLDivElement>(null)
@@ -216,7 +229,9 @@ export default function AvatarUpload({
 
   const display = previewUrl ?? url
   const objectPosition = `center ${yPercent}%`
-  const positionDirty = Math.abs(yPercent - savedYPercent) > 0.1
+  const positionDirty =
+    Math.abs(yPercent - savedYPercent) > 0.1 ||
+    Math.abs(zoom - savedZoom) > 0.01
 
   function onPosPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!display) return
@@ -254,10 +269,14 @@ export default function AvatarUpload({
       const supabase = createClient()
       const { error: updErr } = await supabase
         .from('members')
-        .update({ avatar_position: `center ${yPercent.toFixed(1)}%` })
+        .update({
+          avatar_position: `center ${yPercent.toFixed(1)}%`,
+          avatar_zoom: Number(zoom.toFixed(2)),
+        })
         .eq('id', userId)
       if (updErr) throw updErr
       setSavedYPercent(yPercent)
+      setSavedZoom(zoom)
       setPosSaved(true)
       window.setTimeout(() => setPosSaved(false), 1800)
     } catch (e) {
@@ -269,6 +288,16 @@ export default function AvatarUpload({
 
   function resetPosition() {
     setYPercent(50)
+    setZoom(1)
+  }
+
+  function onPosWheel(e: React.WheelEvent<HTMLDivElement>) {
+    if (!display) return
+    e.preventDefault()
+    // 下にホイール = 拡大、上にホイール = 縮小（macOS の自然なスクロール感に近い）
+    const dir = e.deltaY > 0 ? 1 : -1
+    setZoom((z) => clampZoom(z + dir * ZOOM_STEP * 2))
+    setPosSaved(false)
   }
 
   return (
@@ -291,10 +320,11 @@ export default function AvatarUpload({
         <div
           ref={previewBoxRef}
           onPointerDown={onPosPointerDown}
+          onWheel={onPosWheel}
           onDragStart={(e) => e.preventDefault()}
           className={'rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 ' + (display ? 'cursor-grab active:cursor-grabbing' : '')}
           style={{ width: '5rem', height: '5rem', touchAction: 'none' }}
-          title={display ? 'ドラッグして表示位置を調整' : ''}
+          title={display ? 'ドラッグで位置調整・ホイールで拡大縮小' : ''}
         >
           {display ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -304,7 +334,12 @@ export default function AvatarUpload({
               draggable={false}
               onDragStart={(e) => e.preventDefault()}
               className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800 select-none pointer-events-none"
-              style={{ objectPosition, userSelect: 'none' }}
+              style={{
+                objectPosition,
+                transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+                transformOrigin: 'center center',
+                userSelect: 'none',
+              }}
             />
           ) : (
             <Avatar src={null} name={displayName} size="xl" />
@@ -350,10 +385,23 @@ export default function AvatarUpload({
           クリックして選択、または画像をドラッグ&ドロップ／Ctrl+V で貼り付け。自動で 256×256 にリサイズして WebP 変換します。
         </p>
         {url && (
-          <div className="text-xs space-y-1 pt-2 border-t border-slate-200 dark:border-slate-800 mt-1">
+          <div className="text-xs space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 mt-1">
             <p className="text-slate-500">
-              画像を <strong>上下にドラッグ</strong> して円内の表示位置を調整できます（縦位置 {yPercent.toFixed(0)}%）
+              <strong>上下にドラッグ</strong> で表示位置を調整、<strong>マウスホイール</strong> で拡大縮小できます（縦位置 {yPercent.toFixed(0)}% / 拡大 {zoom.toFixed(2)}×）
             </p>
+            <label className="flex items-center gap-2 text-slate-500">
+              <span className="w-12 shrink-0">拡大</span>
+              <input
+                type="range"
+                min={ZOOM_MIN}
+                max={ZOOM_MAX}
+                step={ZOOM_STEP}
+                value={zoom}
+                onChange={(e) => { setZoom(clampZoom(parseFloat(e.target.value))); setPosSaved(false) }}
+                className="flex-1"
+              />
+              <span className="w-12 shrink-0 text-right tabular-nums">{zoom.toFixed(2)}×</span>
+            </label>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
@@ -371,19 +419,19 @@ export default function AvatarUpload({
               {positionDirty && (
                 <button
                   type="button"
-                  onClick={() => setYPercent(savedYPercent)}
+                  onClick={() => { setYPercent(savedYPercent); setZoom(savedZoom) }}
                   className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
                 >
                   変更を取り消す
                 </button>
               )}
-              {Math.abs(yPercent - 50) > 0.1 && !positionDirty && (
+              {(Math.abs(yPercent - 50) > 0.1 || Math.abs(zoom - 1) > 0.01) && !positionDirty && (
                 <button
                   type="button"
                   onClick={resetPosition}
                   className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
                 >
-                  中央に戻す
+                  初期状態に戻す
                 </button>
               )}
               {posSaved && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ 保存しました</span>}

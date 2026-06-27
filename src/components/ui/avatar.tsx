@@ -24,14 +24,16 @@ export function Avatar({
   size = 'md',
   className,
   objectPosition,
+  zoom,
 }: {
   src?: string | null
   name: string
   size?: Size
   className?: string
-  /** CSS object-position 値（例: 'center 30%' で画像の上寄りを見せる）。
-   *  デフォルトは 'center' で画像中央。プロフィール写真の構図に応じて調整可能。 */
+  /** CSS object-position 値（例: 'center 30%' で画像の上寄りを見せる） */
   objectPosition?: string
+  /** 拡大率（1.0 = 等倍）。1.0 以外なら img を transform: scale で拡大 */
+  zoom?: number | null
 }) {
   const base = cn(
     'inline-flex items-center justify-center rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700',
@@ -40,13 +42,20 @@ export function Avatar({
   )
 
   if (src) {
+    const z = zoom && zoom > 0 ? zoom : 1
+    const imgStyle: React.CSSProperties = {}
+    if (objectPosition) imgStyle.objectPosition = objectPosition
+    if (z !== 1) {
+      imgStyle.transform = `scale(${z})`
+      imgStyle.transformOrigin = 'center center'
+    }
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt=""
         className={cn(base, 'object-cover bg-slate-100 dark:bg-slate-800')}
-        style={objectPosition ? { objectPosition } : undefined}
+        style={Object.keys(imgStyle).length > 0 ? imgStyle : undefined}
       />
     )
   }

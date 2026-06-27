@@ -175,6 +175,7 @@ export default async function MyPage({
               name={member.display_name}
               size="xl"
               objectPosition={member.avatar_position ?? undefined}
+              zoom={member.avatar_zoom ?? undefined}
             />
             <div className="flex-1 min-w-0 space-y-2">
               <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 truncate">
