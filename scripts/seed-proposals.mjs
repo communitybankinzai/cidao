@@ -15,10 +15,20 @@
  *   aggregates via the existing recompute_vote_aggregates trigger.
  * - Title prefix "[サンプル]" makes --reset and human identification straightforward.
  */
+import { readFileSync } from 'node:fs'
 import pg from 'pg'
 
-const CONN = process.env.DATABASE_URL ||
-  'postgresql://postgres.oxuxvtuhijnsewivgrje:***REMOVED-PASSWORD***@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres'
+function loadEnv() {
+  const c = readFileSync('.env.local', 'utf8'); const env = {}
+  for (const l of c.split(/\r?\n/)) { const t=l.trim(); if(!t||t.startsWith('#'))continue; const i=t.indexOf('='); if(i<0)continue; env[t.slice(0,i).trim()]=t.slice(i+1).trim().replace(/^['"]|['"]$/g,'') }
+  return env
+}
+const env = loadEnv()
+const CONN = process.env.DATABASE_URL || env.DATABASE_URL
+if (!CONN) {
+  console.error('ERROR: DATABASE_URL missing in .env.local')
+  process.exit(1)
+}
 
 const APPLY = process.argv.includes('--apply')
 const RESET = process.argv.includes('--reset')
