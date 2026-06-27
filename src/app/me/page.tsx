@@ -28,9 +28,9 @@ const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = 
 }
 
 const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
-  light:      { label: 'ライト登録',   weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
-  email_only: { label: '本登録',       weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
-  verified:   { label: '住所確認済',   weight_citizen: '1.0', weight_related: '0.5',  color: 'bg-sky-200 text-sky-900' },
+  light:      { label: 'ライト登録',                weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
+  email_only: { label: '通常メンバー',              weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
+  verified:   { label: 'マイナンバー確認済（将来）', weight_citizen: '1.0', weight_related: '0.5',  color: 'bg-sky-200 text-sky-900' },
 }
 
 export default async function MyPage({
@@ -213,24 +213,14 @@ export default async function MyPage({
         {member.tier === 'light' && (
           <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-              本登録すると提案・拘束的投票・コメントができます
+              メアド以外の情報（名前・市内/関係人口・興味分野など）を登録すると通常メンバーになり、提案・拘束的投票・コメントができます
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
               プロフィールを完成させて投票重みを上げましょう（市民 0.1 → 0.3）
             </p>
             <Link href="/me/edit">
-              <Button size="sm">本登録フォームを開く</Button>
+              <Button size="sm">プロフィールを編集する</Button>
             </Link>
-          </div>
-        )}
-        {member.tier === 'email_only' && (
-          <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-4 rounded space-y-2">
-            <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">
-              住所確認で投票重みを最大化（市民 0.3 → 1.0）
-            </p>
-            <p className="text-xs text-sky-700 dark:text-sky-300">
-              本人確認ハガキの発送機能は Phase 1 後半で実装予定
-            </p>
           </div>
         )}
 
