@@ -38,6 +38,15 @@ export default async function AdminHomePage() {
               <p className="text-sm text-slate-500">所属申告の承認/却下、新規登録された団体の公開承認</p>
             </Link>
           </li>
+          <li>
+            <Link
+              href="/admin/sns"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">SNS 定期紹介</h2>
+              <p className="text-sm text-slate-500">FreeFree・イベント・団体の X/FB/LINE 紹介ローテーション、投稿ログ、手動実行</p>
+            </Link>
+          </li>
         </ul>
       </div>
     </div>
