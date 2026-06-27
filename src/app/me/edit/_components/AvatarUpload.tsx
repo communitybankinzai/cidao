@@ -9,13 +9,24 @@ const INPUT_MAX_BYTES = 20 * 1024 * 1024 // 20MB（変換前の上限）
 
 type Stage = 'idle' | 'processing' | 'uploading' | 'saving' | 'done'
 
+function parseYPercent(pos: string | null | undefined): number {
+  if (!pos) return 50
+  const m = pos.match(/(\d+(?:\.\d+)?)%\s*$/)
+  if (m) return Math.max(0, Math.min(100, parseFloat(m[1])))
+  if (/top/.test(pos)) return 0
+  if (/bottom/.test(pos)) return 100
+  return 50
+}
+
 export default function AvatarUpload({
   userId,
   initialUrl,
+  initialPosition,
   displayName,
 }: {
   userId: string
   initialUrl: string | null
+  initialPosition: string | null
   displayName: string
 }) {
   const [url, setUrl] = useState<string | null>(initialUrl)
@@ -24,6 +35,13 @@ export default function AvatarUpload({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  // 位置調整：画像の縦方向のクロップ位置（0=画像の上端, 100=画像の下端 を円中央に）
+  const [yPercent, setYPercent] = useState<number>(parseYPercent(initialPosition))
+  const [savedYPercent, setSavedYPercent] = useState<number>(parseYPercent(initialPosition))
+  const [posSaving, setPosSaving] = useState(false)
+  const [posSaved, setPosSaved] = useState(false)
+  const previewBoxRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef<{ startY: number; startYPercent: number } | null>(null)
   const previewRef = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -198,6 +216,59 @@ export default function AvatarUpload({
   }
 
   const display = previewUrl ?? url
+  const objectPosition = `center ${yPercent}%`
+  const positionDirty = Math.abs(yPercent - savedYPercent) > 0.1
+
+  function onPosPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!display) return
+    e.preventDefault()
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    draggingRef.current = { startY: e.clientY, startYPercent: yPercent }
+    setPosSaved(false)
+  }
+  function onPosPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = draggingRef.current
+    if (!d) return
+    const box = previewBoxRef.current
+    if (!box) return
+    const h = box.getBoundingClientRect().height || 120
+    // 下にドラッグすると画像内の上側 (yPercent 小) を見せる感覚（画像を掴んで下に引っ張る）
+    const deltaPx = e.clientY - d.startY
+    const deltaPct = (deltaPx / h) * 100
+    const next = Math.max(0, Math.min(100, d.startYPercent - deltaPct))
+    setYPercent(next)
+  }
+  function onPosPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (draggingRef.current) {
+      ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
+      draggingRef.current = null
+    }
+  }
+
+  async function savePosition() {
+    if (!url || posSaving) return
+    setPosSaving(true)
+    setError(null)
+    try {
+      const supabase = createClient()
+      const { error: updErr } = await supabase
+        .from('members')
+        .update({ avatar_position: `center ${yPercent.toFixed(1)}%` })
+        .eq('id', userId)
+      if (updErr) throw updErr
+      setSavedYPercent(yPercent)
+      setPosSaved(true)
+      window.setTimeout(() => setPosSaved(false), 1800)
+    } catch (e) {
+      setError(`位置の保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setPosSaving(false)
+    }
+  }
+
+  function resetPosition() {
+    setYPercent(50)
+  }
 
   return (
     <div
@@ -216,7 +287,29 @@ export default function AvatarUpload({
       aria-label="プロフィール画像のアップロード領域。ファイルをドロップ、または画像をコピーして貼り付けできます。"
     >
       <div className="relative shrink-0">
-        <Avatar src={display} name={displayName} size="xl" />
+        <div
+          ref={previewBoxRef}
+          onPointerDown={onPosPointerDown}
+          onPointerMove={onPosPointerMove}
+          onPointerUp={onPosPointerUp}
+          onPointerCancel={onPosPointerUp}
+          className={'rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 ' + (display ? 'cursor-grab active:cursor-grabbing' : '')}
+          style={{ width: '5rem', height: '5rem', touchAction: 'none' }}
+          title={display ? 'ドラッグして表示位置を調整' : ''}
+        >
+          {display ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={display}
+              alt=""
+              draggable={false}
+              className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800 select-none"
+              style={{ objectPosition, userSelect: 'none' }}
+            />
+          ) : (
+            <Avatar src={null} name={displayName} size="xl" />
+          )}
+        </div>
         {busy && (
           <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center text-white text-[10px]">
             …
@@ -256,6 +349,47 @@ export default function AvatarUpload({
         <p className="text-xs text-slate-500">
           クリックして選択、または画像をドラッグ&ドロップ／Ctrl+V で貼り付け。自動で 256×256 にリサイズして WebP 変換します。
         </p>
+        {url && (
+          <div className="text-xs space-y-1 pt-2 border-t border-slate-200 dark:border-slate-800 mt-1">
+            <p className="text-slate-500">
+              画像を <strong>上下にドラッグ</strong> して円内の表示位置を調整できます（縦位置 {yPercent.toFixed(0)}%）
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={savePosition}
+                disabled={!positionDirty || posSaving}
+                className={
+                  'text-xs px-2 py-1 rounded border ' +
+                  (positionDirty && !posSaving
+                    ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900'
+                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 cursor-not-allowed')
+                }
+              >
+                {posSaving ? '保存中…' : '位置を保存'}
+              </button>
+              {positionDirty && (
+                <button
+                  type="button"
+                  onClick={() => setYPercent(savedYPercent)}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+                >
+                  変更を取り消す
+                </button>
+              )}
+              {Math.abs(yPercent - 50) > 0.1 && !positionDirty && (
+                <button
+                  type="button"
+                  onClick={resetPosition}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+                >
+                  中央に戻す
+                </button>
+              )}
+              {posSaved && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ 保存しました</span>}
+            </div>
+          </div>
+        )}
         {info && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">{info}</p>}
         {error && (
           <div className="flex items-center gap-2 flex-wrap">

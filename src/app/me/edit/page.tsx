@@ -108,6 +108,7 @@ export default async function EditProfilePage() {
             <AvatarUpload
               userId={user.id}
               initialUrl={member.avatar_url ?? null}
+              initialPosition={member.avatar_position ?? null}
               displayName={member.display_name}
             />
           </Field>
