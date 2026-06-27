@@ -18,6 +18,18 @@ function colorFromName(name: string): string {
   return `hsl(${hue} 55% 60%)`
 }
 
+/** avatar_position 文字列を {x, y} に parse。'50% 70%' / 'center 70%' / 'top' / 'bottom' / null を受け入れる。 */
+export function parseAvatarPosition(pos: string | null | undefined): { x: number; y: number } {
+  if (!pos) return { x: 50, y: 50 }
+  const m = pos.match(/(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+  if (m) return { x: parseFloat(m[1]), y: parseFloat(m[2]) }
+  const m2 = pos.match(/center\s+(\d+(?:\.\d+)?)%/)
+  if (m2) return { x: 50, y: parseFloat(m2[1]) }
+  if (/top/.test(pos)) return { x: 50, y: 0 }
+  if (/bottom/.test(pos)) return { x: 50, y: 100 }
+  return { x: 50, y: 50 }
+}
+
 export function Avatar({
   src,
   name,
@@ -30,32 +42,34 @@ export function Avatar({
   name: string
   size?: Size
   className?: string
-  /** CSS object-position 値（例: 'center 30%' で画像の上寄りを見せる） */
+  /** 'X% Y%' 形式の表示位置。デフォルトは '50% 50%'（中央）。 */
   objectPosition?: string
-  /** 拡大率（1.0 = 等倍）。1.0 以外なら img を transform: scale で拡大 */
+  /** 拡大率（1.0 = 等倍 / 等しく cover、3.0 = 3 倍）。zoom > 1 でドラッグによる位置調整が効く */
   zoom?: number | null
 }) {
   const base = cn(
-    'inline-flex items-center justify-center rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700',
+    'inline-flex items-center justify-center rounded-full overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800',
     SIZE_CLASS[size],
     className,
   )
 
   if (src) {
     const z = zoom && zoom > 0 ? zoom : 1
-    const imgStyle: React.CSSProperties = {}
-    if (objectPosition) imgStyle.objectPosition = objectPosition
-    if (z !== 1) {
-      imgStyle.transform = `scale(${z})`
-      imgStyle.transformOrigin = 'center center'
-    }
+    const { x, y } = parseAvatarPosition(objectPosition)
+    // background-image で画像を表示。background-size を 100*z% にして拡大、
+    // background-position の 0–100% で枠内のどこを中央に寄せるか調整。
+    // ドラッグ等で z=1, x=50, y=50 のときは object-fit: cover + center と同等の見た目。
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt=""
-        className={cn(base, 'object-cover bg-slate-100 dark:bg-slate-800')}
-        style={Object.keys(imgStyle).length > 0 ? imgStyle : undefined}
+      <span
+        aria-label={name}
+        role="img"
+        className={base}
+        style={{
+          backgroundImage: `url(${src})`,
+          backgroundSize: `${(100 * z).toFixed(2)}%`,
+          backgroundPosition: `${x.toFixed(2)}% ${y.toFixed(2)}%`,
+          backgroundRepeat: 'no-repeat',
+        }}
       />
     )
   }

@@ -9,14 +9,7 @@ const INPUT_MAX_BYTES = 20 * 1024 * 1024 // 20MB（変換前の上限）
 
 type Stage = 'idle' | 'processing' | 'uploading' | 'saving' | 'done'
 
-function parseYPercent(pos: string | null | undefined): number {
-  if (!pos) return 50
-  const m = pos.match(/(\d+(?:\.\d+)?)%\s*$/)
-  if (m) return Math.max(0, Math.min(100, parseFloat(m[1])))
-  if (/top/.test(pos)) return 0
-  if (/bottom/.test(pos)) return 100
-  return 50
-}
+import { parseAvatarPosition } from '@/components/ui/avatar'
 
 const ZOOM_MIN = 1.0  // 1.0 未満は枠より画像が小さくなって余白が出るため不要
 const ZOOM_MAX = 3.0
@@ -45,9 +38,12 @@ export default function AvatarUpload({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  // 位置調整：画像の縦方向のクロップ位置（0=画像の上端, 100=画像の下端 を円中央に）
-  const [yPercent, setYPercent] = useState<number>(parseYPercent(initialPosition))
-  const [savedYPercent, setSavedYPercent] = useState<number>(parseYPercent(initialPosition))
+  // 位置調整：背景画像の位置（0=左/上、50=中央、100=右/下）
+  const initPos = parseAvatarPosition(initialPosition)
+  const [xPercent, setXPercent] = useState<number>(initPos.x)
+  const [savedXPercent, setSavedXPercent] = useState<number>(initPos.x)
+  const [yPercent, setYPercent] = useState<number>(initPos.y)
+  const [savedYPercent, setSavedYPercent] = useState<number>(initPos.y)
   // 拡大率
   const [zoom, setZoom] = useState<number>(clampZoom(initialZoom ?? 1))
   const [savedZoom, setSavedZoom] = useState<number>(clampZoom(initialZoom ?? 1))
@@ -228,28 +224,36 @@ export default function AvatarUpload({
   }
 
   const display = previewUrl ?? url
-  const objectPosition = `center ${yPercent}%`
   const positionDirty =
     Math.abs(yPercent - savedYPercent) > 0.1 ||
+    Math.abs(xPercent - savedXPercent) > 0.1 ||
     Math.abs(zoom - savedZoom) > 0.01
 
   function onPosPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!display) return
+    if (zoom <= 1.001) return  // 拡大していないとそもそも動かない
     e.preventDefault()
     e.stopPropagation()
     const box = previewBoxRef.current
     if (!box) return
-    const h = box.getBoundingClientRect().height || 80
+    const rect = box.getBoundingClientRect()
+    const w = rect.width || 80
+    const h = rect.height || 80
+    const startX = e.clientX
     const startY = e.clientY
+    const startXPercent = xPercent
     const startYPercent = yPercent
     setPosSaved(false)
 
     const onMove = (ev: PointerEvent) => {
-      const deltaPx = ev.clientY - startY
-      const deltaPct = (deltaPx / h) * 100
-      // 下にドラッグ → 画像が下に動いて見える（画像内の上側を見せる方向）→ yPercent を減らす
-      const next = Math.max(0, Math.min(100, startYPercent - deltaPct))
-      setYPercent(next)
+      // ドラッグした方向に画像が動く感覚 → background-position は逆方向に
+      // 拡大率 z で 1px ドラッグ ≒ 1 / ((z - 1) * boxSize) のパーセント変化が境界
+      // = 動かせる範囲は z-1 倍の枠なので、boxSize × (z-1) ピクセル分動かせば 100% シフト
+      const scaleFactor = Math.max(0.001, zoom - 1)
+      const deltaPctX = ((ev.clientX - startX) / (w * scaleFactor)) * 100
+      const deltaPctY = ((ev.clientY - startY) / (h * scaleFactor)) * 100
+      setXPercent(Math.max(0, Math.min(100, startXPercent - deltaPctX)))
+      setYPercent(Math.max(0, Math.min(100, startYPercent - deltaPctY)))
     }
     const onUp = () => {
       document.removeEventListener('pointermove', onMove)
@@ -270,11 +274,12 @@ export default function AvatarUpload({
       const { error: updErr } = await supabase
         .from('members')
         .update({
-          avatar_position: `center ${yPercent.toFixed(1)}%`,
+          avatar_position: `${xPercent.toFixed(1)}% ${yPercent.toFixed(1)}%`,
           avatar_zoom: Number(zoom.toFixed(2)),
         })
         .eq('id', userId)
       if (updErr) throw updErr
+      setSavedXPercent(xPercent)
       setSavedYPercent(yPercent)
       setSavedZoom(zoom)
       setPosSaved(true)
@@ -287,6 +292,7 @@ export default function AvatarUpload({
   }
 
   function resetPosition() {
+    setXPercent(50)
     setYPercent(50)
     setZoom(1)
   }
@@ -322,28 +328,28 @@ export default function AvatarUpload({
           onPointerDown={onPosPointerDown}
           onWheel={onPosWheel}
           onDragStart={(e) => e.preventDefault()}
-          className={'rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 ' + (display ? 'cursor-grab active:cursor-grabbing' : '')}
-          style={{ width: '5rem', height: '5rem', touchAction: 'none' }}
-          title={display ? 'ドラッグで位置調整・ホイールで拡大縮小' : ''}
+          className={
+            'rounded-full overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 ' +
+            (display
+              ? (zoom > 1.001 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default')
+              : '')
+          }
+          style={
+            display
+              ? {
+                  width: '5rem',
+                  height: '5rem',
+                  touchAction: 'none',
+                  backgroundImage: `url(${display})`,
+                  backgroundSize: `${(100 * zoom).toFixed(2)}%`,
+                  backgroundPosition: `${xPercent.toFixed(2)}% ${yPercent.toFixed(2)}%`,
+                  backgroundRepeat: 'no-repeat',
+                }
+              : { width: '5rem', height: '5rem', touchAction: 'none' }
+          }
+          title={display ? (zoom > 1.001 ? 'ドラッグで位置調整・ホイールで拡大縮小' : '拡大するとドラッグで位置調整できます') : ''}
         >
-          {display ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={display}
-              alt=""
-              draggable={false}
-              onDragStart={(e) => e.preventDefault()}
-              className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800 select-none pointer-events-none"
-              style={{
-                objectPosition,
-                transform: zoom !== 1 ? `scale(${zoom})` : undefined,
-                transformOrigin: 'center center',
-                userSelect: 'none',
-              }}
-            />
-          ) : (
-            <Avatar src={null} name={displayName} size="xl" />
-          )}
+          {!display && <Avatar src={null} name={displayName} size="xl" />}
         </div>
         {busy && (
           <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center text-white text-[10px]">
@@ -387,13 +393,13 @@ export default function AvatarUpload({
         {url && (
           <div className="text-xs space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 mt-1">
             <p className="text-slate-500">
-              <strong>① 拡大スライダーで拡大</strong>（または円の上でマウスホイール）→ <strong>② 円を上下にドラッグ</strong>して見せたい位置を中央に
+              <strong>① 拡大スライダーで拡大</strong>（または円の上でマウスホイール）→ <strong>② 円を上下左右にドラッグ</strong>して見せたい位置を中央に
             </p>
             <p className="text-[10px] text-slate-400">
-              現在：拡大 {zoom.toFixed(2)}× / 縦位置 {yPercent.toFixed(0)}%
+              現在：拡大 {zoom.toFixed(2)}× / 横位置 {xPercent.toFixed(0)}% / 縦位置 {yPercent.toFixed(0)}%
               {zoom <= 1.001 && (
                 <span className="text-amber-600 dark:text-amber-400 ml-2">
-                  ※ 拡大が 1.00× のままだと画像が枠ぴったりで上下に動きません
+                  ※ 拡大が 1.00× のままだと画像が枠ぴったりで動かせません
                 </span>
               )}
             </p>
@@ -427,13 +433,13 @@ export default function AvatarUpload({
               {positionDirty && (
                 <button
                   type="button"
-                  onClick={() => { setYPercent(savedYPercent); setZoom(savedZoom) }}
+                  onClick={() => { setXPercent(savedXPercent); setYPercent(savedYPercent); setZoom(savedZoom) }}
                   className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
                 >
                   変更を取り消す
                 </button>
               )}
-              {(Math.abs(yPercent - 50) > 0.1 || Math.abs(zoom - 1) > 0.01) && !positionDirty && (
+              {(Math.abs(xPercent - 50) > 0.1 || Math.abs(yPercent - 50) > 0.1 || Math.abs(zoom - 1) > 0.01) && !positionDirty && (
                 <button
                   type="button"
                   onClick={resetPosition}
