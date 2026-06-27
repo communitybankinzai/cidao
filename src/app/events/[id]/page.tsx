@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
-import { joinEvent, leaveEvent, claimEvent } from '../actions'
+import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
 export default async function EventDetailPage({
   params,
@@ -148,6 +148,49 @@ export default async function EventDetailPage({
           )}
           <p className="text-xs text-slate-500">主催 {counts.organizer} / スタッフ {counts.staff} / 参加 {counts.participant}</p>
         </section>
+
+        {canEdit && (participants?.length ?? 0) > 0 && (
+          <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">出欠・役割の管理（主催者用）</h2>
+            <p className="text-xs text-slate-500">出席をつけると、その人に役割に応じた貢献度ポイントが付きます（主催 40 / スタッフ 20 / 参加 5）。スタッフにしたい人は「スタッフで出席」を押してください。</p>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {participants!.map((p) => {
+                const m = Array.isArray(p.members) ? p.members[0] : p.members
+                const name = (m as { display_name?: string } | null)?.display_name ?? '（名前未設定）'
+                const roleLabel = p.role === 'organizer' ? '主催者' : p.role === 'staff' ? 'スタッフ' : '参加者'
+                return (
+                  <li key={p.member_id} className="py-2 flex flex-wrap items-center gap-2 justify-between">
+                    <span className="text-sm">
+                      {name}
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{roleLabel}</span>
+                      {p.attended && <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">✅ 出席</span>}
+                    </span>
+                    <span className="flex gap-1.5 flex-wrap">
+                      {p.attended ? (
+                        <form action={async () => { 'use server'; await manageParticipant(id, p.member_id, null, false) }}>
+                          <Button type="submit" variant="outline" size="sm">出席取消</Button>
+                        </form>
+                      ) : p.role === 'organizer' ? (
+                        <form action={async () => { 'use server'; await manageParticipant(id, p.member_id, null, true) }}>
+                          <Button type="submit" size="sm">主催で出席 +40</Button>
+                        </form>
+                      ) : (
+                        <>
+                          <form action={async () => { 'use server'; await manageParticipant(id, p.member_id, 'participant', true) }}>
+                            <Button type="submit" variant="outline" size="sm">参加で出席 +5</Button>
+                          </form>
+                          <form action={async () => { 'use server'; await manageParticipant(id, p.member_id, 'staff', true) }}>
+                            <Button type="submit" size="sm">スタッフで出席 +20</Button>
+                          </form>
+                        </>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
       </article>
     </div>
   )

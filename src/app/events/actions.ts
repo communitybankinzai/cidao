@@ -217,6 +217,28 @@ export async function claimEvent(eventId: string) {
   revalidatePath(`/events/${eventId}`)
 }
 
+// 主催者/管理者がイベント参加者の役割・出欠を更新する。
+// 出欠を true にすると award_on_event_attendance トリガーが役割に応じてポイントを付与
+// （主催 40 / スタッフ 20 / 参加 5）。authz は SECURITY DEFINER 関数内の can_edit_event。
+export async function manageParticipant(
+  eventId: string,
+  memberId: string,
+  role: 'participant' | 'staff' | null,
+  attended: boolean | null,
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+  const { error } = await supabase.rpc('manage_event_participant', {
+    p_event_id: eventId,
+    p_member_id: memberId,
+    p_role: role,
+    p_attended: attended,
+  })
+  if (error) throw new Error(`出欠・役割の更新に失敗: ${error.message}`)
+  revalidatePath(`/events/${eventId}`)
+}
+
 export async function joinEvent(eventId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
