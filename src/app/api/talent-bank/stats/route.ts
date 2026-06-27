@@ -4,24 +4,27 @@ import { createClient } from '@/lib/supabase/server'
 /**
  * GET /api/talent-bank/stats
  *
- * Returns the count of "人材バンク registered" members.
- * A talent-bank-registered member = tier in ('email_only','verified') AND has at least one interest.
- * This is the same definition we surface on the CBI site and CiDAO home as a public counter.
+ * Returns the count of "人材バンク registered" members — same definition as the
+ * /talent page: members who have a public PR row in member_profiles_pr and have
+ * not closed messaging.
+ *
+ * Note: an earlier version of this endpoint counted "tier in (email_only,verified)
+ * AND interests not null" — that mis-aligned with /talent (which shows PR-published
+ * members) and over-counted. Now both use the same source of truth.
  *
  * Response: { registered: number, asOf: ISO8601 }
  *
- * CORS: enabled for the CBI public site (cbi.communitybankinzai.org and *.github.io).
+ * CORS: enabled for the CBI public site.
  */
 export async function GET() {
   const supabase = await createClient()
 
-  // tier in (email_only, verified) AND interests is non-empty
+  // 「人材バンクに掲載されている人」= member_profiles_pr に公開行があり message_acceptance != 'closed'
+  // /talent と同じ定義
   const { count, error } = await supabase
-    .from('members')
-    .select('id', { count: 'exact', head: true })
-    .in('tier', ['email_only', 'verified'])
-    .is('deleted_at', null)
-    .not('interests', 'is', null)
+    .from('member_profiles_pr')
+    .select('member_id', { count: 'exact', head: true })
+    .neq('message_acceptance', 'closed')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders() })
