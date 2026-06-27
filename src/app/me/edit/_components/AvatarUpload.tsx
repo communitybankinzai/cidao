@@ -18,7 +18,7 @@ function parseYPercent(pos: string | null | undefined): number {
   return 50
 }
 
-const ZOOM_MIN = 0.5
+const ZOOM_MIN = 1.0  // 1.0 未満は枠より画像が小さくなって余白が出るため不要
 const ZOOM_MAX = 3.0
 const ZOOM_STEP = 0.05
 function clampZoom(z: number): number {
@@ -387,7 +387,15 @@ export default function AvatarUpload({
         {url && (
           <div className="text-xs space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 mt-1">
             <p className="text-slate-500">
-              <strong>上下にドラッグ</strong> で表示位置を調整、<strong>マウスホイール</strong> で拡大縮小できます（縦位置 {yPercent.toFixed(0)}% / 拡大 {zoom.toFixed(2)}×）
+              <strong>① 拡大スライダーで拡大</strong>（または円の上でマウスホイール）→ <strong>② 円を上下にドラッグ</strong>して見せたい位置を中央に
+            </p>
+            <p className="text-[10px] text-slate-400">
+              現在：拡大 {zoom.toFixed(2)}× / 縦位置 {yPercent.toFixed(0)}%
+              {zoom <= 1.001 && (
+                <span className="text-amber-600 dark:text-amber-400 ml-2">
+                  ※ 拡大が 1.00× のままだと画像が枠ぴったりで上下に動きません
+                </span>
+              )}
             </p>
             <label className="flex items-center gap-2 text-slate-500">
               <span className="w-12 shrink-0">拡大</span>
