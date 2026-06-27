@@ -5,6 +5,7 @@ type EventForPermission = {
   organizer_id: string
   organizer_name_text: string | null
   proxy_registration: boolean
+  submitter_member_id?: string | null
 }
 
 // /events/[id] と /events/[id]/edit 双方で「編集できるか」を server で判定するためのヘルパー。
@@ -16,6 +17,9 @@ export async function canUserEditEvent(
   userEmail: string | null,
 ): Promise<boolean> {
   if (event.organizer_type === 'member' && event.organizer_id === userId) return true
+
+  // 写真投稿者本人（claim 済み）
+  if (event.submitter_member_id && event.submitter_member_id === userId) return true
 
   if (event.organizer_type === 'org') {
     const { data: mem } = await supabase

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
-import { joinEvent, leaveEvent } from '../actions'
+import { joinEvent, leaveEvent, claimEvent } from '../actions'
 
 export default async function EventDetailPage({
   params,
@@ -69,7 +69,7 @@ export default async function EventDetailPage({
           </div>
           <h1 className="text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">
-            {new Date(event.start_at).toLocaleString('ja-JP')} 〜 {new Date(event.end_at).toLocaleString('ja-JP')}
+            {new Date(event.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} 〜 {new Date(event.end_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
           </p>
         </header>
 
@@ -100,6 +100,31 @@ export default async function EventDetailPage({
           {event.fee != null && <p className="text-sm">参加費: {event.fee} 円</p>}
           {event.capacity != null && <p className="text-sm">定員: {event.capacity} 名（現在 {counts.participant} 名）</p>}
         </div>
+
+        {event.external_source && (
+          <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-2">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">情報提供</h2>
+            {event.submitter_member_id ? (
+              event.submitter_member_id === user?.id ? (
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">✅ あなたがこのイベント情報の提供者です（貢献度 +10pt 付与済み）。上の「編集」から内容を修正できます。</p>
+              ) : (
+                <p className="text-sm text-slate-500">情報提供者が登録済みです。</p>
+              )
+            ) : !user ? (
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-400">この写真（チラシ）を投稿したのがあなたなら、ログインして申告すると内容を編集できるようになり、情報提供として貢献度ポイント（+10pt）が付きます。</p>
+                <Link href={`/login?next=/events/${id}`}><Button variant="outline" size="sm">ログインして申告</Button></Link>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-400">この写真（チラシ）を投稿したのがあなたなら、申告すると内容を編集できるようになり、情報提供として貢献度ポイント（+10pt）が付きます。</p>
+                <form action={async () => { 'use server'; await claimEvent(id) }}>
+                  <Button type="submit" variant="outline" size="sm">これは私が投稿しました</Button>
+                </form>
+              </>
+            )}
+          </section>
+        )}
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">参加</h2>

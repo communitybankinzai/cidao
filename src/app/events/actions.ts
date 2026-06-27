@@ -206,6 +206,17 @@ export async function updateEvent(input: UpdateInput) {
   redirect(`/events/${input.id}`)
 }
 
+// 写真投稿者の claim：ログインユーザーが「未claim の取り込みイベント」を自分の投稿として申告。
+// SECURITY DEFINER の claim_event() が submitter セット＋情報提供ポイント(10pt)付与を行う。
+export async function claimEvent(eventId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+  const { error } = await supabase.rpc('claim_event', { p_event_id: eventId })
+  if (error) throw new Error(`情報提供の登録に失敗: ${error.message}`)
+  revalidatePath(`/events/${eventId}`)
+}
+
 export async function joinEvent(eventId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
