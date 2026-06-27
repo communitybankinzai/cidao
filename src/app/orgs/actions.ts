@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { canUserEditOrg } from '@/lib/org-permissions'
 
 type OrgInput = {
   name: string
@@ -250,6 +251,93 @@ export async function rejectClaim(orgId: string, memberId: string) {
   }
 
   revalidatePath('/admin/claims')
+  revalidatePath('/orgs')
+}
+
+// 自動拡充された情報を「正しい」と確認するアクション（編集権者のみ）。
+// 内容変更なしで info_verified を立てる軽量経路。本格的に直したい人は /orgs/[id]/edit を使う。
+export async function verifyOrgInfo(orgId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, representative_id, contact_email, name')
+    .eq('id', orgId)
+    .single()
+  if (!org) throw new Error('団体が見つかりません')
+
+  const allowed = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
+  if (!allowed) throw new Error('この団体の情報を確認する権限がありません')
+
+  const { error } = await supabase
+    .from('organizations')
+    .update({ info_verified: true })
+    .eq('id', orgId)
+  if (error) throw new Error(`確認失敗: ${error.message}`)
+
+  revalidatePath(`/orgs/${orgId}`)
+}
+
+// 団体情報の編集（編集権者のみ）。任意フィールドだけ送れば良い。
+// 編集が行われた＝代表者が内容を承認したものとして info_verified=true にする。
+export type OrgEditInput = {
+  description?: string | null
+  website_url?: string | null
+  sns_links?: Record<string, string> | null
+  activity_detail?: string | null
+  activity_area?: string | null
+  contact_email?: string | null
+  contact_url?: string | null
+}
+
+export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, representative_id, contact_email, name')
+    .eq('id', orgId)
+    .single()
+  if (!org) throw new Error('団体が見つかりません')
+
+  const allowed = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
+  if (!allowed) throw new Error('この団体を編集する権限がありません')
+
+  // クリーンアップ：空文字は NULL に
+  const clean = (v: string | null | undefined) => {
+    if (v == null) return null
+    const t = v.trim()
+    return t === '' ? null : t
+  }
+
+  const updates: Record<string, unknown> = { info_verified: true }
+  if (input.description !== undefined) updates.description = clean(input.description)
+  if (input.website_url !== undefined) updates.website_url = clean(input.website_url)
+  if (input.activity_detail !== undefined) updates.activity_detail = clean(input.activity_detail)
+  if (input.activity_area !== undefined) updates.activity_area = clean(input.activity_area)
+  if (input.contact_email !== undefined) updates.contact_email = clean(input.contact_email)
+  if (input.contact_url !== undefined) updates.contact_url = clean(input.contact_url)
+  if (input.sns_links !== undefined) {
+    if (!input.sns_links) {
+      updates.sns_links = {}
+    } else {
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(input.sns_links)) {
+        const c = clean(v)
+        if (c) out[k] = c
+      }
+      updates.sns_links = out
+    }
+  }
+
+  const { error } = await supabase.from('organizations').update(updates).eq('id', orgId)
+  if (error) throw new Error(`更新失敗: ${error.message}`)
+
+  revalidatePath(`/orgs/${orgId}`)
   revalidatePath('/orgs')
 }
 

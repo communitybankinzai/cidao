@@ -4,7 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { categoryLabel } from '@/lib/categories'
-import { requestJoinOrg, approveMembership } from '../actions'
+import { canUserEditOrg } from '@/lib/org-permissions'
+import { requestJoinOrg, approveMembership, verifyOrgInfo } from '../actions'
+
+const SNS_LABEL: Record<string, string> = {
+  x: 'X', facebook: 'Facebook', instagram: 'Instagram', youtube: 'YouTube',
+  line: 'LINE', note: 'note', blog: 'ブログ',
+}
 
 const ROLE_LABEL: Record<string, string> = {
   representative: '代表',
@@ -79,6 +85,22 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
   const pending = members?.filter((m) => m.status === 'claimed') ?? []
   const confirmed = members?.filter((m) => m.status === 'confirmed') ?? []
 
+  // 編集権者か（自動拡充された provisional 情報の確認/修正ボタンの出し分け）
+  const canEdit = user
+    ? await canUserEditOrg(
+        supabase,
+        { id: org.id, representative_id: org.representative_id, contact_email: org.contact_email, name: org.name },
+        user.id,
+        user.email ?? null,
+      )
+    : false
+
+  const snsEntries = org.sns_links && typeof org.sns_links === 'object'
+    ? Object.entries(org.sns_links as Record<string, string>).filter(([, v]) => v)
+    : []
+  const isEnriched = !!org.enriched_at
+  const isUnverified = isEnriched && !org.info_verified
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <article className="max-w-3xl mx-auto space-y-6">
@@ -97,9 +119,89 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           <h1 className="text-3xl font-serif font-bold">{org.name}</h1>
         </header>
 
-        {org.description && (
-          <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-            <p className="whitespace-pre-wrap">{org.description}</p>
+        {(org.description || org.activity_detail) && (
+          <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+            {isUnverified && (
+              <div className="text-xs px-2 py-1 inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 rounded">
+                <span>⚠️ 自動収集・未確認</span>
+                <span className="text-amber-700/70 dark:text-amber-300/70">この情報は AI が Web から自動収集した暫定情報です。代表者の確認をお待ちしています。</span>
+              </div>
+            )}
+            {org.activity_detail ? (
+              <p className="whitespace-pre-wrap">{org.activity_detail}</p>
+            ) : org.description ? (
+              <p className="whitespace-pre-wrap">{org.description}</p>
+            ) : null}
+            {org.activity_detail && org.description && org.description.trim() !== org.activity_detail.trim() && (
+              <details className="text-xs">
+                <summary className="text-slate-500 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">登録時の簡易説明を見る</summary>
+                <p className="whitespace-pre-wrap mt-2 text-slate-600 dark:text-slate-400">{org.description}</p>
+              </details>
+            )}
+
+            {(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url) && (
+              <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2 text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
+                {org.website_url && (
+                  <div>
+                    <dt className="text-xs text-slate-500">公式サイト</dt>
+                    <dd><a className="text-blue-600 hover:underline break-all" href={org.website_url} target="_blank" rel="noopener noreferrer">{org.website_url}</a></dd>
+                  </div>
+                )}
+                {snsEntries.length > 0 && (
+                  <div>
+                    <dt className="text-xs text-slate-500">SNS</dt>
+                    <dd className="flex flex-wrap gap-2">
+                      {snsEntries.map(([k, v]) => (
+                        <a key={k} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded hover:bg-slate-200 dark:hover:bg-slate-700" href={v} target="_blank" rel="noopener noreferrer">{SNS_LABEL[k] ?? k}</a>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                {org.activity_area && (
+                  <div>
+                    <dt className="text-xs text-slate-500">活動エリア</dt>
+                    <dd>{org.activity_area}</dd>
+                  </div>
+                )}
+                {org.contact_email && (
+                  <div>
+                    <dt className="text-xs text-slate-500">連絡先メール</dt>
+                    <dd className="break-all">{org.contact_email}</dd>
+                  </div>
+                )}
+                {org.contact_url && (
+                  <div>
+                    <dt className="text-xs text-slate-500">問い合わせ</dt>
+                    <dd><a className="text-blue-600 hover:underline break-all" href={org.contact_url} target="_blank" rel="noopener noreferrer">{org.contact_url}</a></dd>
+                  </div>
+                )}
+              </dl>
+            )}
+
+            {isUnverified && canEdit && (
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                <form action={async () => { 'use server'; await verifyOrgInfo(org.id) }}>
+                  <Button type="submit" size="sm" variant="secondary">この内容で正しい（確認する）</Button>
+                </form>
+                <Link href={`/orgs/${org.id}/edit`}>
+                  <Button size="sm">情報を修正する</Button>
+                </Link>
+                <span className="text-xs text-slate-500 self-center">あなたはこの団体の編集権者です</span>
+              </div>
+            )}
+            {isUnverified && !canEdit && user && (
+              <p className="text-xs text-slate-500 pt-2">
+                この団体の代表者・役員、または contact_email と同じメールでログインしている方は確認/修正できます。
+              </p>
+            )}
+            {isEnriched && org.info_verified && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ 代表者により確認済み</p>
+            )}
+            {canEdit && !isUnverified && (
+              <div className="pt-2">
+                <Link href={`/orgs/${org.id}/edit`} className="text-xs text-slate-500 hover:underline">団体情報を編集 →</Link>
+              </div>
+            )}
           </div>
         )}
 
