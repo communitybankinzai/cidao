@@ -13,6 +13,7 @@ type ProfileUpdate = {
   contact_permission: boolean
   collaboration_consent: boolean
   ranking_opt_in: boolean
+  proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
 
@@ -29,6 +30,17 @@ export async function updateProfile(input: ProfileUpdate) {
     throw new Error('表示名を入力してください')
   }
 
+  // contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
+  const { data: current } = await supabase
+    .from('members')
+    .select('contact_preferences')
+    .eq('id', user.id)
+    .single()
+  const prefs = {
+    ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
+    proposal_email: input.proposal_email,
+  }
+
   const update: Record<string, unknown> = {
     display_name: input.display_name.trim(),
     residency_type: input.residency_type,
@@ -39,6 +51,7 @@ export async function updateProfile(input: ProfileUpdate) {
     contact_permission: input.contact_permission,
     collaboration_consent: input.collaboration_consent,
     ranking_opt_in: input.ranking_opt_in,
+    contact_preferences: prefs,
   }
 
   if (input.upgradeToEmailOnly) {
