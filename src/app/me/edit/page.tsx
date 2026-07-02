@@ -53,6 +53,7 @@ export default async function EditProfilePage() {
       contact_permission: formData.get('contact_permission') === 'on',
       collaboration_consent: formData.get('collaboration_consent') === 'on',
       ranking_opt_in: formData.get('ranking_opt_in') === 'on',
+      proposal_email: formData.get('proposal_email') === 'on',
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
     })
 
@@ -201,6 +202,18 @@ export default async function EditProfilePage() {
                 <span>
                   貢献度ランキングに参加
                   <span className="block text-xs text-slate-500">ランキングページに表示されます</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  name="proposal_email"
+                  defaultChecked={((member.contact_preferences ?? {}) as Record<string, unknown>).proposal_email !== false}
+                  className="mt-1"
+                />
+                <span>
+                  提案・投票のメール通知を受け取る
+                  <span className="block text-xs text-slate-500">投票開始・締切前・結果確定のお知らせが届きます</span>
                 </span>
               </label>
               {wasLight && (
