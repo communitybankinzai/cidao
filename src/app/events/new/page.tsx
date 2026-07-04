@@ -7,7 +7,7 @@ import { createEvent } from '../actions'
 import { ImageScanField } from './_components/ImageScanField'
 import { OrganizerPicker } from './_components/OrganizerPicker'
 
-export default async function NewEventPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function NewEventPage({ searchParams }: { searchParams: Promise<{ date?: string; error?: string }> }) {
   const sp = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -46,20 +46,29 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
     const organizer_name_text = organizer_choice === '__external__'
       ? String(formData.get('organizer_name_text') ?? '').trim() || undefined
       : undefined
-    await createEvent({
-      title: String(formData.get('title') ?? ''),
-      description: String(formData.get('description') ?? ''),
-      category: String(formData.get('category') ?? 'other'),
-      start_at: String(formData.get('start_at') ?? ''),
-      end_at: String(formData.get('end_at') ?? ''),
-      location: (formData.get('location') as string | null) || undefined,
-      online_flag: formData.get('online_flag') === 'on',
-      capacity: formData.get('capacity') ? Number(formData.get('capacity')) : undefined,
-      fee: formData.get('fee') ? Number(formData.get('fee')) : undefined,
-      organizer_choice,
-      organizer_name_text,
-      flyer_image_url: (formData.get('flyer_image_url') as string | null) || undefined,
-    })
+    try {
+      await createEvent({
+        title: String(formData.get('title') ?? ''),
+        description: String(formData.get('description') ?? ''),
+        category: String(formData.get('category') ?? 'other'),
+        start_at: String(formData.get('start_at') ?? ''),
+        end_at: String(formData.get('end_at') ?? ''),
+        location: (formData.get('location') as string | null) || undefined,
+        online_flag: formData.get('online_flag') === 'on',
+        capacity: formData.get('capacity') ? Number(formData.get('capacity')) : undefined,
+        fee: formData.get('fee') ? Number(formData.get('fee')) : undefined,
+        organizer_choice,
+        organizer_name_text,
+        flyer_image_url: (formData.get('flyer_image_url') as string | null) || undefined,
+      })
+    } catch (e) {
+      // redirect() は内部的に例外を投げるので、それは素通りさせる
+      if (e && typeof e === 'object' && 'digest' in e && typeof e.digest === 'string' && e.digest.startsWith('NEXT_REDIRECT')) {
+        throw e
+      }
+      const message = e instanceof Error ? e.message : '登録に失敗しました'
+      redirect(`/events/new?error=${encodeURIComponent(message)}`)
+    }
   }
 
   return (
@@ -67,6 +76,12 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
         <nav className="text-xs text-slate-500"><Link href="/events" className="hover:underline">← イベント一覧</Link></nav>
         <h1 className="text-3xl font-serif font-bold">新しいイベント</h1>
+
+        {sp.error && (
+          <p className="text-sm text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded p-3">
+            登録に失敗しました：{sp.error}
+          </p>
+        )}
 
         <ImageScanField />
 
