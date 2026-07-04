@@ -4,9 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
-import { updateEvent } from '../../actions'
+import { updateEvent, deleteEvent } from '../../actions'
 import { ImageScanField } from '../../new/_components/ImageScanField'
 import { OrganizerPicker, ORGANIZER_EXTERNAL, ORGANIZER_MEMBER } from '../../new/_components/OrganizerPicker'
+import { DeleteEventButton } from './_components/DeleteEventButton'
 
 // JST datetime-local 用の文字列（YYYY-MM-DDTHH:MM）に変換
 function toLocalDatetime(iso: string): string {
@@ -76,6 +77,11 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     }
   } else {
     initialChoice = ORGANIZER_MEMBER
+  }
+
+  async function handleDelete() {
+    'use server'
+    await deleteEvent(id)
   }
 
   async function handleUpdate(formData: FormData) {
@@ -158,9 +164,12 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
             </L>
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <Link href={`/events/${id}`}><Button variant="outline" type="button">キャンセル</Button></Link>
-          <Button type="submit">更新</Button>
+        <div className="flex justify-between gap-2">
+          <DeleteEventButton action={handleDelete} />
+          <div className="flex gap-2">
+            <Link href={`/events/${id}`}><Button variant="outline" type="button">キャンセル</Button></Link>
+            <Button type="submit">更新</Button>
+          </div>
         </div>
       </form>
     </div>

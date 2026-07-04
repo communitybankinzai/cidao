@@ -206,6 +206,19 @@ export async function updateEvent(input: UpdateInput) {
   redirect(`/events/${input.id}`)
 }
 
+export async function deleteEvent(eventId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // 削除可否は RLS の events_delete_organizer ポリシー（can_edit_event or is_committee_or_super）が担保
+  const { error } = await supabase.from('events').delete().eq('id', eventId)
+  if (error) throw new Error(`イベント削除失敗: ${error.message}`)
+
+  revalidatePath('/events')
+  redirect('/events')
+}
+
 // 写真投稿者の claim：ログインユーザーが「未claim の取り込みイベント」を自分の投稿として申告。
 // SECURITY DEFINER の claim_event() が submitter セット＋情報提供ポイント(10pt)付与を行う。
 export async function claimEvent(eventId: string) {
