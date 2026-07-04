@@ -6,6 +6,7 @@ type OrgRef = { id: string; name: string }
 
 export const ORGANIZER_MEMBER = '__member__'
 export const ORGANIZER_EXTERNAL = '__external__'
+export const ORGANIZER_UNKNOWN = '__unknown__'
 
 export function OrganizerPicker({
   memberOrgs,
@@ -60,6 +61,7 @@ export function OrganizerPicker({
           <optgroup label="その他">
             <option value={ORGANIZER_EXTERNAL}>他の団体（未登録・自由入力）</option>
             <option value={ORGANIZER_MEMBER}>個人として</option>
+            <option value={ORGANIZER_UNKNOWN}>主催者不明（自分は情報提供者）</option>
           </optgroup>
         </select>
       </div>
@@ -81,7 +83,13 @@ export function OrganizerPicker({
         </div>
       )}
 
-      {choice !== ORGANIZER_EXTERNAL && choice !== ORGANIZER_MEMBER && !memberOrgIds.has(choice) && (
+      {choice === ORGANIZER_UNKNOWN && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          ※ あなたは主催者としては登録されません（情報提供者としての代理登録）。参加したい場合はイベント詳細ページから別途「参加する」を押してください。
+        </p>
+      )}
+
+      {choice !== ORGANIZER_EXTERNAL && choice !== ORGANIZER_MEMBER && choice !== ORGANIZER_UNKNOWN && !memberOrgIds.has(choice) && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           ※ あなたはこの団体のメンバーではないため、代理登録（proxy_registration）として記録されます。
         </p>

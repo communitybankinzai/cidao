@@ -34,9 +34,15 @@ export async function createEvent(input: CreateInput) {
   let name_text: string | null = null
   let isProxy = false
 
-  if (input.organizer_choice === '__member__') {
+  const isUnknownOrganizer = input.organizer_choice === '__unknown__'
+
+  if (input.organizer_choice === '__member__' || isUnknownOrganizer) {
     organizer_type = 'member'
     organizer_id = user.id
+    if (isUnknownOrganizer) {
+      name_text = '主催者不明'
+      isProxy = true
+    }
   } else if (input.organizer_choice === '__external__') {
     organizer_type = 'member'
     organizer_id = user.id
@@ -100,11 +106,15 @@ export async function createEvent(input: CreateInput) {
   if (error) throw new Error(`イベント作成失敗: ${error.message}`)
 
   // 主催者を participants の organizer として登録
-  await supabase.from('event_participants').insert({
-    event_id: data.id,
-    member_id: user.id,
-    role: 'organizer',
-  })
+  // ただし「主催者不明（情報提供者）」の場合、登録者は主催者ではないので participant 登録はスキップ
+  // （参加したい場合は別途イベント詳細ページの「参加する」を押してもらう）
+  if (!isUnknownOrganizer) {
+    await supabase.from('event_participants').insert({
+      event_id: data.id,
+      member_id: user.id,
+      role: 'organizer',
+    })
+  }
 
   revalidatePath('/events')
   redirect(`/events/${data.id}`)
@@ -138,9 +148,15 @@ export async function updateEvent(input: UpdateInput) {
   let name_text: string | null = null
   let isProxy = false
 
-  if (input.organizer_choice === '__member__') {
+  const isUnknownOrganizer = input.organizer_choice === '__unknown__'
+
+  if (input.organizer_choice === '__member__' || isUnknownOrganizer) {
     organizer_type = 'member'
     organizer_id = user.id
+    if (isUnknownOrganizer) {
+      name_text = '主催者不明'
+      isProxy = true
+    }
   } else if (input.organizer_choice === '__external__') {
     organizer_type = 'member'
     organizer_id = user.id
