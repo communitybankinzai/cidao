@@ -17,6 +17,11 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 
+type Occurrence = {
+  start_at: string             // YYYY-MM-DDTHH:MM（JST ローカル想定）
+  end_at?: string              // YYYY-MM-DDTHH:MM。省略時は start_at + 1h
+}
+
 type IngestPayload = {
   source_id: string            // 外部側の一意 ID（COCoLa の Drive file id 等）
   source_url?: string          // 外部側の参照 URL（Drive ファイル URL 等）
@@ -24,6 +29,9 @@ type IngestPayload = {
   description?: string
   start_at: string             // YYYY-MM-DDTHH:MM（JST ローカル想定）
   end_at?: string              // YYYY-MM-DDTHH:MM。省略時は start_at + 1h
+  // 同一チラシに複数日程がある場合（例: 7/18と8/9開催）に指定。
+  // 2件以上ある場合のみ日程ごとに個別イベントとして登録する（省略時は従来どおり start_at/end_at の単発登録）。
+  occurrences?: Occurrence[]
   location?: string
   organizer_name?: string      // 主催団体名（proxy_registration として保存）
   category?: string            // 既定 'other'
@@ -77,20 +85,31 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  // 4. dedupe
+  // 4. 複数日程（occurrences）が2件以上あればそれぞれ個別イベントとして登録する。
+  //    無指定 or 1件以下なら従来どおり start_at/end_at のみの単発登録（後方互換）。
   const externalSource = 'cocola-image-scan'
-  const { data: existing } = await supabase
-    .from('events')
-    .select('id, flyer_image_url')
-    .eq('external_source', externalSource)
-    .eq('external_source_id', body.source_id)
-    .maybeSingle()
-  if (existing) {
-    return NextResponse.json({
-      event_id: existing.id,
-      flyer_image_url: existing.flyer_image_url,
-      deduped: true,
-    })
+  const occList: Occurrence[] =
+    Array.isArray(body.occurrences) && body.occurrences.length > 1
+      ? body.occurrences
+      : [{ start_at: body.start_at, end_at: body.end_at }]
+  const isMulti = occList.length > 1
+
+  // dedupe: 単発は従来どおり source_id そのもの。複数日程は `${source_id}#${index}` で日程ごとに判定
+  // （再スキャンしても同じ日程の重複が増えないようにする）。
+  if (!isMulti) {
+    const { data: existing } = await supabase
+      .from('events')
+      .select('id, flyer_image_url')
+      .eq('external_source', externalSource)
+      .eq('external_source_id', body.source_id)
+      .maybeSingle()
+    if (existing) {
+      return NextResponse.json({
+        event_id: existing.id,
+        flyer_image_url: existing.flyer_image_url,
+        deduped: true,
+      })
+    }
   }
 
   // 5. 画像アップロード（best-effort）
@@ -121,43 +140,74 @@ export async function POST(request: Request) {
     }
   }
 
-  // 6. events insert
+  // 6. events insert（occurrences が複数ある場合は日程ごとに1行ずつ）
   const isProxy = !!body.organizer_name
-  const end_at = body.end_at && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(body.end_at)
-    ? body.end_at
-    : plusOneHourLocal(body.start_at)
+  const results: { event_id: string; deduped: boolean }[] = []
 
-  const { data: inserted, error: insErr } = await supabase
-    .from('events')
-    .insert({
-      title: body.title.slice(0, 80),
-      description: (body.description ?? body.title).slice(0, 4000),
-      category: body.category ?? 'other',
-      start_at: jstLocalToUtcIso(body.start_at),
-      end_at: jstLocalToUtcIso(end_at),
-      location: body.location ?? null,
-      online_flag: false,
-      organizer_type: 'member',
-      organizer_id: botMemberId,
-      organizer_name_text: isProxy ? (body.organizer_name as string) : null,
-      proxy_registration: isProxy,
-      proxy_source_url: isProxy ? (body.source_url ?? 'https://cocola/image-scan') : null,
-      external_source: externalSource,
-      external_source_id: body.source_id,
-      flyer_image_url,
-      status: 'open',
-    })
-    .select('id')
-    .single()
+  for (let i = 0; i < occList.length; i++) {
+    const occ = occList[i]
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(occ.start_at)) {
+      return NextResponse.json({ error: `occurrences[${i}].start_at must be YYYY-MM-DDTHH:MM` }, { status: 400 })
+    }
+    const occEnd = occ.end_at && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(occ.end_at)
+      ? occ.end_at
+      : plusOneHourLocal(occ.start_at)
+    const externalSourceId = isMulti ? `${body.source_id}#${i}` : body.source_id
 
-  if (insErr) {
-    return NextResponse.json({ error: `insert failed: ${insErr.message}` }, { status: 500 })
+    if (isMulti) {
+      const { data: existing } = await supabase
+        .from('events')
+        .select('id')
+        .eq('external_source', externalSource)
+        .eq('external_source_id', externalSourceId)
+        .maybeSingle()
+      if (existing) {
+        results.push({ event_id: existing.id, deduped: true })
+        continue
+      }
+    }
+
+    const { data: inserted, error: insErr } = await supabase
+      .from('events')
+      .insert({
+        title: body.title.slice(0, 80),
+        description: (body.description ?? body.title).slice(0, 4000),
+        category: body.category ?? 'other',
+        start_at: jstLocalToUtcIso(occ.start_at),
+        end_at: jstLocalToUtcIso(occEnd),
+        location: body.location ?? null,
+        online_flag: false,
+        organizer_type: 'member',
+        organizer_id: botMemberId,
+        organizer_name_text: isProxy ? (body.organizer_name as string) : null,
+        proxy_registration: isProxy,
+        proxy_source_url: isProxy ? (body.source_url ?? 'https://cocola/image-scan') : null,
+        external_source: externalSource,
+        external_source_id: externalSourceId,
+        flyer_image_url,
+        status: 'open',
+      })
+      .select('id')
+      .single()
+
+    if (insErr) {
+      return NextResponse.json({ error: `insert failed: ${insErr.message}` }, { status: 500 })
+    }
+    results.push({ event_id: inserted.id, deduped: false })
   }
 
+  // 単発登録は従来どおり単一オブジェクトのレスポンス（後方互換）。
+  // 複数日程登録時は events 配列で全件返す。
+  if (!isMulti) {
+    return NextResponse.json({
+      event_id: results[0].event_id,
+      flyer_image_url,
+      deduped: results[0].deduped,
+    })
+  }
   return NextResponse.json({
-    event_id: inserted.id,
+    events: results,
     flyer_image_url,
-    deduped: false,
   })
 }
 
