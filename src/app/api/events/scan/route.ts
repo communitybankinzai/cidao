@@ -95,6 +95,21 @@ export async function POST(request: Request) {
             organizer_name: { ...nullableString, description: '主催団体名。会場とは別物。判らなければ null。' },
             capacity: { ...nullableInteger, description: '定員（人数）。記載なしは null。' },
             fee: { ...nullableInteger, description: '参加費（円）。無料は 0、記載なしは null。' },
+            occurrences: {
+              type: 'array',
+              description:
+                '同一イベントが複数日程で開催される場合（例: 7/18と8/9の2回開催）、各回の開始・終了日時をここに列挙する。' +
+                '単発開催の場合は start_at/end_at と同じ内容を1件だけ入れる。',
+              items: {
+                type: 'object',
+                properties: {
+                  start_at: { type: 'string', description: 'YYYY-MM-DDTHH:MM（JST）' },
+                  end_at: { type: 'string', description: 'YYYY-MM-DDTHH:MM（JST）' },
+                },
+                required: ['start_at', 'end_at'],
+                additionalProperties: false,
+              },
+            },
             confidence: { type: 'number', description: '0〜1の抽出自信度' },
           },
           required: [
@@ -107,6 +122,7 @@ export async function POST(request: Request) {
             'organizer_name',
             'capacity',
             'fee',
+            'occurrences',
             'confidence',
           ],
           additionalProperties: false,
@@ -117,6 +133,7 @@ export async function POST(request: Request) {
       'イベントチラシ画像から構造化情報を抽出するアシスタント。' +
       `日時は JST（Asia/Tokyo）。年が省略されている場合は ${today} を起点に最も近い未来の日付を採用する。` +
       '「2026年6月26日（金）13:30-15:00」のような表記は start_at=2026-06-26T13:30, end_at=2026-06-26T15:00 として分解する。' +
+      '「7/18（土）・8/9（日）」のように同一イベントが複数日程で開催される場合は、occurrences に各回の日時を列挙する（単発開催なら1件のみ）。' +
       '「主催」「主催団体」「お問合せ」欄から organizer_name を、「会場」「場所」欄から location を抽出（混同しない）。' +
       '画像がイベントチラシでない、または読み取り不能な場合は title="（読み取り失敗）", confidence=0 を返す。',
     messages: [

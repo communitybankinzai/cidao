@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 
+type Occurrence = { start_at: string; end_at: string }
+
 type Extracted = {
   title?: string
   description?: string
@@ -12,8 +14,16 @@ type Extracted = {
   organizer_name?: string | null
   capacity?: number | null
   fee?: number | null
+  occurrences?: Occurrence[]
   flyer_image_url?: string | null
   confidence?: number
+}
+
+// "YYYY-MM-DDTHH:MM" → "YYYY/MM/DD HH:MM"（表示用の軽い整形。パースできなければそのまま返す）
+function formatOcc(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s)
+  if (!m) return s
+  return `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}`
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'error'
@@ -28,6 +38,8 @@ export function ImageScanField({
   const [message, setMessage] = useState<string>('')
   const [flyerUrl, setFlyerUrl] = useState<string | null>(initialFlyerUrl)
   const [dragOver, setDragOver] = useState(false)
+  const [occurrences, setOccurrences] = useState<Occurrence[]>([])
+  const [checkedOcc, setCheckedOcc] = useState<boolean[]>([])
 
   async function handleFile(file: File) {
     setStatus('loading')
@@ -43,6 +55,14 @@ export function ImageScanField({
         throw new Error(data.error ?? `HTTP ${res.status}`)
       }
       if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
+      const occ = Array.isArray(data.occurrences) ? data.occurrences : []
+      if (occ.length > 1) {
+        setOccurrences(occ)
+        setCheckedOcc(occ.map(() => true))
+      } else {
+        setOccurrences([])
+        setCheckedOcc([])
+      }
       const filled = fillForm(data)
       setStatus('done')
       const pct = Math.round((data.confidence ?? 0) * 100)
@@ -126,6 +146,8 @@ export function ImageScanField({
     setFlyerUrl(null)
     setMessage('')
     setStatus('idle')
+    setOccurrences([])
+    setCheckedOcc([])
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -194,6 +216,35 @@ export function ImageScanField({
           />
           <p className="text-[10px] text-slate-500 break-all flex-1">
             添付済み。登録後はイベント詳細ページに大きく表示されます。
+          </p>
+        </div>
+      )}
+      {occurrences.length > 1 && (
+        <div className="rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-2 space-y-1">
+          <input
+            type="hidden"
+            name="occurrences_json"
+            value={JSON.stringify(occurrences.filter((_, i) => checkedOcc[i]))}
+          />
+          <p className="text-xs font-medium">
+            複数日程を検出しました。登録する回にチェックを入れてください（{checkedOcc.filter(Boolean).length}件選択中）
+          </p>
+          {occurrences.map((occ, i) => (
+            <label key={i} className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={checkedOcc[i] ?? true}
+                onChange={(e) => {
+                  const next = [...checkedOcc]
+                  next[i] = e.target.checked
+                  setCheckedOcc(next)
+                }}
+              />
+              {formatOcc(occ.start_at)} 〜 {formatOcc(occ.end_at)}
+            </label>
+          ))}
+          <p className="text-[10px] text-slate-500">
+            チェックした回数分、同内容のイベントがまとめて登録されます。
           </p>
         </div>
       )}

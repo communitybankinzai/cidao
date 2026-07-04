@@ -23,34 +23,46 @@ type CreateInput = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export async function createEvent(input: CreateInput) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('未ログイン')
+type Occurrence = { start_at: string; end_at: string }
 
-  // organizer_choice を解釈し、events 行の組み立てに必要なフィールドを決める
-  let organizer_type: 'member' | 'org'
-  let organizer_id: string
-  let name_text: string | null = null
-  let isProxy = false
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
-  const isUnknownOrganizer = input.organizer_choice === '__unknown__'
+type OrganizerResolution = {
+  organizer_type: 'member' | 'org'
+  organizer_id: string
+  name_text: string | null
+  isProxy: boolean
+  isUnknownOrganizer: boolean
+}
 
-  if (input.organizer_choice === '__member__' || isUnknownOrganizer) {
-    organizer_type = 'member'
-    organizer_id = user.id
-    if (isUnknownOrganizer) {
-      name_text = '主催者不明'
-      isProxy = true
+// organizer_choice を解釈し、events 行の組み立てに必要なフィールドを決める。
+// createEvent / updateEvent / createEventBulk で共通利用。
+async function resolveOrganizer(
+  supabase: SupabaseServerClient,
+  user: { id: string },
+  organizer_choice: string,
+  organizer_name_text: string | undefined,
+): Promise<OrganizerResolution> {
+  const isUnknownOrganizer = organizer_choice === '__unknown__'
+
+  if (organizer_choice === '__member__' || isUnknownOrganizer) {
+    return {
+      organizer_type: 'member',
+      organizer_id: user.id,
+      name_text: isUnknownOrganizer ? '主催者不明' : null,
+      isProxy: isUnknownOrganizer,
+      isUnknownOrganizer,
     }
-  } else if (input.organizer_choice === '__external__') {
-    organizer_type = 'member'
-    organizer_id = user.id
-    name_text = input.organizer_name_text?.trim() || null
+  }
+
+  if (organizer_choice === '__external__') {
+    const name_text = organizer_name_text?.trim() || null
     if (!name_text) throw new Error('未登録団体名を入力してください')
-    isProxy = true
-  } else if (UUID_RE.test(input.organizer_choice)) {
-    const orgId = input.organizer_choice
+    return { organizer_type: 'member', organizer_id: user.id, name_text, isProxy: true, isUnknownOrganizer: false }
+  }
+
+  if (UUID_RE.test(organizer_choice)) {
+    const orgId = organizer_choice
     // ユーザーが当該団体の代表/役員（confirmed）であるかチェック
     const { data: mem } = await supabase
       .from('memberships')
@@ -62,24 +74,28 @@ export async function createEvent(input: CreateInput) {
       .maybeSingle()
     if (mem) {
       // 正規の団体イベント
-      organizer_type = 'org'
-      organizer_id = orgId
-    } else {
-      // 非メンバーが既存登録団体名義で登録 → proxy 扱い。名称は organizations.name から取って organizer_name_text に。
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('name')
-        .eq('id', orgId)
-        .maybeSingle()
-      if (!org) throw new Error('指定された団体が見つかりません')
-      organizer_type = 'member'
-      organizer_id = user.id
-      name_text = org.name
-      isProxy = true
+      return { organizer_type: 'org', organizer_id: orgId, name_text: null, isProxy: false, isUnknownOrganizer: false }
     }
-  } else {
-    throw new Error('主催者の指定が不正です')
+    // 非メンバーが既存登録団体名義で登録 → proxy 扱い。名称は organizations.name から取って organizer_name_text に。
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', orgId)
+      .maybeSingle()
+    if (!org) throw new Error('指定された団体が見つかりません')
+    return { organizer_type: 'member', organizer_id: user.id, name_text: org.name, isProxy: true, isUnknownOrganizer: false }
   }
+
+  throw new Error('主催者の指定が不正です')
+}
+
+export async function createEvent(input: CreateInput) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { organizer_type, organizer_id, name_text, isProxy, isUnknownOrganizer } =
+    await resolveOrganizer(supabase, user, input.organizer_choice, input.organizer_name_text)
 
   const { data, error } = await supabase
     .from('events')
@@ -120,6 +136,57 @@ export async function createEvent(input: CreateInput) {
   redirect(`/events/${data.id}`)
 }
 
+// チラシから複数日程（occurrences）が検出された場合に、同一内容のイベントをまとめて登録する。
+export async function createEventBulk(input: CreateInput, occurrences: Occurrence[]) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { organizer_type, organizer_id, name_text, isProxy, isUnknownOrganizer } =
+    await resolveOrganizer(supabase, user, input.organizer_choice, input.organizer_name_text)
+
+  const list = occurrences.length > 0 ? occurrences : [{ start_at: input.start_at, end_at: input.end_at }]
+
+  let firstId: string | null = null
+  for (const occ of list) {
+    const { data, error } = await supabase
+      .from('events')
+      .insert({
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        start_at: jstLocalToUtcIso(occ.start_at),
+        end_at: jstLocalToUtcIso(occ.end_at),
+        location: input.location ?? null,
+        online_flag: input.online_flag,
+        capacity: input.capacity ?? null,
+        fee: input.fee ?? null,
+        organizer_type,
+        organizer_id,
+        organizer_name_text: name_text,
+        proxy_registration: isProxy,
+        proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
+        flyer_image_url: input.flyer_image_url?.trim() || null,
+        status: 'open',
+      })
+      .select('id')
+      .single()
+    if (error) throw new Error(`イベント作成失敗: ${error.message}`)
+    firstId = firstId ?? data.id
+
+    if (!isUnknownOrganizer) {
+      await supabase.from('event_participants').insert({
+        event_id: data.id,
+        member_id: user.id,
+        role: 'organizer',
+      })
+    }
+  }
+
+  revalidatePath('/events')
+  redirect(`/events/${firstId}`)
+}
+
 type UpdateInput = {
   id: string
   title: string
@@ -142,55 +209,9 @@ export async function updateEvent(input: UpdateInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // organizer 関連の解釈は createEvent と同じロジック
-  let organizer_type: 'member' | 'org'
-  let organizer_id: string
-  let name_text: string | null = null
-  let isProxy = false
-
-  const isUnknownOrganizer = input.organizer_choice === '__unknown__'
-
-  if (input.organizer_choice === '__member__' || isUnknownOrganizer) {
-    organizer_type = 'member'
-    organizer_id = user.id
-    if (isUnknownOrganizer) {
-      name_text = '主催者不明'
-      isProxy = true
-    }
-  } else if (input.organizer_choice === '__external__') {
-    organizer_type = 'member'
-    organizer_id = user.id
-    name_text = input.organizer_name_text?.trim() || null
-    if (!name_text) throw new Error('未登録団体名を入力してください')
-    isProxy = true
-  } else if (UUID_RE.test(input.organizer_choice)) {
-    const orgId = input.organizer_choice
-    const { data: mem } = await supabase
-      .from('memberships')
-      .select('role')
-      .eq('org_id', orgId)
-      .eq('member_id', user.id)
-      .eq('status', 'confirmed')
-      .in('role', ['representative', 'officer'])
-      .maybeSingle()
-    if (mem) {
-      organizer_type = 'org'
-      organizer_id = orgId
-    } else {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('name')
-        .eq('id', orgId)
-        .maybeSingle()
-      if (!org) throw new Error('指定された団体が見つかりません')
-      organizer_type = 'member'
-      organizer_id = user.id
-      name_text = org.name
-      isProxy = true
-    }
-  } else {
-    throw new Error('主催者の指定が不正です')
-  }
+  // organizer 関連の解釈は createEvent と共通のヘルパーを使う
+  const { organizer_type, organizer_id, name_text, isProxy, isUnknownOrganizer } =
+    await resolveOrganizer(supabase, user, input.organizer_choice, input.organizer_name_text)
 
   const { error } = await supabase
     .from('events')
