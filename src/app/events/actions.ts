@@ -217,6 +217,17 @@ export async function updateEvent(input: UpdateInput) {
     .eq('id', input.id)
   if (error) throw new Error(`イベント更新失敗: ${error.message}`)
 
+  // 「主催者不明」に変更した場合、自分の participant ロールが organizer のままだと
+  // 「主催者として登録中」表示が残ってしまうため、participant に格下げする
+  if (isUnknownOrganizer) {
+    await supabase
+      .from('event_participants')
+      .update({ role: 'participant' })
+      .eq('event_id', input.id)
+      .eq('member_id', user.id)
+      .eq('role', 'organizer')
+  }
+
   revalidatePath('/events')
   revalidatePath(`/events/${input.id}`)
   redirect(`/events/${input.id}`)
