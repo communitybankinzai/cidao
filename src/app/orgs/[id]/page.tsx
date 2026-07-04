@@ -154,6 +154,16 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </header>
 
+        {!org.representative_id && (
+          <div className="text-xs px-3 py-2 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 rounded flex flex-wrap items-center gap-1">
+            <span>⚠ この団体はまだ代表者による本登録が行われていません（印西市の公開データを基にした暫定表示です）。</span>
+            <span>
+              ご自身が代表者の場合は{' '}
+              <Link href="/me/edit" className="underline font-medium">本登録できます →</Link>
+            </span>
+          </div>
+        )}
+
         {(org.description || org.activity_detail) && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
             {isUnverified && (
