@@ -218,14 +218,19 @@ export async function updateEvent(input: UpdateInput) {
   if (error) throw new Error(`イベント更新失敗: ${error.message}`)
 
   // 「主催者不明」に変更した場合、自分の participant ロールが organizer のままだと
-  // 「主催者として登録中」表示が残ってしまうため、participant に格下げする
+  // 「主催者として登録中」表示が残ってしまうため、participant に格下げする。
+  // event_participants に直接 UPDATE できる RLS ポリシーは無いため、
+  // SECURITY DEFINER の manage_event_participant RPC を使う。
   if (isUnknownOrganizer) {
-    await supabase
-      .from('event_participants')
-      .update({ role: 'participant' })
-      .eq('event_id', input.id)
-      .eq('member_id', user.id)
-      .eq('role', 'organizer')
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('manage_event_participant', {
+      p_event_id: input.id,
+      p_member_id: user.id,
+      p_role: 'participant',
+      p_attended: null,
+    })
+    if (rpcError || (rpcResult && rpcResult.ok === false)) {
+      throw new Error(`参加者ロールの更新失敗: ${rpcError?.message ?? rpcResult?.error}`)
+    }
   }
 
   revalidatePath('/events')
