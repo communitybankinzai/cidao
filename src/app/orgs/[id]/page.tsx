@@ -303,6 +303,14 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           hasOrgEmail={!!org.contact_email}
         />
 
+        {(myActiveMembership?.status === 'confirmed' || canEdit) && (
+          <div className="text-right">
+            <Link href={`/orgs/${id}/reception`} className="text-xs text-slate-500 hover:underline">
+              📷 受付モード（会員証QRで受付）→
+            </Link>
+          </div>
+        )}
+
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <h2 className="text-sm font-semibold uppercase text-slate-500">参加 / 加入</h2>
           {!user ? (

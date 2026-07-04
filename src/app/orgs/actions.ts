@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { canUserEditOrg } from '@/lib/org-permissions'
 
 type OrgInput = {
@@ -483,4 +484,151 @@ export async function approveMembership(orgId: string, memberId: string) {
     .eq('member_id', memberId)
   if (error) throw new Error(`承認失敗: ${error.message}`)
   revalidatePath(`/orgs/${orgId}`)
+}
+
+// ===========================
+// QR 受付（reception）
+// ===========================
+
+// service_role クライアント（checkins への書込・members 検索用。RLS を通さない分、
+// 呼び出し前に必ず assertReceptionOperator で操作者の権限を検証する）
+function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) throw new Error('サーバー設定エラー（service role 未設定）')
+  return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+// 受付操作者の権限チェック：当該団体の confirmed メンバー、または CiDAO 管理者
+async function assertReceptionOperator(orgId: string): Promise<string> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin) return user.id
+
+  const { data: mem } = await supabase
+    .from('memberships')
+    .select('status')
+    .eq('org_id', orgId)
+    .eq('member_id', user.id)
+    .eq('status', 'confirmed')
+    .is('left_at', null)
+    .maybeSingle()
+  if (!mem) throw new Error('この団体の受付を操作する権限がありません（承認済みメンバーのみ）')
+  return user.id
+}
+
+export type ReceptionResult = {
+  ok: boolean
+  alreadyCheckedIn?: boolean
+  memberName?: string
+  error?: string
+}
+
+// QR/手動受付の本体。eventId 指定時は event_participants の出欠も付ける（ptはDBトリガーが付与）
+export async function receptionCheckin(
+  orgId: string,
+  memberId: string,
+  opts: { eventId?: string | null; purpose?: string | null },
+): Promise<ReceptionResult> {
+  try {
+    const operatorId = await assertReceptionOperator(orgId)
+    const eventId = opts.eventId?.trim() || null
+    const purpose = opts.purpose?.trim().slice(0, 60) || null
+    if (!eventId && !purpose) return { ok: false, error: '受付名かイベントを指定してください' }
+
+    const admin = createAdminClient()
+
+    // 対象メンバーの存在確認
+    const { data: target } = await admin
+      .from('members')
+      .select('id, display_name')
+      .eq('id', memberId)
+      .maybeSingle()
+    if (!target) return { ok: false, error: 'この QR は CiDAO の会員証ではないようです' }
+
+    // イベント指定時：当該団体のイベントであることを確認
+    if (eventId) {
+      const { data: ev } = await admin
+        .from('events')
+        .select('id, organizer_type, organizer_id')
+        .eq('id', eventId)
+        .maybeSingle()
+      if (!ev || ev.organizer_type !== 'org' || ev.organizer_id !== orgId) {
+        return { ok: false, error: 'この団体のイベントではありません' }
+      }
+    }
+
+    // 当日の同一受付（同じイベント or 同じ受付名）の重複チェック
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    let dupQuery = admin
+      .from('checkins')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('member_id', memberId)
+      .gte('created_at', todayStart.toISOString())
+    dupQuery = eventId ? dupQuery.eq('event_id', eventId) : dupQuery.eq('purpose', purpose)
+    const { data: dup } = await dupQuery.limit(1).maybeSingle()
+    if (dup) return { ok: true, alreadyCheckedIn: true, memberName: target.display_name }
+
+    const { error: insErr } = await admin.from('checkins').insert({
+      org_id: orgId,
+      member_id: memberId,
+      event_id: eventId,
+      purpose,
+      scanned_by: operatorId,
+    })
+    if (insErr) return { ok: false, error: `受付記録に失敗: ${insErr.message}` }
+
+    // イベント連動：出席を付ける（既存参加者は role 維持、未登録なら participant で追加）
+    if (eventId) {
+      const { data: existing } = await admin
+        .from('event_participants')
+        .select('role')
+        .eq('event_id', eventId)
+        .eq('member_id', memberId)
+        .maybeSingle()
+      if (existing) {
+        await admin
+          .from('event_participants')
+          .update({ attended: true })
+          .eq('event_id', eventId)
+          .eq('member_id', memberId)
+      } else {
+        await admin.from('event_participants').insert({
+          event_id: eventId,
+          member_id: memberId,
+          role: 'participant',
+          attended: true,
+        })
+      }
+      revalidatePath(`/events/${eventId}`)
+    }
+
+    return { ok: true, memberName: target.display_name }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// 手動受付用のメンバー検索（表示名の部分一致、最大8件）
+export async function searchMembersForReception(
+  orgId: string,
+  query: string,
+): Promise<Array<{ id: string; display_name: string; avatar_url: string | null }>> {
+  await assertReceptionOperator(orgId)
+  const q = query.trim()
+  if (q.length < 1) return []
+
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('members')
+    .select('id, display_name, avatar_url')
+    .ilike('display_name', `%${q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`)
+    .is('deleted_at', null)
+    .limit(8)
+  return data ?? []
 }
