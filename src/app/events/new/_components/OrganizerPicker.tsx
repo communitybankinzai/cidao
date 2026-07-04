@@ -69,6 +69,7 @@ export function OrganizerPicker({
           <label className="text-sm font-medium">団体名（未登録）</label>
           <input
             name="organizer_name_text"
+            required
             maxLength={80}
             placeholder="例: 「木下音頭」愛好会"
             defaultValue={initialNameText ?? ''}
