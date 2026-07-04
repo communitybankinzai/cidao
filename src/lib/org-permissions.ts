@@ -13,6 +13,7 @@ type OrgForPermission = {
 //   (b) memberships で representative/officer かつ confirmed
 //   (c) organizations.contact_email が user の email と一致
 //      （inzaiparque 取込団体の代表者が CiDAO 未登録でも編集できる経路）
+//   (d) CiDAO 管理者（members.admin_role が設定済み）は全団体を編集可能
 export async function canUserEditOrg(
   supabase: SupabaseClient,
   org: OrgForPermission,
@@ -20,6 +21,9 @@ export async function canUserEditOrg(
   userEmail: string | null,
 ): Promise<boolean> {
   if (org.representative_id === userId) return true
+
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin) return true
 
   const { data: mem } = await supabase
     .from('memberships')
