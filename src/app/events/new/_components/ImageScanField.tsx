@@ -27,6 +27,7 @@ export function ImageScanField({
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>('')
   const [flyerUrl, setFlyerUrl] = useState<string | null>(initialFlyerUrl)
+  const [dragOver, setDragOver] = useState(false)
 
   async function handleFile(file: File) {
     setStatus('loading')
@@ -140,10 +141,27 @@ export function ImageScanField({
   return (
     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-2">
       <input type="hidden" name="flyer_image_url" value={flyerUrl ?? ''} />
-      <div className="flex flex-wrap items-center gap-3">
+      <div
+        className={`flex flex-wrap items-center gap-3 rounded border border-dashed p-2 transition-colors ${
+          dragOver
+            ? 'border-amber-500 bg-amber-100 dark:bg-amber-900/40'
+            : 'border-transparent'
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const f = e.dataTransfer.files?.[0]
+          if (f) void handleFile(f)
+        }}
+      >
         <label className="text-sm font-medium flex items-center gap-1">
           <span aria-hidden>📷</span>
-          チラシ画像（アップロード + AI 自動入力）
+          チラシ画像（アップロード + AI 自動入力、ドラッグ&ドロップ可）
         </label>
         <input
           ref={inputRef}
