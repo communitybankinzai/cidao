@@ -67,8 +67,9 @@ export default async function ReceptionPage({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-2xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
+        <nav className="text-xs text-slate-500 flex gap-3">
           <Link href={`/orgs/${id}`} className="hover:underline">← {org.name} に戻る</Link>
+          <Link href={`/orgs/${id}/reception/history`} className="hover:underline">受付履歴・CSV →</Link>
         </nav>
 
         <header className="space-y-1">

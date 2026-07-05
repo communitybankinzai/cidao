@@ -52,6 +52,7 @@ export function ReceptionClient({
   // 手動検索
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Array<{ id: string; display_name: string; avatar_url: string | null }>>([])
+  const [searched, setSearched] = useState(false)
 
   const doCheckin = useCallback(
     async (memberId: string) => {
@@ -157,6 +158,7 @@ export function ReceptionClient({
     setQuery(q)
     if (q.trim().length < 1) {
       setResults([])
+      setSearched(false)
       return
     }
     try {
@@ -164,6 +166,7 @@ export function ReceptionClient({
     } catch {
       setResults([])
     }
+    setSearched(true)
   }
 
   const receptionLabel = eventId
@@ -261,6 +264,12 @@ export function ReceptionClient({
               </li>
             ))}
           </ul>
+        )}
+        {searched && query.trim().length > 0 && results.length === 0 && (
+          <p className="text-xs text-slate-500">
+            「{query}」に一致する会員がいません。CiDAO 登録時の<strong>表示名</strong>で検索してください
+            （本名と異なる場合があります。各自 /me/edit で変更できます）。
+          </p>
         )}
       </section>
 
