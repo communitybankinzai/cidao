@@ -99,6 +99,20 @@ export default async function EventDetailPage({
           {event.location && <p className="mt-3 text-sm">📍 {event.location}</p>}
           {event.fee != null && <p className="text-sm">参加費: {event.fee} 円</p>}
           {event.capacity != null && <p className="text-sm">定員: {event.capacity} 名（現在 {counts.participant} 名）</p>}
+          {(event.website_url || event.form_url) && (
+            <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              {event.website_url && (
+                <a href={event.website_url} target="_blank" rel="noopener noreferrer" className="text-slate-700 dark:text-slate-300 underline hover:text-slate-900 dark:hover:text-slate-100">
+                  🔗 サイトを見る
+                </a>
+              )}
+              {event.form_url && (
+                <a href={event.form_url} target="_blank" rel="noopener noreferrer" className="text-slate-700 dark:text-slate-300 underline hover:text-slate-900 dark:hover:text-slate-100">
+                  📝 申込フォーム
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {event.external_source && (

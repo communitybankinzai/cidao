@@ -59,6 +59,8 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       organizer_choice,
       organizer_name_text,
       flyer_image_url: (formData.get('flyer_image_url') as string | null) || undefined,
+      website_url: (formData.get('website_url') as string | null) || undefined,
+      form_url: (formData.get('form_url') as string | null) || undefined,
     }
     try {
       // チラシから複数日程を検出してチェックした場合は一括登録
@@ -111,6 +113,10 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
             <L label="終了" req><input type="datetime-local" name="end_at" required className={inp} defaultValue={initialEnd} /></L>
           </div>
           <L label="場所"><input name="location" placeholder="例: 印西市役所 会議室" className={inp} /></L>
+          <div className="grid md:grid-cols-2 gap-3">
+            <L label="サイトリンク（任意）"><input type="url" name="website_url" placeholder="https://..." className={inp} /></L>
+            <L label="申込フォームリンク（任意）"><input type="url" name="form_url" placeholder="https://..." className={inp} /></L>
+          </div>
           <div className="grid md:grid-cols-3 gap-3">
             <L label="オンライン">
               <label className="flex gap-2 items-center text-sm"><input type="checkbox" name="online_flag" /> オンライン開催</label>

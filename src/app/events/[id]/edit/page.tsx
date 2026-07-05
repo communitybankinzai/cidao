@@ -108,6 +108,8 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       organizer_choice,
       organizer_name_text,
       flyer_image_url,
+      website_url: (formData.get('website_url') as string | null) || undefined,
+      form_url: (formData.get('form_url') as string | null) || undefined,
     })
   }
 
@@ -150,6 +152,14 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           <L label="場所">
             <input name="location" placeholder="例: 印西市役所 会議室" defaultValue={event.location ?? ''} className={inp} />
           </L>
+          <div className="grid md:grid-cols-2 gap-3">
+            <L label="サイトリンク（任意）">
+              <input type="url" name="website_url" placeholder="https://..." defaultValue={event.website_url ?? ''} className={inp} />
+            </L>
+            <L label="申込フォームリンク（任意）">
+              <input type="url" name="form_url" placeholder="https://..." defaultValue={event.form_url ?? ''} className={inp} />
+            </L>
+          </div>
           <div className="grid md:grid-cols-3 gap-3">
             <L label="オンライン">
               <label className="flex gap-2 items-center text-sm">
