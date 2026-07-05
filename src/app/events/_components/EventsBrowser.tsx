@@ -435,13 +435,6 @@ function RevealItem({
 }
 
 function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo> }) {
-  // 全体を通した表示順インデックス（左右交互スライドの判定に使う）
-  const indexById = useMemo(() => {
-    const m = new Map<string, number>()
-    events.forEach((e, i) => m.set(e.id, i))
-    return m
-  }, [events])
-
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const groups = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
@@ -484,9 +477,8 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {g.items.map((e) => {
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
-              const idx = indexById.get(e.id) ?? 0
               return (
-                <RevealItem key={e.id} id={e.id} fromLeft={idx % 2 === 0} itemsRef={itemsRef}>
+                <RevealItem key={e.id} id={e.id} fromLeft={false} itemsRef={itemsRef}>
                   <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <DateBadge iso={e.start_at} />
                     {e.flyer_image_url ? (
