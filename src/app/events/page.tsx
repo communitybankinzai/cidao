@@ -50,7 +50,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   const { startUtc, endUtc } = monthRangeUtc(y, m)
   const fetchStart = new Date(startUtc.getTime() - 7 * 86_400_000)
-  const fetchEnd = new Date(endUtc.getTime() + 7 * 86_400_000)
+  // リスト表示は「選択月から6ヶ月先」まで連続表示するため取得範囲を広げる。カレンダー表示は単月のまま。
+  const listEndUtc = monthRangeUtc(...(() => {
+    const total = y * 12 + (m - 1) + 6
+    return [Math.floor(total / 12), (total % 12) + 1] as [number, number]
+  })()).startUtc
+  const fetchEnd = new Date((view === 'list' ? listEndUtc : endUtc).getTime() + 7 * 86_400_000)
 
   const { data: events } = await supabase
     .from('events')

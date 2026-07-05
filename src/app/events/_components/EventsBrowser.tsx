@@ -337,44 +337,101 @@ function CalendarView({
   )
 }
 
+function DateBadge({ iso }: { iso: string }) {
+  const d = new Date(iso)
+  const day = Number(new Intl.DateTimeFormat('en-US', { timeZone: JST, day: 'numeric' }).format(d))
+  const wd = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, weekday: 'short' }).format(d)
+  const isSun = wd === '日'
+  const isSat = wd === '土'
+  return (
+    <div
+      className={`shrink-0 w-14 h-16 rounded-lg border flex flex-col items-center justify-center transition-colors ${
+        isSun
+          ? 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/40'
+          : isSat
+          ? 'border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40'
+          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'
+      }`}
+    >
+      <span className={`text-xl font-bold leading-none tabular-nums ${isSun ? 'text-rose-600 dark:text-rose-400' : isSat ? 'text-sky-600 dark:text-sky-400' : 'text-slate-800 dark:text-slate-100'}`}>
+        {day}
+      </span>
+      <span className={`text-[10px] mt-0.5 ${isSun ? 'text-rose-500' : isSat ? 'text-sky-500' : 'text-slate-500'}`}>
+        {wd}曜
+      </span>
+    </div>
+  )
+}
+
 function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo> }) {
   if (events.length === 0) {
     return <p className="text-slate-400 text-center py-12">該当するイベントがありません</p>
   }
+
+  // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
+  const groups = useMemo(() => {
+    const m = new Map<string, { label: string; items: EventRow[] }>()
+    for (const e of events) {
+      const d = new Date(e.start_at)
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit' }).format(d)
+      const label = `${new Intl.DateTimeFormat('ja-JP', { timeZone: JST, year: 'numeric', month: 'long' }).format(d)}`
+      const g = m.get(key) ?? { label, items: [] }
+      g.items.push(e)
+      m.set(key, g)
+    }
+    return Array.from(m.entries())
+  }, [events])
+
+  const thisMonthKey = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit' }).format(new Date())
+
   return (
-    <ul className="space-y-3">
-      {events.map((e) => {
-        const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
-        return (
-          <li key={e.id}>
-            <Link href={`/events/${e.id}`} className="flex gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition">
-              {e.flyer_image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.flyer_image_url} alt="" className="w-16 h-20 object-cover rounded border border-slate-200 dark:border-slate-700 shrink-0" />
-              ) : info ? (
-                <div className="shrink-0"><OrgLogo src={info.logo_url} name={info.name} size="lg" /></div>
-              ) : null}
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between mb-1 gap-2">
-                  <h2 className="text-lg font-semibold truncate">{e.title}</h2>
-                  <span className="text-xs text-slate-500 whitespace-nowrap">
-                    {new Date(e.start_at).toLocaleDateString('ja-JP', { timeZone: JST })} {hmFmt.format(new Date(e.start_at))}
-                  </span>
-                </div>
-                <div className="flex gap-2 text-xs flex-wrap items-center">
-                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(e.category)}</span>
-                  <span className="text-slate-500">主催: {organizerLabel(e)}</span>
-                  {info && info.type !== 'civic_group' && (
-                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">{TYPE_LABEL[info.type] ?? info.type}</span>
-                  )}
-                  {e.online_flag && <span className="px-2 py-0.5 bg-sky-100 dark:bg-sky-900 rounded">オンライン</span>}
-                  {e.location && <span className="text-slate-500">📍 {e.location}</span>}
-                </div>
-              </div>
-            </Link>
-          </li>
-        )
-      })}
-    </ul>
+    <div className="space-y-3">
+      {groups.map(([key, g]) => (
+        <details key={key} open={key === thisMonthKey} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
+            <span>{g.label}</span>
+            <span className="flex items-center gap-2 text-xs font-normal text-slate-500">
+              {g.items.length}件
+              <span className="inline-block transition-transform group-open:rotate-180">▾</span>
+            </span>
+          </summary>
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {g.items.map((e) => {
+              const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
+              return (
+                <li key={e.id}>
+                  <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <DateBadge iso={e.start_at} />
+                    {e.flyer_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={e.flyer_image_url} alt="" className="w-14 h-16 object-cover rounded border border-slate-200 dark:border-slate-700 shrink-0 transition-transform hover:scale-[1.03]" />
+                    ) : info ? (
+                      <div className="shrink-0"><OrgLogo src={info.logo_url} name={info.name} size="lg" /></div>
+                    ) : null}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between mb-1 gap-2">
+                        <h2 className="text-base font-semibold truncate">{e.title}</h2>
+                        <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
+                          {hmFmt.format(new Date(e.start_at))}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 text-xs flex-wrap items-center">
+                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(e.category)}</span>
+                        <span className="text-slate-500">主催: {organizerLabel(e)}</span>
+                        {info && info.type !== 'civic_group' && (
+                          <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">{TYPE_LABEL[info.type] ?? info.type}</span>
+                        )}
+                        {e.online_flag && <span className="px-2 py-0.5 bg-sky-100 dark:bg-sky-900 rounded">オンライン</span>}
+                        {e.location && <span className="text-slate-500">📍 {e.location}</span>}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </details>
+      ))}
+    </div>
   )
 }
