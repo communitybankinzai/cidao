@@ -541,13 +541,15 @@ export async function receptionCheckin(
 
     const admin = createAdminClient()
 
-    // 対象メンバーの存在確認
+    // 対象メンバーの存在確認（実名があれば受付表示に使う）
     const { data: target } = await admin
       .from('members')
-      .select('id, display_name')
+      .select('id, display_name, member_private(real_name)')
       .eq('id', memberId)
       .maybeSingle()
     if (!target) return { ok: false, error: 'この QR は CiDAO の会員証ではないようです' }
+    const priv = (Array.isArray(target.member_private) ? target.member_private[0] : target.member_private) as { real_name: string | null } | null
+    const receptionName = priv?.real_name ? `${priv.real_name}（${target.display_name}）` : target.display_name
 
     // イベント指定時：当該団体のイベントであることを確認
     if (eventId) {
@@ -572,7 +574,7 @@ export async function receptionCheckin(
       .gte('created_at', todayStart.toISOString())
     dupQuery = eventId ? dupQuery.eq('event_id', eventId) : dupQuery.eq('purpose', purpose)
     const { data: dup } = await dupQuery.limit(1).maybeSingle()
-    if (dup) return { ok: true, alreadyCheckedIn: true, memberName: target.display_name }
+    if (dup) return { ok: true, alreadyCheckedIn: true, memberName: receptionName }
 
     const { error: insErr } = await admin.from('checkins').insert({
       org_id: orgId,
@@ -608,27 +610,57 @@ export async function receptionCheckin(
       revalidatePath(`/events/${eventId}`)
     }
 
-    return { ok: true, memberName: target.display_name }
+    return { ok: true, memberName: receptionName }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
-// 手動受付用のメンバー検索（表示名の部分一致、最大8件）
+// 手動受付用のメンバー検索（表示名・実名の部分一致、最大8件）
+// 実名は非公開情報だが、受付用途に限り受付担当者（承認済みメンバー）へ表示する。
 export async function searchMembersForReception(
   orgId: string,
   query: string,
-): Promise<Array<{ id: string; display_name: string; avatar_url: string | null }>> {
+): Promise<Array<{ id: string; display_name: string; real_name: string | null; avatar_url: string | null }>> {
   await assertReceptionOperator(orgId)
   const q = query.trim()
   if (q.length < 1) return []
+  const pattern = `%${q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`
 
   const admin = createAdminClient()
-  const { data } = await admin
+
+  // (1) 表示名でヒット
+  const { data: byDisplay } = await admin
     .from('members')
-    .select('id, display_name, avatar_url')
-    .ilike('display_name', `%${q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`)
+    .select('id, display_name, avatar_url, member_private(real_name)')
+    .ilike('display_name', pattern)
     .is('deleted_at', null)
     .limit(8)
-  return data ?? []
+
+  // (2) 実名でヒット。姓名間のスペース有無の揺れを吸収するため、
+  //     クエリをスペースで分割し、全トークンを含む（AND）レコードを探す
+  const tokens = q.split(/[\s　]+/).filter(Boolean)
+  let realQuery = admin
+    .from('member_private')
+    .select('member_id, real_name, members!inner(id, display_name, avatar_url, deleted_at)')
+    .not('real_name', 'is', null)
+  for (const t of tokens) {
+    realQuery = realQuery.ilike('real_name', `%${t.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`)
+  }
+  const { data: byReal } = await realQuery.limit(8)
+
+  type Row = { id: string; display_name: string; real_name: string | null; avatar_url: string | null }
+  const map = new Map<string, Row>()
+  for (const m of byDisplay ?? []) {
+    const priv = (Array.isArray(m.member_private) ? m.member_private[0] : m.member_private) as { real_name: string | null } | null
+    map.set(m.id, { id: m.id, display_name: m.display_name, real_name: priv?.real_name ?? null, avatar_url: m.avatar_url })
+  }
+  for (const p of byReal ?? []) {
+    const mem = (Array.isArray(p.members) ? p.members[0] : p.members) as { id: string; display_name: string; avatar_url: string | null; deleted_at: string | null } | null
+    if (!mem || mem.deleted_at) continue
+    if (!map.has(mem.id)) {
+      map.set(mem.id, { id: mem.id, display_name: mem.display_name, real_name: p.real_name, avatar_url: mem.avatar_url })
+    }
+  }
+  return [...map.values()].slice(0, 8)
 }

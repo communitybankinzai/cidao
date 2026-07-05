@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 
 type ProfileUpdate = {
   display_name: string
+  real_name?: string | null     // 非公開（member_private テーブル）。受付での本人確認用
   residency_type: 'citizen' | 'related_population'
   relation_type?: string | null
   interests: string[]
@@ -64,6 +65,18 @@ export async function updateProfile(input: ProfileUpdate) {
     .eq('id', user.id)
 
   if (error) throw new Error(`プロフィール更新に失敗: ${error.message}`)
+
+  // 実名（非公開）は member_private に upsert（RLS: 本人のみ書込可）
+  if (input.real_name !== undefined) {
+    const realName = input.real_name?.trim().slice(0, 50) || null
+    const { error: privErr } = await supabase
+      .from('member_private')
+      .upsert(
+        { member_id: user.id, real_name: realName, updated_at: new Date().toISOString() },
+        { onConflict: 'member_id' },
+      )
+    if (privErr) throw new Error(`実名の保存に失敗: ${privErr.message}`)
+  }
 
   revalidatePath('/me')
 }

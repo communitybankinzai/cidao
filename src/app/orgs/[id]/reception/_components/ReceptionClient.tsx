@@ -51,7 +51,7 @@ export function ReceptionClient({
 
   // 手動検索
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Array<{ id: string; display_name: string; avatar_url: string | null }>>([])
+  const [results, setResults] = useState<Array<{ id: string; display_name: string; real_name: string | null; avatar_url: string | null }>>([])
   const [searched, setSearched] = useState(false)
 
   const doCheckin = useCallback(
@@ -259,7 +259,9 @@ export function ReceptionClient({
           <ul className="divide-y divide-slate-100 dark:divide-slate-800 border rounded">
             {results.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="text-sm truncate">{r.display_name}</span>
+                <span className="text-sm truncate">
+                  {r.real_name ? `${r.real_name}（${r.display_name}）` : r.display_name}
+                </span>
                 <Button size="sm" disabled={busy} onClick={() => void doCheckin(r.id)}>受付</Button>
               </li>
             ))}
@@ -267,8 +269,8 @@ export function ReceptionClient({
         )}
         {searched && query.trim().length > 0 && results.length === 0 && (
           <p className="text-xs text-slate-500">
-            「{query}」に一致する会員がいません。CiDAO 登録時の<strong>表示名</strong>で検索してください
-            （本名と異なる場合があります。各自 /me/edit で変更できます）。
+            「{query}」に一致する会員がいません。<strong>表示名</strong>または<strong>登録済みの実名</strong>で検索できます
+            （実名はプロフィール編集（/me/edit）の「実名（非公開・受付用）」欄で各自登録が必要です）。
           </p>
         )}
       </section>

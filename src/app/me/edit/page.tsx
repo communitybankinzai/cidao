@@ -21,6 +21,13 @@ export default async function EditProfilePage() {
 
   if (!member) redirect('/me')
 
+  // 実名（非公開・受付用）。RLS で本人のみ読める
+  const { data: privateInfo } = await supabase
+    .from('member_private')
+    .select('real_name')
+    .eq('member_id', user.id)
+    .maybeSingle()
+
   const wasLight = member.tier === 'light'
 
   // 所属団体 picker 用データ
@@ -45,6 +52,7 @@ export default async function EditProfilePage() {
     const interests = formData.getAll('interests').map(String)
     await updateProfile({
       display_name: String(formData.get('display_name') ?? ''),
+      real_name: (formData.get('real_name') as string | null) ?? null,
       residency_type: String(formData.get('residency_type') ?? 'citizen') as 'citizen' | 'related_population',
       relation_type: (formData.get('relation_type') as string | null) || null,
       interests,
@@ -123,6 +131,20 @@ export default async function EditProfilePage() {
               defaultValue={member.display_name}
               className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
             />
+            <p className="text-xs text-slate-500 mt-1">サイト上で公開される名前です。ニックネーム可。</p>
+          </Field>
+
+          <Field label="実名（非公開・受付用）">
+            <input
+              name="real_name"
+              maxLength={50}
+              defaultValue={privateInfo?.real_name ?? ''}
+              placeholder="例: 印西 太郎"
+              className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              サイト上には公開されません。イベント等の受付で、団体の受付担当者が本人確認に使います（実名でも検索できるようになります）。
+            </p>
           </Field>
 
           <Field label="居住区分" required>

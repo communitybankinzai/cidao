@@ -1,7 +1,23 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
+
+// 受付担当者向けに実名（member_private・非公開）を引くための service_role クライアント。
+// このページは冒頭で承認済みメンバー/管理者チェックを通過した場合のみ描画される。
+async function fetchRealNames(memberIds: string[]): Promise<Map<string, string>> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key || memberIds.length === 0) return new Map()
+  const admin = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+  const { data } = await admin
+    .from('member_private')
+    .select('member_id, real_name')
+    .in('member_id', memberIds)
+    .not('real_name', 'is', null)
+  return new Map((data ?? []).map((r) => [r.member_id, r.real_name as string]))
+}
 
 // 受付履歴（直近90日）。権限は受付モードと同じ（承認済みメンバー or 管理者）。
 export default async function ReceptionHistoryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,12 +46,14 @@ export default async function ReceptionHistoryPage({ params }: { params: Promise
   const { data: rows } = await supabase
     .from('checkins')
     .select(
-      'id, purpose, created_at, members!checkins_member_id_fkey(display_name), scanned:members!checkins_scanned_by_fkey(display_name), events(title)',
+      'id, member_id, purpose, created_at, members!checkins_member_id_fkey(display_name), scanned:members!checkins_scanned_by_fkey(display_name), events(title)',
     )
     .eq('org_id', id)
     .gte('created_at', from)
     .order('created_at', { ascending: false })
     .limit(1000)
+
+  const realNames = await fetchRealNames([...new Set((rows ?? []).map((r) => r.member_id))])
 
   type Row = {
     id: string
@@ -48,9 +66,11 @@ export default async function ReceptionHistoryPage({ params }: { params: Promise
     const m = (Array.isArray(r.members) ? r.members[0] : r.members) as { display_name: string } | null
     const s = (Array.isArray(r.scanned) ? r.scanned[0] : r.scanned) as { display_name: string } | null
     const ev = (Array.isArray(r.events) ? r.events[0] : r.events) as { title: string } | null
+    const display = m?.display_name ?? '匿名'
+    const real = realNames.get(r.member_id)
     return {
       id: r.id,
-      memberName: m?.display_name ?? '匿名',
+      memberName: real ? `${real}（${display}）` : display,
       label: ev?.title ?? r.purpose ?? '受付',
       operator: s?.display_name ?? '-',
       createdAt: r.created_at,
