@@ -637,17 +637,16 @@ export async function searchMembersForReception(
     .is('deleted_at', null)
     .limit(8)
 
-  // (2) 実名でヒット。姓名間のスペース有無の揺れを吸収するため、
-  //     クエリをスペースで分割し、全トークンを含む（AND）レコードを探す
-  const tokens = q.split(/[\s　]+/).filter(Boolean)
-  let realQuery = admin
+  // (2) 実名でヒット。姓名間の半角/全角スペース有無の表記ゆれを吸収するため、
+  //     クエリ側の空白も除去し、DB側の空白除去済み生成列（real_name_normalized）と比較する
+  const normalizedQuery = q.replace(/[\s　]+/g, '')
+  const normalizedPattern = `%${normalizedQuery.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`
+  const { data: byReal } = await admin
     .from('member_private')
     .select('member_id, real_name, members!inner(id, display_name, avatar_url, deleted_at)')
     .not('real_name', 'is', null)
-  for (const t of tokens) {
-    realQuery = realQuery.ilike('real_name', `%${t.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`)
-  }
-  const { data: byReal } = await realQuery.limit(8)
+    .ilike('real_name_normalized', normalizedPattern)
+    .limit(8)
 
   type Row = { id: string; display_name: string; real_name: string | null; avatar_url: string | null }
   const map = new Map<string, Row>()
