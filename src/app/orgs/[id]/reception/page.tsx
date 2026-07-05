@@ -27,9 +27,10 @@ export default async function ReceptionPage({ params }: { params: Promise<{ id: 
     if (!mem) redirect(`/orgs/${id}?error=forbidden`)
   }
 
-  // 受付対象に選べるイベント：この団体の「昨日〜2週間先」のもの
+  // 受付対象に選べるイベント：この団体の「前後2週間」のもの
+  // （過去に遡って参加実績を登録する運用があるため、過去分も同じ幅で見せる）
   const now = Date.now()
-  const from = new Date(now - 1 * 86_400_000).toISOString()
+  const from = new Date(now - 14 * 86_400_000).toISOString()
   const to = new Date(now + 14 * 86_400_000).toISOString()
   const { data: events } = await supabase
     .from('events')
