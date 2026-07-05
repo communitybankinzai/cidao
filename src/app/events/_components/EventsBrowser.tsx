@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
@@ -363,10 +363,52 @@ function DateBadge({ iso }: { iso: string }) {
   )
 }
 
+// スクロールで画面内に入ったら左右どちらかからスライドインさせる（奇数/偶数で交互）
+function RevealItem({ fromLeft, children }: { fromLeft: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLLIElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisible(true)
+          obs.disconnect()
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -10% 0px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  return (
+    <li
+      ref={ref}
+      className="transition-all duration-500 ease-out"
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateX(0)' : `translateX(${fromLeft ? '-28px' : '28px'})`,
+      }}
+    >
+      {children}
+    </li>
+  )
+}
+
 function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo> }) {
   if (events.length === 0) {
     return <p className="text-slate-400 text-center py-12">該当するイベントがありません</p>
   }
+
+  // 全体を通した表示順インデックス（左右交互スライドの判定に使う）
+  const indexById = useMemo(() => {
+    const m = new Map<string, number>()
+    events.forEach((e, i) => m.set(e.id, i))
+    return m
+  }, [events])
 
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const groups = useMemo(() => {
@@ -398,8 +440,9 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {g.items.map((e) => {
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
+              const idx = indexById.get(e.id) ?? 0
               return (
-                <li key={e.id}>
+                <RevealItem key={e.id} fromLeft={idx % 2 === 0}>
                   <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <DateBadge iso={e.start_at} />
                     {e.flyer_image_url ? (
@@ -426,7 +469,7 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
                       </div>
                     </div>
                   </Link>
-                </li>
+                </RevealItem>
               )
             })}
           </ul>
