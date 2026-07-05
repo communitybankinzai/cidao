@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
@@ -363,35 +363,71 @@ function DateBadge({ iso }: { iso: string }) {
   )
 }
 
-// スクロールで画面内に入ったら左右どちらかからスライドインさせる（奇数/偶数で交互）
-function RevealItem({ fromLeft, children }: { fromLeft: boolean; children: React.ReactNode }) {
-  const ref = useRef<HTMLLIElement>(null)
-  const [visible, setVisible] = useState(false)
+const SLIDE_DISTANCE_PX = 90
+
+// スクロール位置と連動して左右からスライドイン/アウトさせる。
+// 画面下端で0%、画面縦方向中央でちょうど100%になるよう進捗を計算し、
+// スクロールを戻せば逆再生される（IntersectionObserverの一発トリガーではなく毎スクロールで再計算）。
+function useScrollSlideReveal(
+  itemsRef: React.MutableRefObject<Map<string, { el: HTMLLIElement; fromLeft: boolean }>>,
+) {
+  const rafIdRef = useRef(0)
+
+  const apply = useCallback(() => {
+    rafIdRef.current = 0
+    const vh = window.innerHeight
+    const start = vh          // 画面下端 = 進捗0
+    const end = vh / 2        // 画面縦方向中央 = 進捗100%
+    itemsRef.current.forEach(({ el, fromLeft }) => {
+      const rect = el.getBoundingClientRect()
+      if (rect.height === 0) return // <details> が閉じている等
+      const itemCenter = rect.top + rect.height / 2
+      let progress = (start - itemCenter) / (start - end)
+      progress = Math.min(1, Math.max(0, progress))
+      const tx = (fromLeft ? -SLIDE_DISTANCE_PX : SLIDE_DISTANCE_PX) * (1 - progress)
+      el.style.opacity = String(progress)
+      el.style.transform = `translateX(${tx}px)`
+    })
+  }, [itemsRef])
+
+  // <details>の開閉やウィンドウリサイズ時にも手動で再計算できるようにする
+  const requestApply = useCallback(() => {
+    if (rafIdRef.current) return
+    rafIdRef.current = requestAnimationFrame(apply)
+  }, [apply])
 
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisible(true)
-          obs.disconnect()
-        }
-      },
-      { threshold: 0.15, rootMargin: '0px 0px -10% 0px' },
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
+    requestApply()
+    window.addEventListener('scroll', requestApply, { passive: true })
+    window.addEventListener('resize', requestApply)
+    return () => {
+      window.removeEventListener('scroll', requestApply)
+      window.removeEventListener('resize', requestApply)
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+    }
+  }, [requestApply])
 
+  return requestApply
+}
+
+function RevealItem({
+  id,
+  fromLeft,
+  itemsRef,
+  children,
+}: {
+  id: string
+  fromLeft: boolean
+  itemsRef: React.MutableRefObject<Map<string, { el: HTMLLIElement; fromLeft: boolean }>>
+  children: React.ReactNode
+}) {
   return (
     <li
-      ref={ref}
-      className="transition-all duration-500 ease-out"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateX(0)' : `translateX(${fromLeft ? '-28px' : '28px'})`,
+      ref={(el) => {
+        if (el) itemsRef.current.set(id, { el, fromLeft })
+        else itemsRef.current.delete(id)
       }}
+      style={{ opacity: 0, transform: `translateX(${fromLeft ? -SLIDE_DISTANCE_PX : SLIDE_DISTANCE_PX}px)` }}
     >
       {children}
     </li>
@@ -399,10 +435,6 @@ function RevealItem({ fromLeft, children }: { fromLeft: boolean; children: React
 }
 
 function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo> }) {
-  if (events.length === 0) {
-    return <p className="text-slate-400 text-center py-12">該当するイベントがありません</p>
-  }
-
   // 全体を通した表示順インデックス（左右交互スライドの判定に使う）
   const indexById = useMemo(() => {
     const m = new Map<string, number>()
@@ -424,12 +456,24 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
     return Array.from(m.entries())
   }, [events])
 
+  const itemsRef = useRef(new Map<string, { el: HTMLLIElement; fromLeft: boolean }>())
+  const requestReveal = useScrollSlideReveal(itemsRef)
+
+  if (events.length === 0) {
+    return <p className="text-slate-400 text-center py-12">該当するイベントがありません</p>
+  }
+
   const thisMonthKey = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit' }).format(new Date())
 
   return (
     <div className="space-y-3">
       {groups.map(([key, g]) => (
-        <details key={key} open={key === thisMonthKey} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+        <details
+          key={key}
+          open={key === thisMonthKey}
+          onToggle={() => requestReveal()}
+          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden"
+        >
           <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
             <span>{g.label}</span>
             <span className="flex items-center gap-2 text-xs font-normal text-slate-500">
@@ -442,7 +486,7 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
               const idx = indexById.get(e.id) ?? 0
               return (
-                <RevealItem key={e.id} fromLeft={idx % 2 === 0}>
+                <RevealItem key={e.id} id={e.id} fromLeft={idx % 2 === 0} itemsRef={itemsRef}>
                   <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <DateBadge iso={e.start_at} />
                     {e.flyer_image_url ? (
