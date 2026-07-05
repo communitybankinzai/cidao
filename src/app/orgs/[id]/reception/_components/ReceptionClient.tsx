@@ -53,6 +53,8 @@ export function ReceptionClient({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Array<{ id: string; display_name: string; real_name: string | null; avatar_url: string | null }>>([])
   const [searched, setSearched] = useState(false)
+  const searchSeqRef = useRef(0)          // 古い応答の上書き防止用の連番
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // デバウンス
 
   const doCheckin = useCallback(
     async (memberId: string) => {
@@ -154,19 +156,29 @@ export function ReceptionClient({
     }
   }, [scanning, doCheckin])
 
-  async function handleSearch(q: string) {
+  function handleSearch(q: string) {
     setQuery(q)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (q.trim().length < 1) {
+      searchSeqRef.current++  // 進行中の検索応答も無効化
       setResults([])
       setSearched(false)
       return
     }
-    try {
-      setResults(await searchMembersForReception(orgId, q))
-    } catch {
-      setResults([])
-    }
-    setSearched(true)
+    // デバウンス：入力が 300ms 止まってから検索する
+    searchTimerRef.current = setTimeout(async () => {
+      const seq = ++searchSeqRef.current
+      let next: typeof results = []
+      try {
+        next = await searchMembersForReception(orgId, q)
+      } catch {
+        next = []
+      }
+      // 自分より新しい検索が始まっていたら、この（古い）結果は捨てる
+      if (seq !== searchSeqRef.current) return
+      setResults(next)
+      setSearched(true)
+    }, 300)
   }
 
   const receptionLabel = eventId
