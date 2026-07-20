@@ -42,6 +42,7 @@ export const ACTION_LABELS: Record<string, string> = {
   freefree_posted:      'FreeFree 掲載',
   freefree_coupon_used: 'クーポン利用',
   freefree_support:     '応援',
+  org_membership:       '団体所属',
   profile_filled:       'プロフィール充実',
   login_streak:         '連続ログイン',
 }
