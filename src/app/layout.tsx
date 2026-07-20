@@ -39,8 +39,13 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
+      translate="no"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      {/* ブラウザの自動翻訳がReactのDOMを書き換えてクラッシュするため翻訳対象外にする */}
+      <head>
+        <meta name="google" content="notranslate" />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   )
