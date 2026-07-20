@@ -68,7 +68,7 @@ export default function OrgClaimPicker({
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="団体名で検索（例: ボーイスカウト、亀成川、印西少年）"
+          placeholder="団体名で検索して1つずつ追加（例: ボーイスカウト）"
           className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
         />
         {candidates.length > 0 && (
@@ -99,7 +99,7 @@ export default function OrgClaimPicker({
 
       {selections.length === 0 ? (
         <p className="text-xs text-slate-500">
-          所属している印西の団体があれば検索して追加してください。承認は管理者または団体代表者が行います。
+          所属している印西の団体があれば検索して追加してください。複数の団体に所属している場合は、検索→追加を繰り返してすべて登録できます。承認は管理者または団体代表者が行います。
         </p>
       ) : (
         <ul className="space-y-2">
