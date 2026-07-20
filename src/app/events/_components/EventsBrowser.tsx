@@ -291,7 +291,18 @@ function CalendarView({
   orgInfo: Record<string, OrgInfo>
   organizerLabel: (r: EventRow) => string
 }) {
+  // 日付タップで、その日のイベント一覧をカレンダー直下に表示する。
+  // 初期表示は「今日」（イベントがある場合のみパネルが出る）
+  const [selected, setSelected] = useState<string>(today)
+  const selectedItems = byDate.get(selected) ?? []
+  const selectedLabel = (() => {
+    const [sy, sm, sd] = selected.split('-').map(Number)
+    const dow = ['日', '月', '火', '水', '木', '金', '土'][new Date(sy, sm - 1, sd).getDay()]
+    return `${sm}月${sd}日（${dow}）`
+  })()
+
   return (
+    <div className="space-y-3">
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
       <div className="grid grid-cols-7 text-[11px] font-medium border-b border-slate-200 dark:border-slate-800">
         {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => (
@@ -306,23 +317,27 @@ function CalendarView({
           const inMonth = cy === year && cm === month
           const dow = idx % 7
           const isToday = ymd === today
+          const isSelected = ymd === selected
           const items = byDate.get(ymd) ?? []
           return (
-            <div key={ymd} className={`min-h-[92px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}>
+            <div
+              key={ymd}
+              onClick={() => setSelected(ymd)}
+              className={`min-h-[92px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${items.length > 0 ? 'cursor-pointer' : ''} ${isSelected ? 'bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-inset ring-amber-300 dark:ring-amber-800' : inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}
+            >
               <div className="flex items-center justify-between">
                 <span className={`text-xs tabular-nums ${isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : !inMonth ? 'text-slate-300 dark:text-slate-700' : dow === 0 ? 'text-rose-600 dark:text-rose-400' : dow === 6 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}`}>{cd}</span>
                 {isLoggedIn && inMonth && (
-                  <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} className="opacity-0 hover:opacity-100 focus:opacity-100 text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
+                  <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} onClick={(ev) => ev.stopPropagation()} className="opacity-0 hover:opacity-100 focus:opacity-100 text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
                 )}
               </div>
               <ul className="flex flex-col gap-0.5 overflow-hidden">
                 {items.slice(0, 3).map((e) => (
                   <li key={e.id}>
-                    <Link href={`/events/${e.id}`} title={`${hmFmt.format(new Date(e.start_at))} ${e.title} / ${organizerLabel(e)}`} className="block truncate text-[11px] px-1 py-0.5 rounded bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/70 text-amber-900 dark:text-amber-100">
-                      <span className="tabular-nums mr-1">{hmFmt.format(new Date(e.start_at))}</span>
+                    <span title={`${hmFmt.format(new Date(e.start_at))} ${e.title} / ${organizerLabel(e)}`} className="block truncate text-[11px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100">
                       {e.flyer_image_url && <span className="mr-0.5" aria-hidden>📎</span>}
                       {e.title}
-                    </Link>
+                    </span>
                   </li>
                 ))}
                 {items.length > 3 && (
@@ -333,6 +348,29 @@ function CalendarView({
           )
         })}
       </div>
+    </div>
+
+    {selectedItems.length > 0 && (
+      <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{selectedItems.length}件）</p>
+        <ul className="space-y-1.5">
+          {selectedItems.map((e) => (
+            <li key={e.id}>
+              <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
+                <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">{hmFmt.format(new Date(e.start_at))}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
+                    {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
+                    {e.title}
+                  </span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{organizerLabel(e)}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
     </div>
   )
 }
