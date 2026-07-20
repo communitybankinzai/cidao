@@ -8,7 +8,12 @@ import { claimMemberships, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
 import AvatarUpload from './_components/AvatarUpload'
 
-export default async function EditProfilePage() {
+export default async function EditProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>
+}) {
+  const { welcome } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/me/edit')
@@ -111,6 +116,19 @@ export default async function EditProfilePage() {
               : '内容を更新できます'}
           </p>
         </header>
+
+        {welcome === '1' && (
+          <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-1.5">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              ようこそ！まず「表示名」をご確認ください
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+              現在、LINEに登録されているお名前がそのまま表示名になっています。
+              表示名はCiDAO内で<strong>他の参加者に公開されます</strong>ので、
+              実名を出したくない場合は、公開してもよいニックネームに変更して保存してください（あとからいつでも変更できます）。
+            </p>
+          </div>
+        )}
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
           <Field label="プロフィール画像（任意）">
