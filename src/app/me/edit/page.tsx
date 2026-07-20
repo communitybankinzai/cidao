@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { updateProfile } from '../actions'
-import { claimMemberships, type OrgClaim } from '../../orgs/actions'
+import { claimMemberships, leaveOrg, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
 import AvatarUpload from './_components/AvatarUpload'
 
@@ -288,10 +288,23 @@ export default async function EditProfilePage({
                     <span className="truncate">
                       {(m.organizations as unknown as { name?: string } | null)?.name ?? '(団体名取得不可)'}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 shrink-0">
-                      {m.role === 'representative' ? '代表者' : m.role === 'officer' ? '役員' : '会員'}
-                      {' / '}
-                      {m.status === 'confirmed' ? '承認済' : '申請中'}
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+                        {m.role === 'representative' ? '代表者' : m.role === 'officer' ? '役員' : '会員'}
+                        {' / '}
+                        {m.status === 'confirmed' ? '承認済' : '申請中'}
+                      </span>
+                      <button
+                        type="submit"
+                        formNoValidate
+                        formAction={async () => {
+                          'use server'
+                          await leaveOrg(m.org_id)
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
+                      >
+                        脱退
+                      </button>
                     </span>
                   </li>
                 ))}

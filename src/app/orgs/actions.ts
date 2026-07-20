@@ -207,6 +207,34 @@ export async function expressInterest(orgId: string, message: string, contactOk:
   }
 }
 
+export async function leaveOrg(orgId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // 団体の代表者は脱退不可（organizations.representative_id の FK が残るため、先に代表変更が必要）
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('representative_id, name')
+    .eq('id', orgId)
+    .single()
+  if (org?.representative_id === user.id) {
+    throw new Error('団体の代表者は脱退できません。先に管理者へ代表者の変更を依頼してください')
+  }
+
+  const { error } = await supabase
+    .from('memberships')
+    .update({ left_at: new Date().toISOString() })
+    .eq('org_id', orgId)
+    .eq('member_id', user.id)
+    .is('left_at', null)
+  if (error) throw new Error(`脱退に失敗: ${error.message}`)
+
+  revalidatePath('/me/edit')
+  revalidatePath('/me')
+  revalidatePath(`/orgs/${orgId}`)
+}
+
 export async function requestJoinOrg(orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

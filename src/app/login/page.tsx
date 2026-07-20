@@ -13,10 +13,16 @@ export default function LoginPage() {
   const [status, setStatus] = useState<'idle' | 'redirecting' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
+  const [notice, setNotice] = useState<string | null>(null)
+
   // 認証プロバイダから戻された際のエラー（クエリ・ハッシュ両方）を画面に表示する
   useEffect(() => {
     const search = new URLSearchParams(window.location.search)
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    if (search.get('deleted') === '1') {
+      setNotice('退会手続きが完了しました。30日以内にLINEで再ログインすればアカウントを復元できます。')
+      return
+    }
     const desc =
       hash.get('error_description') ??
       search.get('error_description') ??
@@ -65,6 +71,11 @@ export default function LoginPage() {
         </header>
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+          {notice && (
+            <div className="rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 p-3">
+              <p className="text-xs text-emerald-900 dark:text-emerald-100">{notice}</p>
+            </div>
+          )}
           <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 space-y-1.5">
             <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
               なぜLINEログインなの？

@@ -1,7 +1,36 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+
+// 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
+// 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
+// 再ログイン時に auth/callback で deleted_at をクリアして復元する運用。
+export async function deleteAccount() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  // 団体代表者のまま退会すると organizations.representative_id が宙に浮くためブロック
+  const { data: repOrgs } = await supabase
+    .from('organizations')
+    .select('name')
+    .eq('representative_id', user.id)
+    .limit(1)
+  if (repOrgs && repOrgs.length > 0) {
+    throw new Error(`団体「${repOrgs[0].name}」の代表者のため退会できません。先に管理者へ代表者の変更を依頼してください`)
+  }
+
+  const { error } = await supabase
+    .from('members')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', user.id)
+  if (error) throw new Error(`退会処理に失敗: ${error.message}`)
+
+  await supabase.auth.signOut()
+  redirect('/login?deleted=1')
+}
 
 type ProfileUpdate = {
   display_name: string

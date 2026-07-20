@@ -7,6 +7,7 @@ import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-sum
 import { categoryLabel } from '@/lib/categories'
 import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
 import { TYPE_LABEL as ORG_TYPE_LABEL } from '@/lib/org-labels'
+import DeleteAccountSection from './_components/DeleteAccountSection'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
   open: {
@@ -399,6 +400,8 @@ export default async function MyPage({
             </Link>
           </p>
         )}
+
+        <DeleteAccountSection />
       </div>
     </div>
   )

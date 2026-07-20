@@ -16,9 +16,15 @@ export async function GET(request: Request) {
       if (user) {
         const { data: member } = await supabase
           .from('members')
-          .select('interests')
+          .select('interests, deleted_at')
           .eq('id', user.id)
           .single()
+        // 退会済みユーザーの再ログイン → アカウント復元（仕様書 v2.1：30日以内復元可。
+        // 30日経過後の物理削除バッチが未実装のため、それまでは期限によらず復元する）
+        if (member?.deleted_at) {
+          await supabase.from('members').update({ deleted_at: null }).eq('id', user.id)
+          return NextResponse.redirect(`${origin}/me?restored=1`)
+        }
         if (member && (member.interests ?? []).length === 0) {
           return NextResponse.redirect(`${origin}/me/edit?welcome=1`)
         }
