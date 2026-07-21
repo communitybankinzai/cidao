@@ -1,6 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
+const TIER_LABEL: Record<string, string> = {
+  light: 'ライト登録',
+  email_only: '通常メンバー',
+  verified: '住所確認済',
+}
+
 export default async function RankingPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -20,11 +26,11 @@ export default async function RankingPage() {
         <div className="max-w-md text-center space-y-3">
           <h1 className="text-2xl font-bold">貢献度ランキング</h1>
           <p className="text-sm text-slate-500">
-            ランキング参加メンバーがまだいません。
+            まだ誰も表示に同意していません。最初のひとりになりませんか？
           </p>
           {user && (
             <Link href="/me/edit" className="text-sm text-sky-600 underline">
-              マイページから参加する
+              マイページで「ランキングに参加する」をON にする
             </Link>
           )}
         </div>
@@ -58,7 +64,7 @@ export default async function RankingPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
           <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">貢献度ランキング</h1>
           <p className="text-xs text-slate-500 mt-2">
-            ランキング参加をオプトインしたメンバーのみ表示。Top {ranking.length}
+            「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）
           </p>
         </header>
 
@@ -76,7 +82,7 @@ export default async function RankingPage() {
               <div className="flex-1">
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{m.display_name}</div>
                 <div className="text-xs text-slate-500">
-                  {m.residency_type === 'citizen' ? '市民' : '関係人口'} · {m.tier}
+                  {m.residency_type === 'citizen' ? '市民' : '関係人口'} · {TIER_LABEL[m.tier] ?? m.tier}
                 </div>
               </div>
               <div className="font-mono text-right">

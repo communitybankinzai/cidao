@@ -240,8 +240,8 @@ export default async function EditProfilePage({
               <label className="flex items-start gap-2">
                 <input type="checkbox" name="ranking_opt_in" defaultChecked={member.ranking_opt_in ?? false} className="mt-1" />
                 <span>
-                  貢献度ランキングに参加
-                  <span className="block text-xs text-slate-500">ランキングページに表示されます</span>
+                  ランキングに参加する
+                  <span className="block text-xs text-slate-500">表示名と貢献度ポイントが /ranking に公開されます。活動の励みにどうぞ</span>
                 </span>
               </label>
               <label className="flex items-start gap-2">
