@@ -18,6 +18,14 @@ export async function canUserEditEvent(
 ): Promise<boolean> {
   if (event.organizer_type === 'member' && event.organizer_id === userId) return true
 
+  // 運営委員（committee）・統括管理者（super）はすべてのイベントを編集・削除できる
+  const { data: me } = await supabase
+    .from('members')
+    .select('admin_role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (me?.admin_role === 'committee' || me?.admin_role === 'super') return true
+
   // 写真投稿者本人（claim 済み）
   if (event.submitter_member_id && event.submitter_member_id === userId) return true
 
