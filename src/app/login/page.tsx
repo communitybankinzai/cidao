@@ -14,6 +14,31 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [notice, setNotice] = useState<string | null>(null)
+  const [inAppBrowser, setInAppBrowser] = useState(false)
+
+  // LINEアプリ内蔵ブラウザ（WebView）は、OAuth往復でストレージが分離されることがあり
+  // 「PKCE code verifier not found」エラーの主な原因になる。事前に検出して案内する。
+  useEffect(() => {
+    const ua = navigator.userAgent || ''
+    if (/\bLine\//i.test(ua)) {
+      setInAppBrowser(true)
+    }
+  }, [])
+
+  function openInExternalBrowser() {
+    const url = window.location.href
+    const ua = navigator.userAgent || ''
+    if (/iphone|ipad|ipod/i.test(ua)) {
+      // iOS: Safari を強制起動するスキーム
+      window.location.href = url.replace(/^https?:\/\//i, 'x-safari-https://')
+    } else if (/android/i.test(ua)) {
+      // Android: Chrome を強制起動する intent スキーム
+      const stripped = url.replace(/^https?:\/\//i, '')
+      window.location.href = `intent://${stripped}#Intent;scheme=https;package=com.android.chrome;end`
+    } else {
+      window.open(url, '_blank')
+    }
+  }
 
   // 認証プロバイダから戻された際のエラー（クエリ・ハッシュ両方）を画面に表示する
   useEffect(() => {
@@ -71,6 +96,27 @@ export default function LoginPage() {
         </header>
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+          {inAppBrowser && (
+            <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                ⚠️ LINEのアプリ内で開いています
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                この状態のままだとログインに失敗することがあります。お手数ですが、下のボタンからSafari（またはChrome）で開き直してください。
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openInExternalBrowser}
+                className="w-full border-amber-400 text-amber-900 dark:text-amber-100"
+              >
+                外部ブラウザで開く
+              </Button>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                うまく開かない場合は、右下または右上の「…」メニューから「他のアプリで開く」を選んでください。
+              </p>
+            </div>
+          )}
           {notice && (
             <div className="rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 p-3">
               <p className="text-xs text-emerald-900 dark:text-emerald-100">{notice}</p>
@@ -108,9 +154,23 @@ export default function LoginPage() {
           </Button>
 
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              ログインに失敗しました：{error}
-            </p>
+            <div className="rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-3 space-y-2">
+              {/PKCE|code verifier/i.test(error) ? (
+                <>
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">
+                    ログインに失敗しました
+                  </p>
+                  <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">
+                    アプリ内ブラウザ（LINE等）で開いている場合や、しばらく時間が経ってから戻ってきた場合に起きることがあります。
+                    お手数ですが、Safari（またはChrome）で開き直して、もう一度お試しください。
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  ログインに失敗しました：{error}
+                </p>
+              )}
+            </div>
           )}
 
           <p className="text-xs text-slate-500 text-center pt-2">
