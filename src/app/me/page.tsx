@@ -393,6 +393,14 @@ export default async function MyPage({
           </Link>
         </section>
 
+        {/* 不具合・要望の報告 */}
+        <section className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+          <span className="text-sm">不具合・ご要望の報告</span>
+          <Link href="/bug-report?source=cidao_app">
+            <Button variant="outline" size="sm">報告する</Button>
+          </Link>
+        </section>
+
         {member.ranking_opt_in && (
           <p className="text-xs text-center">
             <Link href="/ranking" className="text-slate-500 hover:underline">
