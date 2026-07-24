@@ -126,9 +126,9 @@ export async function createEvent(input: CreateInput) {
   if (error) throw new Error(`イベント作成失敗: ${error.message}`)
 
   // 主催者を participants の organizer として登録
-  // ただし「主催者不明（情報提供者）」の場合、登録者は主催者ではないので participant 登録はスキップ
+  // ただし「主催者不明（情報提供者）」または「代理登録」の場合、登録者は主催者本人ではないので participant 登録はスキップ
   // （参加したい場合は別途イベント詳細ページの「参加する」を押してもらう）
-  if (!isUnknownOrganizer) {
+  if (!isUnknownOrganizer && !isProxy) {
     await supabase.from('event_participants').insert({
       event_id: data.id,
       member_id: user.id,
@@ -178,7 +178,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
     if (error) throw new Error(`イベント作成失敗: ${error.message}`)
     firstId = firstId ?? data.id
 
-    if (!isUnknownOrganizer) {
+    if (!isUnknownOrganizer && !isProxy) {
       await supabase.from('event_participants').insert({
         event_id: data.id,
         member_id: user.id,
