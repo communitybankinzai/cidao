@@ -47,6 +47,33 @@ export default async function AdminHomePage() {
               <p className="text-sm text-slate-500">FreeFree・イベント・団体の X/FB/LINE 紹介ローテーション、投稿ログ、手動実行</p>
             </Link>
           </li>
+          <li>
+            <Link
+              href="/admin/members"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">メンバー一覧（本登録済み）</h2>
+              <p className="text-sm text-slate-500">メール確認済み・住所確認済み会員の一覧</p>
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/members/light"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">メンバー一覧（ライト）</h2>
+              <p className="text-sm text-slate-500">LINEログインのみで自動作成された会員の一覧</p>
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/events"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">イベント参加者一覧</h2>
+              <p className="text-sm text-slate-500">イベントごとの参加者・出欠状況を横断的に確認</p>
+            </Link>
+          </li>
         </ul>
       </div>
     </div>
