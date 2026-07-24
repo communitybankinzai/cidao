@@ -42,18 +42,30 @@ export function CommentSection({
   const showQuestionPrompt =
     myVoteChoice === 'わからない' && kind !== 'question'
 
-  // スレッド構造: 質問→（回答→コメント）／ ルートコメント（フラット）
+  // スレッド構造: ルート（質問／コメント）＋各ノードの下に返信を再帰表示
   const questions = comments.filter((c) => c.kind === 'question' && !c.parent_id)
   const rootComments = comments.filter((c) => c.kind === 'comment' && !c.parent_id)
-  const childrenOf = (id: string) =>
-    comments.filter((c) => c.parent_id === id).sort((a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
 
   // 質問は likes 多い順
   questions.sort((a, b) => (b.likes ?? 0) - (a.likes ?? 0))
   // ルートコメントは新しい順
   rootComments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  const handleLike = (id: string) => {
+    startTransition(async () => {
+      await likeComment(id, proposalId)
+    })
+  }
+
+  const handleReply = async (parentId: string, replyBody: string) => {
+    const replyKind = myUserId === proposerId ? 'answer' : 'comment'
+    await postComment({
+      proposalId,
+      kind: replyKind,
+      body: replyBody,
+      parentId,
+    })
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -134,41 +146,42 @@ export function CommentSection({
         <div className="space-y-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase">質問（{questions.length}）</h3>
           {questions.map((q) => (
-            <QuestionThread
-              key={q.id}
-              question={q}
-              answers={childrenOf(q.id)}
-              proposalId={proposalId}
-              proposerId={proposerId}
-              isLoggedIn={isLoggedIn}
-              myUserId={myUserId}
-              myLiked={myLikedIds.includes(q.id)}
-              pending={pending}
-              onLike={(id) => {
-                startTransition(async () => {
-                  await likeComment(id, proposalId)
-                })
-              }}
-              onReply={async (parentId, replyBody) => {
-                const ans = myUserId === proposerId ? 'answer' : 'comment'
-                await postComment({
-                  proposalId,
-                  kind: ans,
-                  body: replyBody,
-                  parentId,
-                })
-              }}
-            />
+            <div key={q.id} className="border-l-2 border-amber-300 dark:border-amber-700 pl-3">
+              <ThreadNode
+                comment={q}
+                allComments={comments}
+                depth={0}
+                isLoggedIn={isLoggedIn}
+                myUserId={myUserId}
+                proposerId={proposerId}
+                myLikedIds={myLikedIds}
+                pending={pending}
+                onLike={handleLike}
+                onReply={handleReply}
+              />
+            </div>
           ))}
         </div>
       )}
 
-      {/* ルートコメント（フラット） */}
+      {/* ルートコメント（各コメントの下に返信を階層表示） */}
       {rootComments.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-semibold text-slate-500 uppercase">コメント（{rootComments.length}）</h3>
           {rootComments.map((c) => (
-            <CommentItem key={c.id} c={c} />
+            <ThreadNode
+              key={c.id}
+              comment={c}
+              allComments={comments}
+              depth={0}
+              isLoggedIn={isLoggedIn}
+              myUserId={myUserId}
+              proposerId={proposerId}
+              myLikedIds={myLikedIds}
+              pending={pending}
+              onLike={handleLike}
+              onReply={handleReply}
+            />
           ))}
         </div>
       )}
@@ -180,57 +193,77 @@ export function CommentSection({
   )
 }
 
-function QuestionThread({
-  question,
-  answers,
+/** コメント1件＋その返信ツリーを再帰表示。すべての階層で返信できる */
+function ThreadNode({
+  comment,
+  allComments,
+  depth,
   isLoggedIn,
   myUserId,
   proposerId,
-  myLiked,
+  myLikedIds,
   pending,
   onLike,
   onReply,
 }: {
-  question: Comment
-  answers: Comment[]
-  proposalId: string
-  proposerId: string
+  comment: Comment
+  allComments: Comment[]
+  depth: number
   isLoggedIn: boolean
   myUserId: string | null
-  myLiked: boolean
+  proposerId: string
+  myLikedIds: string[]
   pending: boolean
   onLike: (id: string) => void
   onReply: (parentId: string, body: string) => Promise<void>
 }) {
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyBody, setReplyBody] = useState('')
+  const [replyError, setReplyError] = useState<string | null>(null)
+
+  const children = allComments
+    .filter((c) => c.parent_id === comment.id)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+  const myLiked = myLikedIds.includes(comment.id)
+  const showLike = comment.kind === 'question'
 
   return (
-    <div className="border-l-2 border-amber-300 dark:border-amber-700 pl-3 space-y-2">
-      <CommentItem c={question} questionMark />
+    <div className="space-y-2">
+      <CommentItem c={comment} questionMark={comment.kind === 'question'} />
+
       {isLoggedIn && (
         <div className="flex gap-3 text-xs text-slate-400">
-          <button
-            onClick={() => onLike(question.id)}
-            disabled={pending}
-            className={myLiked ? 'text-amber-600 font-semibold' : 'hover:text-amber-600'}
-            title={myLiked ? 'もう一度押すと取り消します' : ''}
-          >
-            👍 {myLiked ? 'いいね済み' : 'いいね'} ({question.likes})
-          </button>
+          {showLike && (
+            <button
+              onClick={() => onLike(comment.id)}
+              disabled={pending}
+              className={myLiked ? 'text-amber-600 font-semibold' : 'hover:text-amber-600'}
+              title={myLiked ? 'もう一度押すと取り消します' : ''}
+            >
+              👍 {myLiked ? 'いいね済み' : 'いいね'} ({comment.likes})
+            </button>
+          )}
           <button onClick={() => setReplyOpen((v) => !v)} className="hover:text-slate-700 dark:hover:text-slate-300">
             {replyOpen ? '閉じる' : '返信'}
           </button>
         </div>
       )}
+
       {replyOpen && (
         <form
           onSubmit={async (e) => {
             e.preventDefault()
-            if (replyBody.trim().length < 1) return
-            await onReply(question.id, replyBody.trim())
-            setReplyBody('')
-            setReplyOpen(false)
+            const trimmed = replyBody.trim()
+            if (trimmed.length < 1) return
+            setReplyError(null)
+            try {
+              await onReply(comment.id, trimmed)
+              setReplyBody('')
+              setReplyOpen(false)
+            } catch (err) {
+              setReplyError(err instanceof Error ? err.message : String(err))
+            }
           }}
           className="space-y-2 pl-3"
         >
@@ -238,16 +271,37 @@ function QuestionThread({
             value={replyBody}
             onChange={(e) => setReplyBody(e.target.value)}
             rows={2}
-            placeholder={myUserId === proposerId ? '提案者として回答' : 'コメント'}
+            placeholder={`${comment.author_name} さんへ返信`}
             className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-sm"
           />
+          {replyError && <p className="text-xs text-rose-600">{replyError}</p>}
           <Button type="submit" size="sm" variant="outline">送信</Button>
         </form>
       )}
-      {answers.length > 0 && (
-        <div className="ml-3 space-y-2 mt-2">
-          {answers.map((a) => (
-            <CommentItem key={a.id} c={a} />
+
+      {children.length > 0 && (
+        <div
+          className={
+            'space-y-2 ' +
+            (depth < 6
+              ? 'ml-3 pl-3 border-l border-slate-200 dark:border-slate-700'
+              : '')
+          }
+        >
+          {children.map((child) => (
+            <ThreadNode
+              key={child.id}
+              comment={child}
+              allComments={allComments}
+              depth={depth + 1}
+              isLoggedIn={isLoggedIn}
+              myUserId={myUserId}
+              proposerId={proposerId}
+              myLikedIds={myLikedIds}
+              pending={pending}
+              onLike={onLike}
+              onReply={onReply}
+            />
           ))}
         </div>
       )}

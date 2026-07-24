@@ -151,15 +151,17 @@ export async function postComment(input: CommentInput) {
   if (!user) throw new Error('未ログイン')
 
   // 字数制約（仕様§3.4.1 ポイント加算条件と一致）
+  // 返信（parentId有り）は会話の流れを妨げないよう1字以上でOK
   const trimmed = input.body.trim()
-  if (input.kind === 'question' && trimmed.length < 30) {
+  const isReply = !!input.parentId
+  if (trimmed.length < 1) {
+    throw new Error('本文を入力してください')
+  }
+  if (!isReply && input.kind === 'question' && trimmed.length < 30) {
     throw new Error('質問は30字以上で入力してください')
   }
-  if (input.kind === 'comment' && trimmed.length < 50) {
+  if (!isReply && input.kind === 'comment' && trimmed.length < 50) {
     throw new Error('コメントは50字以上で入力してください')
-  }
-  if (input.kind === 'answer' && trimmed.length < 1) {
-    throw new Error('回答を入力してください')
   }
 
   const { error } = await supabase.from('comments').insert({
