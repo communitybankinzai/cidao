@@ -207,22 +207,83 @@ export async function postComment(input: CommentInput) {
     })
   }
 
+  // 返信の場合、返信先コメントの投稿者にも通知（提案者・recipient宛と重複しない場合のみ）
+  if (input.parentId) {
+    const { data: parent } = await supabase
+      .from('comments')
+      .select('author_id')
+      .eq('id', input.parentId)
+      .single()
+    if (
+      parent &&
+      parent.author_id !== user.id &&
+      parent.author_id !== proposal?.proposer_id &&
+      parent.author_id !== input.recipientId
+    ) {
+      await insertNotification({
+        recipientId: parent.author_id,
+        actorId: user.id,
+        kind: 'comment',
+        title: `${actorName}さんがあなたの投稿に返信しました`,
+        body: preview,
+        linkUrl: `/proposals/${input.proposalId}`,
+      })
+    }
+  }
+
   revalidatePath(`/proposals/${input.proposalId}`)
 }
 
-export async function likeComment(commentId: string, proposalId: string) {
+/** いいねのトグル。未いいねなら +1、いいね済みなら取り消して -1（comment_likes で1人1回を保証） */
+export async function likeComment(commentId: string, proposalId: string): Promise<{ liked: boolean }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // increment via RPC for atomicity（簡易版：単純な update +1。重複防止は別テーブルが必要だが Phase 1 では省略）
-  const { error } = await supabase.rpc('increment_comment_likes', { p_comment_id: commentId })
-  if (error) {
-    // フォールバック: 直接 update
-    const { data: cur } = await supabase.from('comments').select('likes').eq('id', commentId).single()
-    if (cur) {
-      await supabase.from('comments').update({ likes: (cur.likes ?? 0) + 1 }).eq('id', commentId)
+  const { error: insErr } = await supabase
+    .from('comment_likes')
+    .insert({ comment_id: commentId, member_id: user.id })
+
+  if (!insErr) {
+    await supabase.rpc('adjust_comment_likes', { p_comment_id: commentId, p_delta: 1 })
+
+    // いいねされた本人へ通知（best-effort、取り消し時は通知しない）
+    const { data: target } = await supabase
+      .from('comments')
+      .select('author_id, body')
+      .eq('id', commentId)
+      .single()
+    if (target) {
+      const { data: me } = await supabase
+        .from('members')
+        .select('display_name')
+        .eq('id', user.id)
+        .single()
+      await insertNotification({
+        recipientId: target.author_id,
+        actorId: user.id,
+        kind: 'comment',
+        title: `${me?.display_name ?? 'メンバー'}さんがあなたの投稿に👍いいねしました`,
+        body: target.body.slice(0, 80) + (target.body.length > 80 ? '…' : ''),
+        linkUrl: `/proposals/${proposalId}`,
+      })
     }
+
+    revalidatePath(`/proposals/${proposalId}`)
+    return { liked: true }
   }
-  revalidatePath(`/proposals/${proposalId}`)
+
+  if (insErr.code === '23505') {
+    // 既にいいね済み → 取り消し
+    await supabase
+      .from('comment_likes')
+      .delete()
+      .eq('comment_id', commentId)
+      .eq('member_id', user.id)
+    await supabase.rpc('adjust_comment_likes', { p_comment_id: commentId, p_delta: -1 })
+    revalidatePath(`/proposals/${proposalId}`)
+    return { liked: false }
+  }
+
+  throw new Error(`いいねに失敗: ${insErr.message}`)
 }

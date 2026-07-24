@@ -93,6 +93,16 @@ export default async function ProposalDetailPage({
     is_proposer: c.author_id === proposal.proposer_id,
   }))
 
+  // 自分がいいね済みのコメントID（RLSで自分の行のみ返る）
+  let myLikedIds: string[] = []
+  if (user) {
+    const { data: myLikes } = await supabase
+      .from('comment_likes')
+      .select('comment_id')
+      .eq('member_id', user.id)
+    myLikedIds = (myLikes ?? []).map((l) => l.comment_id)
+  }
+
   // 議論残り時間 / 投票残り時間
   const now = Date.now()
   const discussionEndsAt = proposal.discussion_start_at
@@ -199,6 +209,7 @@ export default async function ProposalDetailPage({
           myUserId={user?.id ?? null}
           myVoteChoice={myVote && !myVote.retracted_at ? myVote.choice : null}
           comments={comments}
+          myLikedIds={myLikedIds}
         />
       </article>
     </div>

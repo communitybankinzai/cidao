@@ -23,6 +23,7 @@ export function CommentSection({
   myUserId,
   myVoteChoice,
   comments,
+  myLikedIds,
 }: {
   proposalId: string
   proposerId: string
@@ -30,6 +31,7 @@ export function CommentSection({
   myUserId: string | null
   myVoteChoice: string | null
   comments: Comment[]
+  myLikedIds: string[]
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +142,7 @@ export function CommentSection({
               proposerId={proposerId}
               isLoggedIn={isLoggedIn}
               myUserId={myUserId}
+              myLiked={myLikedIds.includes(q.id)}
               pending={pending}
               onLike={(id) => {
                 startTransition(async () => {
@@ -183,6 +186,7 @@ function QuestionThread({
   isLoggedIn,
   myUserId,
   proposerId,
+  myLiked,
   pending,
   onLike,
   onReply,
@@ -193,6 +197,7 @@ function QuestionThread({
   proposerId: string
   isLoggedIn: boolean
   myUserId: string | null
+  myLiked: boolean
   pending: boolean
   onLike: (id: string) => void
   onReply: (parentId: string, body: string) => Promise<void>
@@ -205,8 +210,13 @@ function QuestionThread({
       <CommentItem c={question} questionMark />
       {isLoggedIn && (
         <div className="flex gap-3 text-xs text-slate-400">
-          <button onClick={() => onLike(question.id)} disabled={pending} className="hover:text-amber-600">
-            👍 いいね ({question.likes})
+          <button
+            onClick={() => onLike(question.id)}
+            disabled={pending}
+            className={myLiked ? 'text-amber-600 font-semibold' : 'hover:text-amber-600'}
+            title={myLiked ? 'もう一度押すと取り消します' : ''}
+          >
+            👍 {myLiked ? 'いいね済み' : 'いいね'} ({question.likes})
           </button>
           <button onClick={() => setReplyOpen((v) => !v)} className="hover:text-slate-700 dark:hover:text-slate-300">
             {replyOpen ? '閉じる' : '返信'}
