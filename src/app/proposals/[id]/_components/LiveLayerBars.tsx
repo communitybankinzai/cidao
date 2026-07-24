@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 
 const TIER_LABEL: Record<string, string> = {
   light: 'ライト登録',
-  email_only: '通常メンバー',
+  email_only: '通常登録',
   verified: 'マイナンバー確認済（将来）',
 }
 

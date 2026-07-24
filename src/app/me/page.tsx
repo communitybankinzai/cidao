@@ -30,7 +30,7 @@ const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = 
 
 const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
   light:      { label: 'ライト登録',                weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
-  email_only: { label: '通常メンバー',              weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
+  email_only: { label: '通常登録',                  weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
   verified:   { label: 'マイナンバー確認済（将来）', weight_citizen: '1.0', weight_related: '0.5',  color: 'bg-sky-200 text-sky-900' },
 }
 
@@ -241,7 +241,7 @@ export default async function MyPage({
         {member.tier === 'light' && (
           <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-              メアド以外の情報（名前・市内/関係人口・興味分野など）を登録すると通常メンバーになり、提案・拘束的投票・コメントができます
+              メアド以外の情報（名前・市内/関係人口・興味分野など）を登録すると通常登録になり、提案・拘束的投票・コメントができます
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
               プロフィールを完成させて投票重みを上げましょう（市民 0.1 → 0.3）

@@ -9,7 +9,7 @@ const SITE_URL = 'https://cidao.vercel.app'
 
 const TIER_LABEL: Record<string, { label: string; color: string }> = {
   light:      { label: 'ライト登録',   color: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
-  email_only: { label: '通常メンバー', color: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200' },
+  email_only: { label: '通常登録',     color: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200' },
   verified:   { label: '本人確認済み', color: 'bg-sky-200 text-sky-900 dark:bg-sky-900 dark:text-sky-200' },
 }
 
