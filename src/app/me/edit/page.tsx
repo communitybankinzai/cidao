@@ -64,7 +64,6 @@ export default async function EditProfilePage({
       self_introduction: (formData.get('self_introduction') as string | null) || null,
       skills_text: (formData.get('skills_text') as string | null) || null,
       contact_permission: formData.get('contact_permission') === 'on',
-      collaboration_consent: formData.get('collaboration_consent') === 'on',
       ranking_opt_in: formData.get('ranking_opt_in') === 'on',
       proposal_email: formData.get('proposal_email') === 'on',
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
@@ -228,13 +227,6 @@ export default async function EditProfilePage({
                 <span>
                   CBI からの連絡を許可
                   <span className="block text-xs text-slate-500">運営からの重要連絡・依頼を受け取ります</span>
-                </span>
-              </label>
-              <label className="flex items-start gap-2">
-                <input type="checkbox" name="collaboration_consent" defaultChecked={member.collaboration_consent ?? false} className="mt-1" />
-                <span>
-                  街活性室等への情報連携に同意
-                  <span className="block text-xs text-slate-500">CBI が連携する地域組織への情報共有を許可</span>
                 </span>
               </label>
               <label className="flex items-start gap-2">

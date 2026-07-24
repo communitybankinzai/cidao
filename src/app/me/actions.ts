@@ -41,7 +41,6 @@ type ProfileUpdate = {
   self_introduction?: string | null
   skills_text?: string | null
   contact_permission: boolean
-  collaboration_consent: boolean
   ranking_opt_in: boolean
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
@@ -79,7 +78,8 @@ export async function updateProfile(input: ProfileUpdate) {
     self_introduction: input.self_introduction ?? null,
     skills_text: input.skills_text ?? null,
     contact_permission: input.contact_permission,
-    collaboration_consent: input.collaboration_consent,
+    // collaboration_consent（街活性室等への情報連携）は連携中止に伴い設定項目から削除（2026-07-25）。
+    // DBカラムと既存値は保持するが、以後更新しない
     ranking_opt_in: input.ranking_opt_in,
     contact_preferences: prefs,
   }
