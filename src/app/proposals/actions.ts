@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { bindingMeta } from '@/lib/categories'
+import { insertNotification } from '@/lib/notify'
 
 type CreateInput = {
   title: string
@@ -90,6 +91,22 @@ export async function castVote(proposalId: string, choice: string) {
     )
   if (error) throw new Error(`投票に失敗: ${error.message}`)
 
+  // アプリ内通知（best-effort）：提案者へ。投票の秘密のため誰が投票したかは載せない
+  const { data: forNotify } = await supabase
+    .from('proposals')
+    .select('proposer_id, title')
+    .eq('id', proposalId)
+    .single()
+  if (forNotify && forNotify.proposer_id !== user.id) {
+    await insertNotification({
+      recipientId: forNotify.proposer_id,
+      // actor_id は保存しない（通知行から投票者が特定できてしまうため）
+      kind: 'vote',
+      title: `あなたの提案「${forNotify.title}」に新しい投票がありました`,
+      linkUrl: `/proposals/${proposalId}`,
+    })
+  }
+
   revalidatePath(`/proposals/${proposalId}`)
 }
 
@@ -154,6 +171,42 @@ export async function postComment(input: CommentInput) {
     recipient_id: input.recipientId ?? null,
   })
   if (error) throw new Error(`投稿に失敗: ${error.message}`)
+
+  // アプリ内通知（best-effort）：提案者＋コメント宛先へ。自分自身には飛ばない（insertNotification側で除外）
+  const { data: proposal } = await supabase
+    .from('proposals')
+    .select('proposer_id, title')
+    .eq('id', input.proposalId)
+    .single()
+  const { data: me } = await supabase
+    .from('members')
+    .select('display_name')
+    .eq('id', user.id)
+    .single()
+  const actorName = me?.display_name ?? 'メンバー'
+  const kindLabel = { question: '質問', answer: '回答', comment: 'コメント' }[input.kind]
+  const preview = trimmed.slice(0, 80) + (trimmed.length > 80 ? '…' : '')
+  if (proposal) {
+    await insertNotification({
+      recipientId: proposal.proposer_id,
+      actorId: user.id,
+      kind: 'comment',
+      title: `あなたの提案「${proposal.title}」に${actorName}さんから${kindLabel}が届きました`,
+      body: preview,
+      linkUrl: `/proposals/${input.proposalId}`,
+    })
+  }
+  if (input.recipientId && input.recipientId !== proposal?.proposer_id) {
+    await insertNotification({
+      recipientId: input.recipientId,
+      actorId: user.id,
+      kind: 'comment',
+      title: `${actorName}さんからあなた宛の${kindLabel}が届きました`,
+      body: preview,
+      linkUrl: `/proposals/${input.proposalId}`,
+    })
+  }
+
   revalidatePath(`/proposals/${input.proposalId}`)
 }
 
