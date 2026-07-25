@@ -12,7 +12,8 @@ export default async function NewFreefreePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/freefree/new')
 
-  // 自分が代表者 or membership で representative/officer の組織を取得
+  // 自分が代表者 or 所属確定済み（役職不問）の組織を取得
+  // 2026-07-25: 団体PRの掲載を役員限定→所属メンバー全員に緩和（RLSも同時変更）
   const [{ data: ownedOrgs }, { data: memberOrgs }] = await Promise.all([
     supabase
       .from('organizations')
@@ -23,7 +24,6 @@ export default async function NewFreefreePage() {
       .select('org_id, organizations(id, name, type)')
       .eq('member_id', user.id)
       .eq('status', 'confirmed')
-      .in('role', ['representative', 'officer'])
       .is('left_at', null),
   ])
 

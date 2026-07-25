@@ -72,7 +72,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     actorId: user.id,
     kind: 'comment',
     title: `${senderMember.display_name}さんから「活動の声がけ」が届きました`,
-    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}｜連絡先: ${user.email ?? '(未登録)'}`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}${user.email ? `｜連絡先: ${user.email}` : ''}`,
     linkUrl: `/talent/${targetMemberId}`,
   })
 
