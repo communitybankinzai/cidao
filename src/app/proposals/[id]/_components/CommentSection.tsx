@@ -252,7 +252,6 @@ function ThreadNode({
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
   const myLiked = myLikedIds.includes(comment.id)
-  const showLike = comment.kind === 'question'
 
   return (
     <div className="space-y-2">
@@ -260,16 +259,14 @@ function ThreadNode({
 
       {isLoggedIn && (
         <div className="flex gap-3 text-xs text-slate-400">
-          {showLike && (
-            <button
-              onClick={() => onLike(comment.id)}
-              disabled={pending}
-              className={myLiked ? 'text-amber-600 font-semibold' : 'hover:text-amber-600'}
-              title={myLiked ? 'もう一度押すと取り消します' : ''}
-            >
-              👍 {myLiked ? 'いいね済み' : 'いいね'} ({comment.likes})
-            </button>
-          )}
+          <button
+            onClick={() => onLike(comment.id)}
+            disabled={pending}
+            className={myLiked ? 'text-amber-600 font-semibold' : 'hover:text-amber-600'}
+            title={myLiked ? 'もう一度押すと取り消します' : ''}
+          >
+            👍 {myLiked ? 'いいね済み' : 'いいね'} ({comment.likes})
+          </button>
           <button onClick={() => setReplyOpen((v) => !v)} className="hover:text-slate-700 dark:hover:text-slate-300">
             {replyOpen ? '閉じる' : '返信'}
           </button>
