@@ -22,6 +22,7 @@ type CreateInput = {
   period: 'p_1week' | 'p_1month' | 'p_3months'
   images?: string[]                 // public URL 最大3つ（client がアップロード済み）
   coupon?: CouponInput              // 任意のクーポン同時作成
+  sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
 }
 
 export async function createFreefreePost(input: CreateInput) {
@@ -48,8 +49,19 @@ export async function createFreefreePost(input: CreateInput) {
     if (org.type !== input.poster_kind) {
       throw new Error(`選択した組織の種別 (${org.type}) と掲載区分 (${input.poster_kind}) が一致しません`)
     }
+    // 2026-07-25: 掲載権限を役員限定→所属確定済みメンバー全員に緩和（RLSも同時変更済み）
     const canEdit = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
-    if (!canEdit) throw new Error('この組織の代表者または編集権者ではないため掲載できません')
+    if (!canEdit) {
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('org_id')
+        .eq('org_id', org.id)
+        .eq('member_id', user.id)
+        .eq('status', 'confirmed')
+        .is('left_at', null)
+        .maybeSingle()
+      if (!membership) throw new Error('この団体の所属メンバーではないため掲載できません')
+    }
     dbPosterType = 'org'; dbPosterId = org.id
   }
 
@@ -68,6 +80,7 @@ export async function createFreefreePost(input: CreateInput) {
       status: 'active',
       expires_at,
       images: images.length > 0 ? images : null,
+      sns_share: input.sns_share !== false,
     })
     .select('id')
     .single()

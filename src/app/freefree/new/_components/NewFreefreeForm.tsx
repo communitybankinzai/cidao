@@ -126,6 +126,15 @@ export default function NewFreefreeForm({
             <p className="text-xs text-slate-500">有効期限は掲載期間と同じになります</p>
           </div>
         )}
+        <label className="flex items-start gap-2 text-sm pt-2">
+          <input type="checkbox" name="sns_share" defaultChecked className="mt-1" />
+          <span>
+            SNSでの紹介を許可する
+            <span className="block text-xs text-slate-500">
+              CBI公式SNS（Instagram等）でこの掲示物が紹介されることがあります
+            </span>
+          </span>
+        </label>
       </div>
       <div className="flex justify-end gap-2">
         <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>

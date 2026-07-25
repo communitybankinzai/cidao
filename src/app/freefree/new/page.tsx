@@ -52,6 +52,7 @@ export default async function NewFreefreePage() {
     await createFreefreePost({
       poster_kind,
       org_id,
+      sns_share: formData.get('sns_share') === 'on',
       title: String(formData.get('title') ?? ''),
       body: String(formData.get('body') ?? ''),
       category: String(formData.get('category') ?? 'event'),
