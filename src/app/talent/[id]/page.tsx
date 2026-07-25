@@ -69,6 +69,33 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
                 <p className="text-sm">{pr.available_times.join(' / ')}</p>
               </div>
             )}
+            {pr.sns_links && (
+              <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
+                <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">SNS・ウェブサイト</h2>
+                <ul className="text-sm space-y-1">
+                  {pr.sns_links
+                    .split(/\r?\n/)
+                    .map((line: string) => line.trim())
+                    .filter((line: string) => line.length > 0)
+                    .map((line: string, i: number) =>
+                      /^https?:\/\//.test(line) ? (
+                        <li key={i}>
+                          <a
+                            href={line}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sky-700 dark:text-sky-300 hover:underline break-all"
+                          >
+                            {line} ↗
+                          </a>
+                        </li>
+                      ) : (
+                        <li key={i} className="break-all">{line}</li>
+                      )
+                    )}
+                </ul>
+              </div>
+            )}
           </>
         )}
 

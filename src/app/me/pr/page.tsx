@@ -29,6 +29,7 @@ export default async function MyPrPage() {
       interests_free_text: (formData.get('interests_free_text') as string | null) || null,
       contributions: (formData.get('contributions') as string | null) || null,
       available_times: times,
+      sns_links: (formData.get('sns_links') as string | null) || null,
       message_acceptance: String(formData.get('message_acceptance') ?? 'recommended_only') as 'open' | 'recommended_only' | 'closed',
       public_scope: String(formData.get('public_scope') ?? 'registered_only') as 'public' | 'registered_only' | 'consent_only',
     }
@@ -64,6 +65,15 @@ export default async function MyPrPage() {
                 </label>
               ))}
             </div>
+          </L>
+          <L label="SNS・ウェブサイト（任意・1行に1つ）">
+            <textarea
+              name="sns_links"
+              rows={3}
+              defaultValue={pr?.sns_links ?? ''}
+              placeholder={'https://www.instagram.com/あなたのアカウント\nhttps://x.com/あなたのアカウント'}
+              className={inp}
+            />
           </L>
           <L label="声掛け受付">
             <select name="message_acceptance" defaultValue={pr?.message_acceptance ?? 'recommended_only'} className={inp}>
