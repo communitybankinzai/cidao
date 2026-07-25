@@ -150,18 +150,12 @@ export async function postComment(input: CommentInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // 字数制約（仕様§3.4.1 ポイント加算条件と一致）
-  // 返信（parentId有り）は会話の流れを妨げないよう1字以上でOK
+  // 字数下限は撤廃（2026-07-25）。何字でも投稿可。
+  // 貢献度ポイントの付与条件（コメント50字以上・質問30字以上）はDBトリガー
+  // award_on_comment 側で判定する（仕様§3.4.1）
   const trimmed = input.body.trim()
-  const isReply = !!input.parentId
   if (trimmed.length < 1) {
     throw new Error('本文を入力してください')
-  }
-  if (!isReply && input.kind === 'question' && trimmed.length < 30) {
-    throw new Error('質問は30字以上で入力してください')
-  }
-  if (!isReply && input.kind === 'comment' && trimmed.length < 50) {
-    throw new Error('コメントは50字以上で入力してください')
   }
 
   const { error } = await supabase.from('comments').insert({
@@ -234,6 +228,28 @@ export async function postComment(input: CommentInput) {
   }
 
   revalidatePath(`/proposals/${input.proposalId}`)
+}
+
+/**
+ * コメント削除。RLSで「本人」または「committee/super管理者」のみ削除できる。
+ * parent_id は ON DELETE CASCADE のため、返信も一緒に削除される。
+ */
+export async function deleteComment(commentId: string, proposalId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: deleted, error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId)
+    .select('id')
+  if (error) throw new Error(`削除に失敗: ${error.message}`)
+  if (!deleted || deleted.length === 0) {
+    throw new Error('削除できませんでした（権限がありません）')
+  }
+
+  revalidatePath(`/proposals/${proposalId}`)
 }
 
 /** いいねのトグル。未いいねなら +1、いいね済みなら取り消して -1（comment_likes で1人1回を保証） */

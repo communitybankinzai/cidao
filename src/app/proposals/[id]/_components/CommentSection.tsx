@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { postComment, likeComment } from '../../actions'
+import { postComment, likeComment, deleteComment } from '../../actions'
 
 type Comment = {
   id: string
@@ -24,6 +24,7 @@ export function CommentSection({
   myVoteChoice,
   comments,
   myLikedIds,
+  myIsAdmin,
 }: {
   proposalId: string
   proposerId: string
@@ -32,6 +33,7 @@ export function CommentSection({
   myVoteChoice: string | null
   comments: Comment[]
   myLikedIds: string[]
+  myIsAdmin: boolean
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +66,17 @@ export function CommentSection({
       kind: replyKind,
       body: replyBody,
       parentId,
+    })
+  }
+
+  const handleDelete = (id: string) => {
+    if (!window.confirm('このコメントを削除しますか？（ぶら下がっている返信も一緒に削除されます）')) return
+    startTransition(async () => {
+      try {
+        await deleteComment(id, proposalId)
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : String(err))
+      }
     })
   }
 
@@ -109,7 +122,7 @@ export function CommentSection({
                 checked={kind === 'comment'}
                 onChange={() => setKind('comment')}
               />
-              コメント（50字以上）
+              コメント
             </label>
             <label className="flex items-center gap-1">
               <input
@@ -117,18 +130,23 @@ export function CommentSection({
                 checked={kind === 'question'}
                 onChange={() => setKind('question')}
               />
-              質問（30字以上）
+              質問
             </label>
           </div>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={3}
-            placeholder={kind === 'question' ? '提案者への質問を入力（30字以上）' : '意見や補足を入力（50字以上）'}
+            placeholder={kind === 'question' ? '提案者への質問を入力' : '意見や補足を入力'}
             className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
           />
           <div className="flex justify-between items-center">
-            <span className="text-xs text-slate-500">{body.length} 字</span>
+            <span className="text-xs text-slate-500">
+              {body.length} 字
+              <span className="ml-2 text-slate-400">
+                💡 {kind === 'question' ? '30字' : '50字'}以上で貢献度ポイントが付きます
+              </span>
+            </span>
             <Button type="submit" size="sm" disabled={pending}>
               {pending ? '送信中…' : '投稿する'}
             </Button>
@@ -155,9 +173,11 @@ export function CommentSection({
                 myUserId={myUserId}
                 proposerId={proposerId}
                 myLikedIds={myLikedIds}
+                myIsAdmin={myIsAdmin}
                 pending={pending}
                 onLike={handleLike}
                 onReply={handleReply}
+                onDelete={handleDelete}
               />
             </div>
           ))}
@@ -178,9 +198,11 @@ export function CommentSection({
               myUserId={myUserId}
               proposerId={proposerId}
               myLikedIds={myLikedIds}
+              myIsAdmin={myIsAdmin}
               pending={pending}
               onLike={handleLike}
               onReply={handleReply}
+              onDelete={handleDelete}
             />
           ))}
         </div>
@@ -202,9 +224,11 @@ function ThreadNode({
   myUserId,
   proposerId,
   myLikedIds,
+  myIsAdmin,
   pending,
   onLike,
   onReply,
+  onDelete,
 }: {
   comment: Comment
   allComments: Comment[]
@@ -213,9 +237,11 @@ function ThreadNode({
   myUserId: string | null
   proposerId: string
   myLikedIds: string[]
+  myIsAdmin: boolean
   pending: boolean
   onLike: (id: string) => void
   onReply: (parentId: string, body: string) => Promise<void>
+  onDelete: (id: string) => void
 }) {
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyBody, setReplyBody] = useState('')
@@ -247,6 +273,16 @@ function ThreadNode({
           <button onClick={() => setReplyOpen((v) => !v)} className="hover:text-slate-700 dark:hover:text-slate-300">
             {replyOpen ? '閉じる' : '返信'}
           </button>
+          {myIsAdmin && (
+            <button
+              onClick={() => onDelete(comment.id)}
+              disabled={pending}
+              className="hover:text-rose-600"
+              title="管理者権限で削除（返信も一緒に削除されます）"
+            >
+              🗑 削除
+            </button>
+          )}
         </div>
       )}
 
@@ -298,9 +334,11 @@ function ThreadNode({
               myUserId={myUserId}
               proposerId={proposerId}
               myLikedIds={myLikedIds}
+              myIsAdmin={myIsAdmin}
               pending={pending}
               onLike={onLike}
               onReply={onReply}
+              onDelete={onDelete}
             />
           ))}
         </div>

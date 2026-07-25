@@ -103,6 +103,17 @@ export default async function ProposalDetailPage({
     myLikedIds = (myLikes ?? []).map((l) => l.comment_id)
   }
 
+  // 管理者（committee/super）か（コメント削除ボタンの表示判定）
+  let myIsAdmin = false
+  if (user) {
+    const { data: me } = await supabase
+      .from('members')
+      .select('admin_role')
+      .eq('id', user.id)
+      .maybeSingle()
+    myIsAdmin = me?.admin_role === 'committee' || me?.admin_role === 'super'
+  }
+
   // 議論残り時間 / 投票残り時間
   const now = Date.now()
   const discussionEndsAt = proposal.discussion_start_at
@@ -210,6 +221,7 @@ export default async function ProposalDetailPage({
           myVoteChoice={myVote && !myVote.retracted_at ? myVote.choice : null}
           comments={comments}
           myLikedIds={myLikedIds}
+          myIsAdmin={myIsAdmin}
         />
       </article>
     </div>

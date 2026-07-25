@@ -60,13 +60,22 @@ export default async function MyPage({
 
   const { data: contributions } = await supabase
     .from('contributions')
-    .select('action_type, pt, created_at')
+    .select('action_type, pt, reason, related_id, created_at')
     .eq('actor_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
 
   const summary = summarize(contributions ?? [])
   const badges = evaluateBadges(contributions ?? [], summary.total)
+
+  // ポイント履歴の related_id → 提案タイトル解決（提案系アクションのリンク表示用）
+  const relatedIds = Array.from(
+    new Set((contributions ?? []).map((c) => c.related_id).filter((id): id is string => !!id))
+  )
+  const { data: relatedProposals } = relatedIds.length > 0
+    ? await supabase.from('proposals').select('id, title').in('id', relatedIds)
+    : { data: [] }
+  const proposalTitleOf = new Map((relatedProposals ?? []).map((p) => [p.id, p.title]))
 
   const { data: myProposals } = await supabase
     .from('proposals')
@@ -280,6 +289,46 @@ export default async function MyPage({
                   ))}
               </ul>
             </details>
+          )}
+        </section>
+
+        {/* ポイント履歴 */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
+          <div className="flex justify-between items-baseline">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">ポイント履歴</h2>
+            <span className="text-xs text-slate-400">最新{Math.min((contributions ?? []).length, 200)}件</span>
+          </div>
+          {!contributions || contributions.length === 0 ? (
+            <p className="text-sm text-slate-400">まだポイント履歴はありません</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
+              {contributions.map((c, i) => {
+                const proposalTitle = c.related_id ? proposalTitleOf.get(c.related_id) : null
+                return (
+                  <li key={i} className="py-2 flex items-start justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="text-slate-800 dark:text-slate-200">
+                        {ACTION_LABELS[c.action_type] ?? c.action_type}
+                      </span>
+                      {proposalTitle && c.related_id && (
+                        <Link
+                          href={`/proposals/${c.related_id}`}
+                          className="block text-xs text-slate-500 truncate hover:underline"
+                        >
+                          {proposalTitle}
+                        </Link>
+                      )}
+                      <span className="block text-[10px] text-slate-400">
+                        {new Date(c.created_at).toLocaleString('ja-JP')}
+                      </span>
+                    </div>
+                    <span className="font-mono text-emerald-700 dark:text-emerald-400 shrink-0">
+                      +{c.pt}pt
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </section>
 
