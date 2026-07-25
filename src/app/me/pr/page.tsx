@@ -40,7 +40,10 @@ export default async function MyPrPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <form action={handleSave} className="max-w-2xl mx-auto space-y-4">
         <nav className="text-xs text-slate-500"><Link href="/me" className="hover:underline">← マイページ</Link></nav>
-        <h1 className="text-3xl font-serif font-bold">登録メンバーPR編集</h1>
+        <h1 className="text-3xl font-serif font-bold">公開PRの編集</h1>
+        <p className="text-sm text-slate-500">
+          ここに書いた内容が「登録メンバー」一覧に公開され、団体や主催者から声がかかるきっかけになります
+        </p>
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
           <L label="資格・経歴">

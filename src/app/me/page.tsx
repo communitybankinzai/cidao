@@ -231,6 +231,34 @@ export default async function MyPage({
           </div>
         </header>
 
+        {/* 設定ページへのナビ（各画面の役割を明示） */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Link
+            href="/me/edit"
+            className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden>📝</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">プロフィール編集</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              表示名・興味分野・本登録（提案・投票への参加）の設定
+            </p>
+          </Link>
+          <Link
+            href="/me/pr"
+            className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden>📣</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">公開PRの編集</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              「登録メンバー」一覧に載せて、団体から声がかかるための公開情報
+            </p>
+          </Link>
+        </section>
+
         {/* 団体メアドでログイン中の警告 */}
         {collidingOrgs.length > 0 && (
           <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
@@ -250,13 +278,13 @@ export default async function MyPage({
         {member.tier === 'light' && (
           <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-              メアド以外の情報（名前・市内/関係人口・興味分野など）を登録すると通常登録になり、提案・拘束的投票・コメントができます
+              提案・投票・コメントに参加するには本登録（無料）が必要です
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              プロフィールを完成させて投票重みを上げましょう（市民 0.1 → 0.3）
+              「プロフィール編集」で興味分野を選んで保存するだけで完了します（投票の重みも上がります）
             </p>
             <Link href="/me/edit">
-              <Button size="sm">プロフィールを編集する</Button>
+              <Button size="sm">本登録に進む</Button>
             </Link>
           </div>
         )}
@@ -432,14 +460,6 @@ export default async function MyPage({
               ))}
             </ul>
           )}
-        </section>
-
-        {/* 設定リンク */}
-        <section className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
-          <span className="text-sm">プロフィール編集・公開範囲設定</span>
-          <Link href="/me/edit">
-            <Button variant="outline" size="sm">編集</Button>
-          </Link>
         </section>
 
         {/* 不具合・要望の報告 */}

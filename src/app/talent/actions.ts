@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { insertNotification } from '@/lib/notify'
 
 /**
  * 人材バンクのメンバーにメッセージを送る（コンタクト動線）。
@@ -63,6 +64,17 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     .select('id')
     .single()
   if (insertErr) throw new Error(`コンタクトの保存に失敗: ${insertErr.message}`)
+
+  // アプリ内通知（best-effort）。LINEログインユーザーはメールを持たず
+  // メール通知が届かないため、ベル通知が実質的な受信手段になる
+  await insertNotification({
+    recipientId: targetMemberId,
+    actorId: user.id,
+    kind: 'comment',
+    title: `${senderMember.display_name}さんから「活動の声がけ」が届きました`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}｜連絡先: ${user.email ?? '(未登録)'}`,
+    linkUrl: `/talent/${targetMemberId}`,
+  })
 
   // 相手のメール (auth.users.email) を service_role で取得
   let emailSentAt: string | null = null

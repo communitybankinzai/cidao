@@ -111,8 +111,8 @@ export default async function EditProfilePage({
           </h1>
           <p className="text-sm text-slate-500 mt-2">
             {wasLight
-              ? '完成後、投票重みが市民 0.1 → 0.3 に上がり、提案・拘束的投票・コメントが可能になります'
-              : '内容を更新できます'}
+              ? '興味分野を選んで保存すると本登録が完了し、提案・投票・コメントに参加できるようになります'
+              : '表示名・興味分野など、会員としての基本情報を設定するページです'}
           </p>
         </header>
 

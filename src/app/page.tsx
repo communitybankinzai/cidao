@@ -16,11 +16,9 @@ const TIER_LABEL: Record<string, { label: string; color: string }> = {
 export default async function Home() {
   const supabase = await createClient()
 
-  let userEmail: string | null = null
   let userId: string | null = null
   try {
     const { data } = await supabase.auth.getUser()
-    userEmail = data.user?.email ?? null
     userId = data.user?.id ?? null
   } catch {
     // 未ログイン扱い
@@ -186,7 +184,7 @@ export default async function Home() {
         </section>
 
         <footer className="flex gap-3">
-          {userEmail ? (
+          {userId ? (
             <>
               <Link href="/me">
                 <Button variant="default">マイページ</Button>
