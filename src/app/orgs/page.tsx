@@ -12,7 +12,7 @@ export default async function OrgsPage() {
     .select('id, name, type, legal_form, logo_url, description, public_flag, inzai_registration_number, organization_categories(category, is_primary)')
     .eq('public_flag', true)
     .order('name')
-    .limit(200)
+    .limit(500)
 
   // 公開メンバーシップ（display_in_org=true の confirmed）をまとめて取得して org_id でマップ
   type MembershipRow = {

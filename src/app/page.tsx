@@ -24,6 +24,23 @@ export default async function Home() {
     // 未ログイン扱い
   }
 
+  // 登録者数・団体数（システムアカウントは除外）
+  const SYSTEM_MEMBER_IDS = [
+    '943a665e-474d-46da-9f2d-a8cfa0f1bcaa', // 印西市公式登録（未認証プレースホルダー）
+    '31f6bcf1-ce27-4825-a11c-591c5d3cd729', // イベント取込bot
+  ]
+  const [{ count: memberCount }, { count: orgCount }] = await Promise.all([
+    supabase
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+      .is('deleted_at', null)
+      .not('id', 'in', `(${SYSTEM_MEMBER_IDS.join(',')})`),
+    supabase
+      .from('organizations')
+      .select('id', { count: 'exact', head: true })
+      .eq('public_flag', true),
+  ])
+
   // 会員証カード用データ（ログイン時のみ）
   let member: { tier: string; display_name: string; avatar_url: string | null; created_at: string } | null = null
   let qrDataUrl: string | null = null
@@ -156,7 +173,7 @@ export default async function Home() {
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">団体を探す</h4>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                印西市内 219 団体から、活動可能な時間・関心に合う団体を AI が提案します。
+                印西市内 {orgCount ?? 219} 団体から、活動可能な時間・関心に合う団体を AI が提案します。
               </p>
             </Link>
             <Link
@@ -168,16 +185,23 @@ export default async function Home() {
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">メンバーを探す</h4>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                登録メンバーの中から、声をかけたい人を AI が提案します。
+                現在 {memberCount ?? '–'} 名が登録。声をかけたい人を AI が提案します。
               </p>
             </Link>
           </div>
+          <p className="text-[11px] text-slate-600 dark:text-slate-400">
+            自分の目で探したい方は{' '}
+            <Link href="/orgs" className="underline hover:text-emerald-700 dark:hover:text-emerald-300">団体一覧・検索</Link>
+            {' '}／{' '}
+            <Link href="/talent" className="underline hover:text-emerald-700 dark:hover:text-emerald-300">メンバー一覧</Link>
+            {' '}へ
+          </p>
         </section>
 
         <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <NavCard href="/proposals" label="提案・投票" />
           <NavCard href="/events"    label="イベント" />
-          <NavCard href="/orgs"      label="団体" />
+          <NavCard href="/orgs"      label="団体一覧・検索" />
           <NavCard href="/talent"    label="登録メンバー" />
           <NavCard href="/freefree"  label="FreeFree" />
           <NavCard href="/ranking"   label="ランキング" />
