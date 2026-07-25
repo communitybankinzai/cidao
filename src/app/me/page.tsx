@@ -8,6 +8,7 @@ import { categoryLabel } from '@/lib/categories'
 import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
 import { TYPE_LABEL as ORG_TYPE_LABEL } from '@/lib/org-labels'
 import DeleteAccountSection from './_components/DeleteAccountSection'
+import { PushToggle } from '@/components/PushToggle'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
   open: {
@@ -258,6 +259,9 @@ export default async function MyPage({
             </p>
           </Link>
         </section>
+
+        {/* プッシュ通知設定 */}
+        <PushToggle />
 
         {/* 団体メアドでログイン中の警告 */}
         {collidingOrgs.length > 0 && (

@@ -45,3 +45,34 @@ export async function markAllNotificationsRead(): Promise<void> {
     .is('read_at', null)
     .eq('recipient_id', user.id)
 }
+
+/** Webプッシュ購読を保存（同一端末は endpoint 主キーで上書き） */
+export async function savePushSubscription(sub: {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}): Promise<void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    endpoint: sub.endpoint,
+    member_id: user.id,
+    p256dh: sub.keys.p256dh,
+    auth: sub.keys.auth,
+  })
+  if (error) throw new Error(`購読の保存に失敗: ${error.message}`)
+}
+
+/** Webプッシュ購読を解除 */
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+
+  await supabase
+    .from('push_subscriptions')
+    .delete()
+    .eq('endpoint', endpoint)
+    .eq('member_id', user.id)
+}

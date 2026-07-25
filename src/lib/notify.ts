@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { sendWebPush } from '@/lib/push'
 
 /**
  * アプリ内通知（notifications テーブル）への挿入ヘルパー。
@@ -32,6 +33,14 @@ export async function insertNotification(input: {
       title: input.title.slice(0, 200),
       body: input.body ?? null,
       link_url: input.linkUrl ?? null,
+    })
+
+    // Webプッシュ（購読者のみ・best-effort）。スリープ中の端末にも届く
+    await sendWebPush({
+      recipientId: input.recipientId,
+      title: input.title,
+      body: input.body,
+      url: input.linkUrl,
     })
   } catch {
     // best-effort：通知失敗は本体処理に影響させない
