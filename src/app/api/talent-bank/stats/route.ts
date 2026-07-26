@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -17,10 +18,19 @@ import { createClient } from '@/lib/supabase/server'
  * CORS: enabled for the CBI public site.
  */
 export async function GET() {
-  const supabase = await createClient()
+  // 集計は service_role で行う（2026-07-26）。
+  // anon 権限だと RLS により public_scope='public' の行しか見えず、
+  // 「登録ユーザーのみ」公開のPRがカウントから漏れて実数より少なく表示されるため。
+  // 件数のみを返し個人情報は含まないので、service_role 使用でも公開して問題ない。
+  const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const supabase = supaUrl && serviceKey
+    ? createSupabaseClient(supaUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : await createClient()
 
-  // 「人材バンクに掲載されている人」= member_profiles_pr に公開行があり message_acceptance != 'closed'
-  // /talent と同じ定義
+  // 「人材バンクに掲載されている人」= member_profiles_pr に行があり message_acceptance != 'closed'
   const { count, error } = await supabase
     .from('member_profiles_pr')
     .select('member_id', { count: 'exact', head: true })
