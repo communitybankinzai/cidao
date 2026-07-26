@@ -6,6 +6,62 @@ import { createClient } from '@/lib/supabase/server'
 import { insertNotification } from '@/lib/notify'
 
 /**
+ * 相手メンバーのメール (auth.users.email) を service_role で解決し、
+ * Resend で送信する。best-effort：呼び出し元は結果を行に書き戻すだけで、
+ * 失敗しても本体処理（INSERT）は成立している。
+ */
+async function sendInquiryEmail(input: {
+  toMemberId: string
+  subject: string
+  text: string
+  replyTo?: string
+}): Promise<{ emailSentAt: string | null; emailError: string | null }> {
+  let emailSentAt: string | null = null
+  let emailError: string | null = null
+
+  try {
+    const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    const apiKey = process.env.RESEND_API_KEY ?? ''
+    const from = process.env.MAIL_FROM ?? ''
+
+    if (!supaUrl || !serviceKey) {
+      emailError = 'service role not configured'
+    } else if (!apiKey || !from) {
+      emailError = 'RESEND_API_KEY or MAIL_FROM not configured'
+    } else {
+      const admin = createSupabaseClient(supaUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      const { data: targetAuth, error: getUserErr } = await admin.auth.admin.getUserById(input.toMemberId)
+      const targetEmail = targetAuth?.user?.email
+      if (getUserErr || !targetEmail) {
+        emailError = 'target email lookup failed'
+      } else {
+        const { Resend } = await import('resend')
+        const resend = new Resend(apiKey)
+        const { error: sendErr } = await resend.emails.send({
+          from,
+          to: targetEmail,
+          subject: input.subject,
+          text: input.text,
+          replyTo: input.replyTo,
+        })
+        if (sendErr) {
+          emailError = sendErr.message ?? 'resend send failed'
+        } else {
+          emailSentAt = new Date().toISOString()
+        }
+      }
+    }
+  } catch (e) {
+    emailError = e instanceof Error ? e.message : String(e)
+  }
+
+  return { emailSentAt, emailError }
+}
+
+/**
  * 人材バンクのメンバーにメッセージを送る（コンタクト動線）。
  *
  * - talent_inquiries に1行 INSERT（RLS: 本登録以上の本人のみ、相手が message_acceptance != 'closed' のとき）
@@ -66,83 +122,47 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
   if (insertErr) throw new Error(`コンタクトの保存に失敗: ${insertErr.message}`)
 
   // アプリ内通知（best-effort）。LINEログインユーザーはメールを持たず
-  // メール通知が届かないため、ベル通知が実質的な受信手段になる
+  // メール通知が届かないため、ベル通知＋受信箱が実質的な受信手段になる
   await insertNotification({
     recipientId: targetMemberId,
     actorId: user.id,
     kind: 'comment',
     title: `${senderMember.display_name}さんから「活動の声がけ」が届きました`,
-    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}${user.email ? `｜連絡先: ${user.email}` : ''}`,
-    linkUrl: `/talent/${targetMemberId}`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
+    linkUrl: '/me/inbox',
   })
 
-  // 相手のメール (auth.users.email) を service_role で取得
-  let emailSentAt: string | null = null
-  let emailError: string | null = null
-
-  try {
-    const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-    const apiKey = process.env.RESEND_API_KEY ?? ''
-    const from = process.env.MAIL_FROM ?? ''
-
-    if (!supaUrl || !serviceKey) {
-      emailError = 'service role not configured'
-    } else if (!apiKey || !from) {
-      emailError = 'RESEND_API_KEY or MAIL_FROM not configured'
-    } else {
-      const admin = createSupabaseClient(supaUrl, serviceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-      const { data: targetAuth, error: getUserErr } = await admin.auth.admin.getUserById(targetMemberId)
-      const targetEmail = targetAuth?.user?.email
-      if (getUserErr || !targetEmail) {
-        emailError = 'target email lookup failed'
-      } else {
-        const { Resend } = await import('resend')
-        const resend = new Resend(apiKey)
-        const senderEmail = user.email ?? '(連絡先非公開)'
-        const profileUrl = `https://cidao.vercel.app/talent/${targetMemberId}`
-
-        const { error: sendErr } = await resend.emails.send({
-          from,
-          to: targetEmail,
-          subject: `【CiDAO 登録メンバー】${senderMember.display_name} さんから「活動の声がけ」が届いています`,
-          text: [
-            `${targetMember.display_name} 様`,
-            ``,
-            `CiDAO の登録メンバーのプロフィールをご覧になった ${senderMember.display_name} さんから、活動への声がけが届いています。`,
-            ``,
-            `─────────────────────────────`,
-            `差出人: ${senderMember.display_name}`,
-            `連絡先: ${senderEmail}`,
-            `─────────────────────────────`,
-            `メッセージ：`,
-            ``,
-            trimmed,
-            ``,
-            `─────────────────────────────`,
-            ``,
-            `あなたのプロフィール: ${profileUrl}`,
-            ``,
-            `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
-            `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
-            `※ メッセージを今後受け取りたくない場合は CiDAO の /me/pr で『メッセージ受付』を『受け付けない』に変更してください。`,
-            ``,
-            `Community Bank INZAI (CBI) / CiDAO`,
-          ].join('\n'),
-          replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
-        })
-        if (sendErr) {
-          emailError = sendErr.message ?? 'resend send failed'
-        } else {
-          emailSentAt = new Date().toISOString()
-        }
-      }
-    }
-  } catch (e) {
-    emailError = e instanceof Error ? e.message : String(e)
-  }
+  const senderEmail = user.email ?? '(連絡先非公開)'
+  const profileUrl = `https://cidao.vercel.app/talent/${targetMemberId}`
+  const { emailSentAt, emailError } = await sendInquiryEmail({
+    toMemberId: targetMemberId,
+    subject: `【CiDAO 登録メンバー】${senderMember.display_name} さんから「活動の声がけ」が届いています`,
+    text: [
+      `${targetMember.display_name} 様`,
+      ``,
+      `CiDAO の登録メンバーのプロフィールをご覧になった ${senderMember.display_name} さんから、活動への声がけが届いています。`,
+      ``,
+      `─────────────────────────────`,
+      `差出人: ${senderMember.display_name}`,
+      `連絡先: ${senderEmail}`,
+      `─────────────────────────────`,
+      `メッセージ：`,
+      ``,
+      trimmed,
+      ``,
+      `─────────────────────────────`,
+      ``,
+      `受信箱で確認・返信: https://cidao.vercel.app/me/inbox`,
+      `あなたのプロフィール: ${profileUrl}`,
+      ``,
+      `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
+      `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
+      `※ メッセージを今後受け取りたくない場合は CiDAO の /me/pr で『メッセージ受付』を『受け付けない』に変更してください。`,
+      ``,
+      `Community Bank INZAI (CBI) / CiDAO`,
+    ].join('\n'),
+    replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
+  })
 
   // 送信結果を行に書き戻す（best-effort、UPDATE policy は sender 本人）
   if (inserted) {
@@ -153,6 +173,108 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
   }
 
   revalidatePath(`/talent/${targetMemberId}`)
+  return {
+    ok: true,
+    emailSent: !!emailSentAt,
+    emailError,
+  }
+}
+
+/**
+ * 届いた声がけ（またはそのスレッド）に返信する。
+ *
+ * - reply_to_inquiry_id にはスレッドのルート声がけ ID を渡す
+ * - RLS（talent_inquiries_insert_reply）：ルートの当事者のみ、同じ相手にのみ INSERT できる
+ * - 人材バンク掲載チェックは課さない（受信者が掲載者でない相手に返信するため）
+ * - ベル通知＋メール（best-effort）は新規声がけと同じ経路
+ */
+export async function replyTalentInquiry(rootInquiryId: string, message: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const trimmed = message.trim()
+  if (trimmed.length < 1 || trimmed.length > 600) {
+    throw new Error('メッセージは 1〜600 字で入力してください')
+  }
+
+  // ルート声がけ（RLS で自分が当事者の行のみ見える）
+  const { data: root } = await supabase
+    .from('talent_inquiries')
+    .select('id, to_member_id, from_member_id, reply_to_inquiry_id')
+    .eq('id', rootInquiryId)
+    .maybeSingle()
+  if (!root || root.reply_to_inquiry_id !== null) {
+    throw new Error('返信先の声がけが見つかりません')
+  }
+
+  const otherMemberId = root.from_member_id === user.id ? root.to_member_id : root.from_member_id
+  if (otherMemberId === user.id) throw new Error('自分自身には送信できません')
+
+  const [{ data: me }, { data: other }] = await Promise.all([
+    supabase.from('members').select('display_name').eq('id', user.id).single(),
+    supabase.from('members').select('display_name').eq('id', otherMemberId).single(),
+  ])
+  if (!me || !other) throw new Error('メンバー情報が見つかりません')
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('talent_inquiries')
+    .insert({
+      to_member_id: otherMemberId,
+      from_member_id: user.id,
+      message: trimmed,
+      reply_to_inquiry_id: root.id,
+    })
+    .select('id')
+    .single()
+  if (insertErr) throw new Error(`返信の保存に失敗: ${insertErr.message}`)
+
+  await insertNotification({
+    recipientId: otherMemberId,
+    actorId: user.id,
+    kind: 'comment',
+    title: `${me.display_name}さんから「活動の声がけ」への返信が届きました`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
+    linkUrl: '/me/inbox',
+  })
+
+  const senderEmail = user.email ?? '(連絡先非公開)'
+  const { emailSentAt, emailError } = await sendInquiryEmail({
+    toMemberId: otherMemberId,
+    subject: `【CiDAO 登録メンバー】${me.display_name} さんから返信が届いています`,
+    text: [
+      `${other.display_name} 様`,
+      ``,
+      `CiDAO「活動の声がけ」に ${me.display_name} さんから返信が届いています。`,
+      ``,
+      `─────────────────────────────`,
+      `差出人: ${me.display_name}`,
+      `連絡先: ${senderEmail}`,
+      `─────────────────────────────`,
+      `メッセージ：`,
+      ``,
+      trimmed,
+      ``,
+      `─────────────────────────────`,
+      ``,
+      `受信箱で確認・返信: https://cidao.vercel.app/me/inbox`,
+      ``,
+      `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
+      `※ 返信は、このメールに直接 Reply すると ${me.display_name} さんに直接届きます。`,
+      ``,
+      `Community Bank INZAI (CBI) / CiDAO`,
+    ].join('\n'),
+    replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
+  })
+
+  if (inserted) {
+    await supabase
+      .from('talent_inquiries')
+      .update({ email_sent_at: emailSentAt, email_error: emailError })
+      .eq('id', inserted.id)
+  }
+
+  revalidatePath('/me/inbox')
   return {
     ok: true,
     emailSent: !!emailSentAt,

@@ -93,6 +93,13 @@ export default async function MyPage({
     .eq('member_id', user.id)
     .maybeSingle()
 
+  // 届いた声がけの未読件数（受信箱バッジ用）
+  const { count: unreadInquiries } = await supabase
+    .from('talent_inquiries')
+    .select('id', { count: 'exact', head: true })
+    .eq('to_member_id', user.id)
+    .is('read_at', null)
+
   // ログインメアドが org.contact_email と一致する団体（団体メアドでログインしてないかチェック）
   const userEmail = user.email ?? null
   let collidingOrgs: { id: string; name: string }[] = []
@@ -256,6 +263,23 @@ export default async function MyPage({
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               「登録メンバー」一覧に載せて、団体から声がかかるための公開情報
+            </p>
+          </Link>
+          <Link
+            href="/me/inbox"
+            className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition md:col-span-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden>📥</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">届いた声がけ</span>
+              {(unreadInquiries ?? 0) > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-semibold">
+                  未読 {unreadInquiries}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              あなたへの「活動の声がけ」の受信箱。ここから直接返信できます
             </p>
           </Link>
         </section>
