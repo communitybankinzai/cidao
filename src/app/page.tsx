@@ -46,6 +46,7 @@ export default async function Home() {
   let qrDataUrl: string | null = null
   let contribTotal = 0
   let contribMonthly = 0
+  let hasPr = false
   if (userId) {
     const { data: m } = await supabase
       .from('members')
@@ -53,6 +54,12 @@ export default async function Home() {
       .eq('id', userId)
       .maybeSingle()
     member = m ?? null
+
+    const { count: prCount } = await supabase
+      .from('member_profiles_pr')
+      .select('member_id', { count: 'exact', head: true })
+      .eq('member_id', userId)
+    hasPr = (prCount ?? 0) > 0
 
     if (member) {
       qrDataUrl = await QRCode.toDataURL(`${SITE_URL}/talent/${userId}`, {
@@ -82,12 +89,68 @@ export default async function Home() {
             Citizen DAO · 市民DAO
           </p>
           <h1 className="text-4xl font-serif font-bold text-slate-900 dark:text-slate-100">
-            CiDAO
+            CiDAO<span className="text-lg font-sans font-normal text-slate-400 ml-2">（シダオ）</span>
           </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-400">
-            印西市民による提案・投票・貢献度プラットフォーム
+          <p className="text-base leading-relaxed text-slate-700 dark:text-slate-300">
+            地域で「やってみたい」「手伝いたい」人と、協力を求める団体をつなぐ、印西市の無料の市民参加サービスです。
           </p>
+          <details className="text-sm text-slate-600 dark:text-slate-400">
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+              くわしく見る
+            </summary>
+            <div className="mt-2 space-y-1.5 leading-relaxed bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs">
+              <p>CiDAO でできることは、大きく3つです。</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>自分の得意なこと・興味を登録して、団体から活動の声がけを受け取る</li>
+                <li>印西市内の市民活動団体やイベントを探して参加する</li>
+                <li>まちへの提案を出したり、ほかの人の提案に投票したりする</li>
+              </ul>
+              <p className="pt-1 text-slate-500">
+                名前の由来：DAO（ダオ）は「特定のリーダーではなく、参加する一人ひとりの意見で運営を決めていく仕組み」のこと。CiDAO は Citizen（市民）＋ DAO の造語です。
+              </p>
+            </div>
+          </details>
         </header>
+
+        {/* 初めての人向け：自分に合う入口を選ぶ（未ログイン時のみ） */}
+        {!userId && (
+          <section aria-label="はじめての方へ" className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Link
+              href="/login?next=/me/pr"
+              className="block bg-white dark:bg-slate-900 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg p-4 hover:border-emerald-500 transition space-y-1.5"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl" aria-hidden>🙋</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  自分のスキルや経験を活かしたい
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                → あなたのPR（自己紹介）を作る
+              </p>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                できること・興味のあることを登録すると、団体から活動の声がけが届きます。LINEログイン後、約3分で作れます。
+              </p>
+            </Link>
+            <Link
+              href="/orgs"
+              className="block bg-white dark:bg-slate-900 border-2 border-sky-300 dark:border-sky-700 rounded-lg p-4 hover:border-sky-500 transition space-y-1.5"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl" aria-hidden>🔍</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  地域の活動や仲間を探したい
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-sky-700 dark:text-sky-300">
+                → 活動・募集を探す
+              </p>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                印西市内 {orgCount ?? 200} 以上の団体やイベントを、登録なしでもそのまま見られます。
+              </p>
+            </Link>
+          </section>
+        )}
 
         {member && tierInfo && (
           <section aria-label="会員証" className="space-y-2">
@@ -152,13 +215,40 @@ export default async function Home() {
           </section>
         )}
 
+        {/* 次の一歩ガイド（ログイン済み・PR未作成の人向け） */}
+        {member && !hasPr && (
+          <section
+            aria-label="次の一歩"
+            className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-3"
+          >
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+              <StepChip label="① 登録" state="done" />
+              <span aria-hidden>→</span>
+              <StepChip label={isLight ? '② プロフィール登録' : '② PR（自己紹介）を作る'} state="now" />
+              <span aria-hidden>→</span>
+              <StepChip label="③ 活動を探す" state="todo" />
+            </div>
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              まずは、できること・興味があることを登録しましょう（約3分）
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+              {isLight
+                ? 'プロフィールで興味分野を選んで保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。'
+                : 'PR（自己紹介）を公開すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
+            </p>
+            <Link href={isLight ? '/me/edit' : '/me/pr'}>
+              <Button size="sm">{isLight ? 'プロフィールを登録する' : 'PR（自己紹介）を作る'}</Button>
+            </Link>
+          </section>
+        )}
+
         <section className="bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950 dark:to-sky-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs tracking-[0.2em] text-emerald-700 dark:text-emerald-300 uppercase">Agent A7 · Match</div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-0.5">マッチング相談</h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                AI と会話して、あなたに合う活動先や仲間を見つける
+                AI（自動でおすすめを教えてくれる相談相手）と会話しながら、あなたに合う活動先や仲間を見つけられます
               </p>
             </div>
             <span className="text-2xl shrink-0" aria-hidden>💬</span>
@@ -234,6 +324,21 @@ export default async function Home() {
         </footer>
       </main>
     </div>
+  )
+}
+
+function StepChip({ label, state }: { label: string; state: 'done' | 'now' | 'todo' }) {
+  const cls =
+    state === 'done'
+      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+      : state === 'now'
+        ? 'bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 font-semibold'
+        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+  return (
+    <span className={`px-2 py-1 rounded ${cls}`}>
+      {label}
+      {state === 'done' && ' ✓'}
+    </span>
   )
 }
 
