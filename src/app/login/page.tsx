@@ -125,28 +125,6 @@ export default function LoginPage() {
               <p className="text-xs text-emerald-900 dark:text-emerald-100">{notice}</p>
             </div>
           )}
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 space-y-1.5">
-            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-              なぜLINEログインなの？
-            </p>
-            <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside leading-relaxed">
-              <li><strong>投票の公正性のため</strong>：LINEアカウントは電話番号で本人確認されているため、1人が複数アカウントで投票する不正を防げます。みなさんの1票の重みを守る仕組みです</li>
-              <li><strong>かんたん・安全</strong>：パスワードを新しく作る必要がなく、使い慣れたLINEでそのままログインできます</li>
-              <li><strong>無料で運営できる</strong>：SMS認証などの有料サービスを使わず、市民活動の限られた予算で本人確認を実現しています</li>
-            </ul>
-          </div>
-
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 space-y-1.5">
-            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-              安心してご利用ください
-            </p>
-            <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside leading-relaxed">
-              <li>CiDAOがLINEのトーク内容や友だち情報にアクセスすることはありません</li>
-              <li>電話番号がCiDAOに送られることもありません（LINE内での確認に使われるだけです）</li>
-              <li>初めての方はログイン後にプロフィール登録へ進みます</li>
-            </ul>
-          </div>
-
           <Button
             type="button"
             onClick={handleLineLogin}
@@ -155,6 +133,31 @@ export default function LoginPage() {
           >
             {status === 'redirecting' ? 'LINEへ移動中…' : 'LINEでログイン'}
           </Button>
+          <p className="text-[11px] text-slate-500 text-center">
+            無料・パスワード不要。初めての方は自動でアカウントが作られます
+          </p>
+
+          <details className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+            <summary className="text-xs font-semibold text-slate-900 dark:text-slate-100 cursor-pointer">
+              なぜLINEログインなの？
+            </summary>
+            <ul className="mt-2 text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside leading-relaxed">
+              <li><strong>投票の公正性のため</strong>：LINEアカウントは電話番号で本人確認されているため、1人が複数アカウントで投票する不正を防げます。みなさんの1票の重みを守る仕組みです</li>
+              <li><strong>かんたん・安全</strong>：パスワードを新しく作る必要がなく、使い慣れたLINEでそのままログインできます</li>
+              <li><strong>無料で運営できる</strong>：SMS認証などの有料サービスを使わず、市民活動の限られた予算で本人確認を実現しています</li>
+            </ul>
+          </details>
+
+          <details className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+            <summary className="text-xs font-semibold text-slate-900 dark:text-slate-100 cursor-pointer">
+              安心してご利用ください
+            </summary>
+            <ul className="mt-2 text-xs text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside leading-relaxed">
+              <li>CiDAOがLINEのトーク内容や友だち情報にアクセスすることはありません</li>
+              <li>電話番号がCiDAOに送られることもありません（LINE内での確認に使われるだけです）</li>
+              <li>初めての方はログイン後にプロフィール登録へ進みます</li>
+            </ul>
+          </details>
 
           {error && (
             <div className="rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-3 space-y-2">
