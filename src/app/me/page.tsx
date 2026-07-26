@@ -144,6 +144,23 @@ export default async function MyPage({
           </div>
         )}
 
+        {/* 保存直後にPR未作成なら、一覧掲載にはPR公開が別途必要なことを明示
+            （「登録したのに登録メンバー一覧に載らない」問い合わせ対策） */}
+        {sp.updated && !myPr && (
+          <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-4 rounded space-y-2">
+            <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">
+              📣 「登録メンバー」一覧に載るには、公開PRの作成が必要です
+            </p>
+            <p className="text-xs text-sky-700 dark:text-sky-300">
+              プロフィールの保存だけでは <Link href="/talent" className="underline">登録メンバー一覧</Link> には表示されません。
+              できそうな貢献・資格などを公開PRとして登録すると一覧に載り、団体から声がかかるようになります。
+            </p>
+            <Link href="/me/pr">
+              <Button size="sm">公開PRを作成する</Button>
+            </Link>
+          </div>
+        )}
+
         {/* マッチング結果（更新直後のみ） */}
         {sp.updated && matchResult !== null && (
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
