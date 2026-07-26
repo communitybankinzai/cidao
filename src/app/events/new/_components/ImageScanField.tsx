@@ -26,7 +26,18 @@ function formatOcc(s: string): string {
   return `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}`
 }
 
-type Status = 'idle' | 'loading' | 'done' | 'error'
+// notice: AI 抽出が使えなかった等のお知らせ（エラー色ではなくグレー地で表示）
+type Status = 'idle' | 'loading' | 'done' | 'notice'
+
+// サーバー（/api/events/scan）が返す reason ごとの市民向けメッセージ。
+// HTTP ステータス番号は表示しない
+const REASON_MESSAGES: Record<string, string> = {
+  quota: 'AI抽出が一時的に利用できません。お手数ですが下の項目を手入力でご登録ください。',
+  busy: 'AIが混み合っています。数分後に再度お試しいただくか、手入力でご登録ください。',
+  too_large: '画像サイズが大きすぎます。5MB以下に縮小してからお試しください。',
+  parse: 'チラシの読み取りに失敗しました。お手数ですが手入力でご登録ください。',
+  unknown: 'チラシの読み取りに失敗しました。お手数ですが手入力でご登録ください。',
+}
 
 export function ImageScanField({
   initialFlyerUrl = null,
@@ -48,13 +59,23 @@ export function ImageScanField({
       const fd = new FormData()
       fd.append('image', file)
       const res = await fetch('/api/events/scan', { method: 'POST', body: fd })
-      const data = (await res.json().catch(() => ({}))) as Extracted & { error?: string }
-      if (!res.ok) {
-        // 画像アップロード自体は成功している可能性があるので flyer_image_url が来ていれば反映
-        if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
-        throw new Error(data.error ?? `HTTP ${res.status}`)
+      const data = (await res.json().catch(() => ({}))) as Extracted & {
+        ok?: boolean
+        reason?: string
+        error?: string
       }
+      // 画像アップロード自体は成功している可能性があるので flyer_image_url が来ていれば反映
       if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
+      if (!res.ok || data.ok === false) {
+        // AI 抽出は入力補助。失敗してもエラーにせず「お知らせ」として案内し、手入力を促す
+        const reason = data.reason ?? (res.status === 413 ? 'too_large' : 'unknown')
+        const attached = data.flyer_image_url
+          ? '（チラシ画像は添付済みです。そのまま登録できます）'
+          : ''
+        setStatus('notice')
+        setMessage((REASON_MESSAGES[reason] ?? REASON_MESSAGES.unknown) + attached)
+        return
+      }
       const occ = Array.isArray(data.occurrences) ? data.occurrences : []
       if (occ.length > 1) {
         setOccurrences(occ)
@@ -69,9 +90,10 @@ export function ImageScanField({
       setMessage(
         `保存完了（自信度 ${pct}%、${filled}項目に反映）。チラシ画像はイベントに添付されました。内容を確認してから登録してください。`,
       )
-    } catch (e) {
-      setStatus('error')
-      setMessage(e instanceof Error ? e.message : '読み取りに失敗しました')
+    } catch {
+      // 通信断など。エラー表示ではなくお知らせとして手入力を促す
+      setStatus('notice')
+      setMessage(REASON_MESSAGES.unknown)
     }
   }
 
@@ -152,9 +174,7 @@ export function ImageScanField({
   }
 
   const statusColor =
-    status === 'error'
-      ? 'text-rose-600 dark:text-rose-400'
-      : status === 'done'
+    status === 'done'
       ? 'text-emerald-700 dark:text-emerald-400'
       : status === 'loading'
       ? 'text-slate-600 dark:text-slate-300'
@@ -248,7 +268,14 @@ export function ImageScanField({
           </p>
         </div>
       )}
-      {message && <p className={`text-xs ${statusColor}`}>{message}</p>}
+      {message && status === 'notice' ? (
+        <div className="rounded border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-2">
+          <p className="text-xs font-medium text-slate-700 dark:text-slate-200">お知らせ</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300">{message}</p>
+        </div>
+      ) : (
+        message && <p className={`text-xs ${statusColor}`}>{message}</p>
+      )}
       <p className="text-[10px] text-slate-500">
         画像から タイトル / 日時 / 場所 / 主催団体名 などを抽出してフォームに反映します。AI
         の抽出結果には誤りが含まれることがあります。必ず確認・修正してください。
