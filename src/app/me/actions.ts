@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { insertNotification } from '@/lib/notify'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -60,9 +61,10 @@ export async function updateProfile(input: ProfileUpdate) {
   }
 
   // contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
+  // tier は「本登録完了の瞬間」（light→email_only 昇格）の判定に使う
   const { data: current } = await supabase
     .from('members')
-    .select('contact_preferences')
+    .select('contact_preferences, tier')
     .eq('id', user.id)
     .single()
   const prefs = {
@@ -94,6 +96,26 @@ export async function updateProfile(input: ProfileUpdate) {
     .eq('id', user.id)
 
   if (error) throw new Error(`プロフィール更新に失敗: ${error.message}`)
+
+  // 本登録完了の瞬間（light→email_only 昇格）に、公開PR未作成なら
+  // 「一覧掲載には公開PRの作成が必要」をベル通知＋Webプッシュで案内する。
+  // 登録確認メールが存在しない（LINEログイン一本化）ため、これが全員に届く唯一の案内経路
+  if (input.upgradeToEmailOnly && current?.tier === 'light') {
+    const { data: myPr } = await supabase
+      .from('member_profiles_pr')
+      .select('member_id')
+      .eq('member_id', user.id)
+      .maybeSingle()
+    if (!myPr) {
+      await insertNotification({
+        recipientId: user.id,
+        kind: 'system',
+        title: '本登録が完了しました🎉 「登録メンバー」一覧に載るには公開PRの作成が必要です',
+        body: 'できそうな貢献・資格などを公開PRとして登録すると一覧に載り、団体から活動の声がけが届くようになります。',
+        linkUrl: '/me/pr',
+      })
+    }
+  }
 
   // 実名（非公開）は member_private に upsert（RLS: 本人のみ書込可）
   if (input.real_name !== undefined) {
