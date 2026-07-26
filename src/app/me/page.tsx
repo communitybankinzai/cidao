@@ -303,6 +303,11 @@ export default async function MyPage({
 
         {/* プッシュ通知設定 */}
         <PushToggle />
+        <p className="text-xs text-slate-500 -mt-4 px-1">
+          📲 <Link href="/install" className="underline hover:text-slate-700 dark:hover:text-slate-300">
+            スマホのホーム画面に追加してアプリとして使う方法
+          </Link>
+        </p>
 
         {/* 団体メアドでログイン中の警告 */}
         {collidingOrgs.length > 0 && (

@@ -207,6 +207,15 @@ export default async function Home() {
           <NavCard href="/ranking"   label="ランキング" />
         </section>
 
+        <Link
+          href="/install"
+          className="block bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg p-3 hover:border-sky-400 transition text-center"
+        >
+          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            📲 スマホのホーム画面に追加してアプリとして使う →
+          </span>
+        </Link>
+
         <footer className="flex gap-3">
           {userId ? (
             <>
