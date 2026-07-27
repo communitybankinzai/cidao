@@ -21,6 +21,27 @@ export function VoteSection({
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // 押した手応えを出すための表示状態。処理中はどのボタンを押したかを示し、
+  // 完了後は数秒だけ「受け付けました」を出す（disabled だけでは反応が分からないため）
+  const [busyChoice, setBusyChoice] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  function run(label: string, fn: () => Promise<void>) {
+    setError(null)
+    setDone(null)
+    setBusyChoice(label)
+    startTransition(async () => {
+      try {
+        await fn()
+        setDone(label)
+        setTimeout(() => setDone(null), 4000)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusyChoice(null)
+      }
+    })
+  }
 
   if (status === 'discussion') {
     return (
@@ -63,18 +84,10 @@ export function VoteSection({
               key={choice}
               variant={selected ? 'default' : 'outline'}
               disabled={pending}
-              onClick={() => {
-                setError(null)
-                startTransition(async () => {
-                  try {
-                    await castVote(proposalId, choice)
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : String(e))
-                  }
-                })
-              }}
+              aria-busy={busyChoice === choice}
+              onClick={() => run(choice, () => castVote(proposalId, choice))}
             >
-              {choice}
+              {busyChoice === choice ? '送信中…' : choice}
             </Button>
           )
         })}
@@ -85,21 +98,17 @@ export function VoteSection({
           <button
             type="button"
             disabled={pending}
-            onClick={() => {
-              setError(null)
-              startTransition(async () => {
-                try {
-                  await retractVote(proposalId)
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : String(e))
-                }
-              })
-            }}
+            onClick={() => run('撤回', () => retractVote(proposalId))}
             className="text-slate-400 hover:text-rose-500 underline"
           >
-            投票を撤回
+            {busyChoice === '撤回' ? '撤回中…' : '投票を撤回'}
           </button>
         </div>
+      )}
+      {done && (
+        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          {done === '撤回' ? '✓ 投票を取り消しました' : `✓ 「${done}」で投票を受け付けました`}
+        </p>
       )}
       {error && (
         <p className="text-xs text-rose-600">{error}</p>

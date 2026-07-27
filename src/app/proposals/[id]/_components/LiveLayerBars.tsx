@@ -90,7 +90,11 @@ export function LiveLayerBars({
             <div className="flex justify-between text-xs text-slate-500">
               <span>{TIER_LABEL[tier]}</span>
               <span>
-                {totalCount === 0 ? '票なし' : hide ? '-（5名未満）' : `${totalCount}名 / 重み${totalWeight.toFixed(1)}`}
+                {totalCount === 0
+                  ? '票なし'
+                  : hide
+                  ? `あと${5 - totalCount}名で内訳を表示`
+                  : `${totalCount}名 / 重み${totalWeight.toFixed(1)}`}
               </span>
             </div>
             <div className="flex h-6 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
@@ -113,6 +117,14 @@ export function LiveLayerBars({
           </div>
         )
       })}
+      {tiers.some((tier) => {
+        const c = aggregates.filter((a) => a.tier === tier).reduce((s, a) => s + Number(a.count ?? 0), 0)
+        return c > 0 && c < 5
+      }) && (
+        <p className="text-[10px] text-slate-400 pt-1">
+          ※ 5名未満の区分は、誰がどう投票したか推測されないよう内訳を伏せています（票は集計されています）
+        </p>
+      )}
       {liveEnabled && (
         <p className="text-[10px] text-slate-400 flex items-center gap-1.5 pt-1">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
