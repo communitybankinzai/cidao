@@ -102,7 +102,17 @@ async function sendAlert(subject: string, lines: string[]): Promise<string> {
   return error ? `send failed: ${error.message}` : 'sent'
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Vercel Cron 以外から叩けないようにする（警告メールの乱発と Admin API の濫用を防ぐ）。
+  // Vercel は CRON_SECRET があると Authorization: Bearer <CRON_SECRET> を自動付与する。
+  const cronSecret = process.env.CRON_SECRET ?? ''
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 503 })
+  }
+  if ((request.headers.get('authorization') ?? '') !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const adminKey = process.env.ANTHROPIC_ADMIN_KEY ?? ''
   if (!adminKey) {
     return NextResponse.json({ skipped: 'ANTHROPIC_ADMIN_KEY not configured' })
