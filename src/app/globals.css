@@ -128,3 +128,71 @@
     @apply font-sans;
   }
 }
+/* ---------- 押した実感を出すフィードバック（ButtonFeedback.tsx が制御） ----------
+   ボタンやリンクを押したとき、波紋 → 処理中スピナー の2段で反応を示す */
+@layer components {
+  [data-slot="button"],
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 押した瞬間、軽く沈む */
+  [data-slot="button"]:active:not(:disabled),
+  button:active:not(:disabled) {
+    transform: translateY(1px) scale(0.978);
+  }
+  /* 押した位置から広がる波紋 */
+  .cidao-ripple {
+    position: absolute;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.3;
+    transform: scale(0);
+    pointer-events: none;
+    animation: cidaoRipple 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+  @keyframes cidaoRipple {
+    to {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+  /* 処理中：中身を薄くしてスピナーを重ねる */
+  [data-busy="true"] {
+    position: relative;
+    pointer-events: none;
+  }
+  [data-busy="true"] > * {
+    opacity: 0.45;
+  }
+  [data-busy="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-right-color: transparent;
+    animation: cidaoSpin 0.62s linear infinite;
+  }
+  @keyframes cidaoSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="button"]:active:not(:disabled),
+    button:active:not(:disabled) {
+      transform: none;
+    }
+    .cidao-ripple {
+      display: none;
+    }
+    [data-busy="true"]::after {
+      animation: none;
+    }
+  }
+}
