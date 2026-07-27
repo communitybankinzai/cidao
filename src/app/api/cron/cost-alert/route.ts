@@ -71,15 +71,26 @@ async function fetchCostSince(adminKey: string, since: Date): Promise<number> {
   return cents / CENTS_PER_USD
 }
 
-// 失効が近い（または失効済みの）APIキーを返す
+// 失効を知らせる残日数。毎日送ると30日間うるさいので、この日数のときだけ通知する。
+// （失効済み＝残日数マイナスのときは毎回通知する）
+const EXPIRY_MILESTONES = [30, 14, 7, 3, 1]
+
+function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS)
+}
+
+// 失効が近い（または失効済みの）APIキーを返す。
+// 有効なキーのみ対象（archived / inactive は除外）。
 async function fetchExpiringKeys(adminKey: string, withinDays: number): Promise<ApiKey[]> {
   const res = await fetch(`${API_BASE}/api_keys?limit=100`, { headers: adminHeaders(adminKey) })
   if (!res.ok) throw new Error(`api_keys ${res.status}: ${(await res.text()).slice(0, 200)}`)
   const json = (await res.json()) as { data?: ApiKey[] }
-  const limit = Date.now() + withinDays * 86400_000
-  return (json.data ?? []).filter(
-    (k) => k.status !== 'inactive' && k.expires_at && new Date(k.expires_at).getTime() <= limit,
-  )
+  return (json.data ?? []).filter((k) => {
+    if (k.status !== 'active' || !k.expires_at) return false
+    const d = daysUntil(k.expires_at)
+    if (d > withinDays) return false
+    return d <= 0 || EXPIRY_MILESTONES.includes(d)
+  })
 }
 
 async function sendAlert(subject: string, lines: string[]): Promise<string> {
@@ -153,9 +164,9 @@ export async function GET(request: Request) {
     if (expiring.length > 0) {
       alerts.push('<strong>有効期限が近いAPIキーがあります。</strong>')
       for (const k of expiring) {
-        const days = Math.ceil((new Date(k.expires_at!).getTime() - Date.now()) / 86400_000)
+        const days = daysUntil(k.expires_at!)
         alerts.push(
-          `${k.name ?? k.id}: ${days < 0 ? '失効済み' : `あと ${days} 日`}（${k.expires_at}）`,
+          `${k.name ?? k.id}: ${days <= 0 ? '失効済み' : `あと ${days} 日`}（${k.expires_at}）`,
         )
       }
     }
