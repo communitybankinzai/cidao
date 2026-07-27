@@ -23,6 +23,7 @@
 //   CRON_SECRET                : Vercel Cron が Authorization: Bearer で自動付与
 
 import { NextResponse } from 'next/server'
+import { normalizeMailFrom } from '@/lib/mail'
 
 const API_BASE = 'https://api.anthropic.com/v1/organizations'
 const CENTS_PER_USD = 100
@@ -90,7 +91,7 @@ async function sendAlert(subject: string, lines: string[]): Promise<string> {
   const { Resend } = await import('resend')
   const resend = new Resend(apiKey)
   const { error } = await resend.emails.send({
-    from,
+    from: normalizeMailFrom(from),
     to,
     subject,
     html:

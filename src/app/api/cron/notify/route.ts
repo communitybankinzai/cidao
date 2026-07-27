@@ -20,6 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { normalizeMailFrom } from '@/lib/mail'
 
 const SITE_URL = 'https://cidao.vercel.app'
 const WINDOW_HOURS = 72 // voting_started / finalized の遡り窓（初回・障害復帰時の大量送信防止）
@@ -185,7 +186,7 @@ async function handle(request: Request) {
       const chunk = recipients.slice(i, i + 100)
       try {
         const { error: sendErr } = await resend.batch.send(
-          chunk.map((to) => ({ from, to, subject, text })),
+          chunk.map((to) => ({ from: normalizeMailFrom(from), to, subject, text })),
         )
         if (sendErr) {
           errors += chunk.length
