@@ -13,6 +13,7 @@ type InquiryRow = {
   from_member_id: string
   message: string
   reply_to_inquiry_id: string | null
+  proposal_id: string | null
   read_at: string | null
   created_at: string
 }
@@ -36,11 +37,22 @@ export default async function InboxPage() {
   // RLS: 自分が from か to の行のみ返る
   const { data: rows } = await supabase
     .from('talent_inquiries')
-    .select('id, to_member_id, from_member_id, message, reply_to_inquiry_id, read_at, created_at')
+    .select('id, to_member_id, from_member_id, message, reply_to_inquiry_id, proposal_id, read_at, created_at')
     .order('created_at', { ascending: true })
     .limit(500)
 
   const inquiries: InquiryRow[] = rows ?? []
+
+  // 提案への「大賛成」を起点にしたスレッドは、どの提案の話か分かるようにする
+  const proposalIds = Array.from(
+    new Set(inquiries.map((r) => r.proposal_id).filter((v): v is string => !!v))
+  )
+  const { data: proposalRows } = proposalIds.length > 0
+    ? await supabase.from('proposals').select('id, title').in('id', proposalIds)
+    : { data: [] }
+  const proposalTitleOf = new Map<string, string>(
+    (proposalRows ?? []).map((p) => [p.id, p.title])
+  )
 
   // 相手メンバーの表示情報
   const otherIds = Array.from(new Set(
@@ -144,6 +156,15 @@ export default async function InboxPage() {
                         {' · '}
                         {new Date(root.created_at).toLocaleString('ja-JP')}
                       </p>
+                      {root.proposal_id && (
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                          提案「
+                          <Link href={`/proposals/${root.proposal_id}`} className="underline">
+                            {proposalTitleOf.get(root.proposal_id) ?? '（削除された提案）'}
+                          </Link>
+                          」について
+                        </p>
+                      )}
                     </div>
                     {unreadCount > 0 && (
                       <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-semibold">
