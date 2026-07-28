@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { categoryLabel, budgetLabel, bindingMeta } from '@/lib/categories'
+import { categoryLabel, budgetLabel, bindingMeta, quarterEndAt, formatJstDate } from '@/lib/categories'
 import { finalizeVotingIfDue } from '../actions'
 import { VoteSection } from './_components/VoteSection'
 import { CommentSection } from './_components/CommentSection'
@@ -156,6 +156,10 @@ export default async function ProposalDetailPage({
             議論期間中（残り{Math.floor(remainingDiscussionMin / 60)}時間{remainingDiscussionMin % 60}分）
             <br />
             終了後、自動的に投票期間に移行します（{budgetLabel(proposal.budget_size).split('（')[0]}: {meta?.label.includes('諮問') ? '諮問' : '拘束的'}）
+            <br />
+            投票締切: {proposal.voting_deadline_override
+              ? `${formatJstDate(new Date(`${proposal.voting_deadline_override}T00:00:00+09:00`))} 23:59（提案者指定）`
+              : `${formatJstDate(quarterEndAt(new Date(discussionEndsAt ?? now)))} 23:59（四半期末）`}
           </div>
         )}
         {proposal.status === 'voting' && remainingVotingMin !== null && (

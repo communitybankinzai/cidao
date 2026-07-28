@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { bindingMeta } from '@/lib/categories'
+import { VOTE_CHOICES } from '@/lib/categories'
 import { ProposalsBrowser, type ProposalSummary } from './_components/ProposalsBrowser'
 
 type AggRow = {
@@ -12,25 +12,21 @@ type AggRow = {
   weight_total: number | string
 }
 
-function snapshotFor(bindingType: string, aggs: AggRow[]): ProposalSummary['snapshot'] {
-  const meta = bindingMeta(bindingType)
-  if (!meta) return { yesPct: null, noPct: null, holdPct: null, totalVotes: 0 }
-  const [yesC, noC, holdC] = meta.choices
+function snapshotFor(aggs: AggRow[]): ProposalSummary['snapshot'] {
   const totalVotes = aggs.reduce((s, a) => s + (a.count ?? 0), 0)
+  // 旧選択肢（保留・協力できる等）の票も分母には含める
   const totalWeight = aggs.reduce((s, a) => s + Number(a.weight_total ?? 0), 0)
   if (totalWeight === 0) {
-    return { yesPct: null, noPct: null, holdPct: null, totalVotes }
+    return { pcts: null, totalVotes }
   }
-  const pctFor = (choice: string) => {
-    const w = aggs.filter((a) => a.choice === choice).reduce((s, a) => s + Number(a.weight_total ?? 0), 0)
-    return (w / totalWeight) * 100
+  const pcts: Record<string, number> = {}
+  for (const c of VOTE_CHOICES) {
+    const w = aggs
+      .filter((a) => a.choice === c.key)
+      .reduce((s, a) => s + Number(a.weight_total ?? 0), 0)
+    pcts[c.key] = (w / totalWeight) * 100
   }
-  return {
-    yesPct: pctFor(yesC),
-    noPct: pctFor(noC),
-    holdPct: pctFor(holdC),
-    totalVotes,
-  }
+  return { pcts, totalVotes }
 }
 
 export default async function ProposalsPage() {
@@ -70,7 +66,7 @@ export default async function ProposalsPage() {
     voting_start_at: p.voting_start_at,
     voting_end_at: p.voting_end_at,
     created_at: p.created_at,
-    snapshot: snapshotFor(p.binding_type, aggsByProposal.get(p.id) ?? []),
+    snapshot: snapshotFor(aggsByProposal.get(p.id) ?? []),
   }))
 
   return (

@@ -68,11 +68,11 @@ const PROPOSALS = [
     voting_start_at: d(-1),
     voting_end_at: d(6), // 残り6日
     aggregates: [
-      { tier: 'verified',   choice: '賛成', count: 1, weight_total: 1.0 },
-      { tier: 'email_only', choice: '賛成', count: 4, weight_total: 2.0 }, // weight 0.5
-      { tier: 'email_only', choice: '反対', count: 1, weight_total: 0.5 },
-      { tier: 'light',      choice: '賛成', count: 6, weight_total: 1.5 }, // weight 0.25
-      { tier: 'light',      choice: '保留', count: 2, weight_total: 0.5 },
+      { tier: 'verified',   choice: '大賛成', count: 1, weight_total: 1.0 },
+      { tier: 'email_only', choice: '賛成',   count: 4, weight_total: 2.0 }, // weight 0.5
+      { tier: 'email_only', choice: '反対',   count: 1, weight_total: 0.5 },
+      { tier: 'light',      choice: '大賛成', count: 6, weight_total: 1.5 }, // weight 0.25
+      { tier: 'light',      choice: '無理',   count: 2, weight_total: 0.5 },
     ],
   },
   {
@@ -88,11 +88,11 @@ const PROPOSALS = [
     voting_start_at: d(-2),
     voting_end_at: d(12), // 残り12日
     aggregates: [
-      { tier: 'verified',   choice: '協力できる', count: 1, weight_total: 1.0 },
-      { tier: 'email_only', choice: '協力できる', count: 5, weight_total: 2.5 },
-      { tier: 'email_only', choice: '難しい',     count: 1, weight_total: 0.5 },
-      { tier: 'light',      choice: '協力できる', count: 4, weight_total: 1.0 },
-      { tier: 'light',      choice: 'わからない', count: 3, weight_total: 0.75 },
+      { tier: 'verified',   choice: '大賛成', count: 1, weight_total: 1.0 },
+      { tier: 'email_only', choice: '大賛成', count: 5, weight_total: 2.5 },
+      { tier: 'email_only', choice: '賛成',   count: 1, weight_total: 0.5 },
+      { tier: 'light',      choice: '大賛成', count: 4, weight_total: 1.0 },
+      { tier: 'light',      choice: '無理',   count: 3, weight_total: 0.75 },
     ],
   },
   {
@@ -108,11 +108,11 @@ const PROPOSALS = [
     voting_start_at: d(-8),
     voting_end_at: d(-5),
     aggregates: [
-      { tier: 'verified',   choice: '賛成', count: 1, weight_total: 1.0 },
-      { tier: 'email_only', choice: '賛成', count: 6, weight_total: 3.0 },
-      { tier: 'email_only', choice: '保留', count: 1, weight_total: 0.5 },
-      { tier: 'light',      choice: '賛成', count: 9, weight_total: 2.25 },
-      { tier: 'light',      choice: '反対', count: 1, weight_total: 0.25 },
+      { tier: 'verified',   choice: '大賛成', count: 1, weight_total: 1.0 },
+      { tier: 'email_only', choice: '賛成',   count: 6, weight_total: 3.0 },
+      { tier: 'email_only', choice: '無理',   count: 1, weight_total: 0.5 },
+      { tier: 'light',      choice: '大賛成', count: 9, weight_total: 2.25 },
+      { tier: 'light',      choice: '反対',   count: 1, weight_total: 0.25 },
     ],
   },
   {

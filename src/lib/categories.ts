@@ -20,9 +20,9 @@ export function categoryLabel(key: string): string {
 }
 
 export const BUDGET_SIZES = [
-  { key: 'small',  label: '小（〜5万円）',       votingDays: 3 },
-  { key: 'medium', label: '中（5〜50万円）',     votingDays: 7 },
-  { key: 'large',  label: '大（50万円〜）',      votingDays: 14 },
+  { key: 'small',  label: '小（〜5万円）' },
+  { key: 'medium', label: '中（5〜50万円）' },
+  { key: 'large',  label: '大（50万円〜）' },
 ] as const
 
 export type BudgetSizeKey = typeof BUDGET_SIZES[number]['key']
@@ -31,28 +31,44 @@ export function budgetLabel(key: string): string {
   return BUDGET_SIZES.find((b) => b.key === key)?.label ?? key
 }
 
-export function votingDaysFor(budget: string): number {
-  return BUDGET_SIZES.find((b) => b.key === budget)?.votingDays ?? 7
+// ===========================
+// 投票の選択肢（2026-07-29 より全提案種別で共通の4択）
+// key は votes.choice / vote_aggregates.choice に保存される値そのもの。
+// side は拘束的決議の可決判定（finalize_voting）での賛否の振り分け。
+// ===========================
+export const VOTE_CHOICES = [
+  { key: '大賛成', desc: '是非協力したい',   side: 'yes', color: 'bg-emerald-600' },
+  { key: '賛成',   desc: 'でも協力は難しい', side: 'yes', color: 'bg-emerald-400' },
+  { key: '無理',   desc: '実現は無理そう',   side: 'no',  color: 'bg-amber-500' },
+  { key: '反対',   desc: '良いと思わない',   side: 'no',  color: 'bg-rose-500' },
+] as const
+
+export type VoteChoiceKey = typeof VOTE_CHOICES[number]['key']
+
+export const VOTE_CHOICE_KEYS: readonly string[] = VOTE_CHOICES.map((c) => c.key)
+
+export function voteChoiceMeta(key: string) {
+  return VOTE_CHOICES.find((c) => c.key === key)
 }
 
 export const BINDING_TYPES = [
   {
     key: 'internal',
     label: 'CBI 内部事項（拘束的）',
-    desc: '年会費・運営方針など。賛成/反対/保留で投票',
-    choices: ['賛成', '反対', '保留'],
+    desc: '年会費・運営方針など。大賛成/賛成/無理/反対 で投票',
+    choices: VOTE_CHOICE_KEYS,
   },
   {
     key: 'hosted',
     label: 'CBI 主催事業（拘束的）',
-    desc: '企画採用・予算配分など。賛成/反対/保留で投票',
-    choices: ['賛成', '反対', '保留'],
+    desc: '企画採用・予算配分など。大賛成/賛成/無理/反対 で投票',
+    choices: VOTE_CHOICE_KEYS,
   },
   {
     key: 'external',
     label: '外部・市政提案（諮問的）',
-    desc: '市への要望・他事業提案。協力できる/難しい/わからない で意向把握',
-    choices: ['協力できる', '難しい', 'わからない'],
+    desc: '市への要望・他事業提案。大賛成/賛成/無理/反対 で意向把握',
+    choices: VOTE_CHOICE_KEYS,
   },
 ] as const
 
@@ -60,4 +76,22 @@ export type BindingTypeKey = typeof BINDING_TYPES[number]['key']
 
 export function bindingMeta(key: string) {
   return BINDING_TYPES.find((b) => b.key === key)
+}
+
+// ===========================
+// 投票締切のデフォルト＝投票開始が属する四半期の末日 23:59:59（JST）
+// DB 側の public.quarter_end_at() と同じ規則。UI の案内表示に使う。
+// ===========================
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+export function quarterEndAt(from: Date = new Date()): Date {
+  const jst = new Date(from.getTime() + JST_OFFSET_MS)
+  const nextQuarterMonth = Math.floor(jst.getUTCMonth() / 3) * 3 + 3  // 12 なら翌年1月に繰り上がる
+  const nextQuarterStartUtc = Date.UTC(jst.getUTCFullYear(), nextQuarterMonth, 1)
+  return new Date(nextQuarterStartUtc - JST_OFFSET_MS - 1000)
+}
+
+export function formatJstDate(d: Date): string {
+  const jst = new Date(d.getTime() + JST_OFFSET_MS)
+  return `${jst.getUTCFullYear()}年${jst.getUTCMonth() + 1}月${jst.getUTCDate()}日`
 }

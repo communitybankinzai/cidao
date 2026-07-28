@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
+import { voteChoiceMeta } from '@/lib/categories'
 import { castVote, retractVote } from '../../actions'
 
 export function VoteSection({
@@ -76,9 +77,10 @@ export function VoteSection({
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
       <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">あなたの投票</h2>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {choices.map((choice) => {
           const selected = myChoice === choice
+          const desc = voteChoiceMeta(choice)?.desc
           return (
             <Button
               key={choice}
@@ -86,8 +88,12 @@ export function VoteSection({
               disabled={pending}
               aria-busy={busyChoice === choice}
               onClick={() => run(choice, () => castVote(proposalId, choice))}
+              className="h-auto flex-col gap-0.5 whitespace-normal py-2.5 text-center"
             >
-              {busyChoice === choice ? '送信中…' : choice}
+              <span className="text-sm font-semibold">
+                {busyChoice === choice ? '送信中…' : choice}
+              </span>
+              {desc && <span className="text-[11px] font-normal opacity-75">{desc}</span>}
             </Button>
           )
         })}

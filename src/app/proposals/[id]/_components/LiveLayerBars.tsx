@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { VOTE_CHOICES } from '@/lib/categories'
 
 const TIER_LABEL: Record<string, string> = {
   light: 'ライト登録',
@@ -10,11 +11,11 @@ const TIER_LABEL: Record<string, string> = {
 }
 
 const CHOICE_COLORS: Record<string, string> = {
-  '賛成': 'bg-emerald-500',
-  '反対': 'bg-rose-500',
+  ...Object.fromEntries(VOTE_CHOICES.map((c) => [c.key, c.color])),
+  // 4択化（2026-07-29）以前に投じられた票の色。集計には残るため表示だけ維持する
   '保留': 'bg-slate-400',
   '協力できる': 'bg-emerald-500',
-  '難しい': 'bg-rose-500',
+  '難しい': 'bg-amber-400',
   'わからない': 'bg-slate-400',
 }
 

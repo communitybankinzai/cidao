@@ -221,8 +221,7 @@ async function handle(request: Request) {
 
 function composeEmail(p: Proposal, kind: Kind): { subject: string; text: string } {
   const url = `${SITE_URL}/proposals/${p.id}`
-  const isBinding = p.binding_type !== 'external'
-  const choices = isBinding ? '賛成 / 反対 / 保留' : '協力できる / 難しい / わからない'
+  const choices = '大賛成（是非協力したい） / 賛成（でも協力は難しい） / 無理（実現は無理そう） / 反対（良いと思わない）'
   const endAt = p.voting_end_at ? formatJst(p.voting_end_at) : '未定'
 
   const footer = [

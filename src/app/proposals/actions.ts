@@ -14,6 +14,8 @@ type CreateInput = {
   budget_size: 'small' | 'medium' | 'large'
   implementation_date: string  // YYYY-MM-DD
   related_links: string[]
+  // 投票締切の個別指定（YYYY-MM-DD）。空なら投票開始が属する四半期の末日が使われる
+  voting_deadline_override: string | null
   start_immediately: boolean  // 議論期間スキップして即投票するか（管理者専用、Phase 1 は使わない）
 }
 
@@ -32,6 +34,14 @@ export async function createProposal(input: CreateInput) {
     throw new Error('提案には本登録（メール登録以上）が必要です')
   }
 
+  // 締切の個別指定は未来日のみ有効。過去日・空文字は null にして
+  // DB 側（start_voting_if_due）の四半期末デフォルトに委ねる
+  const deadline = (input.voting_deadline_override ?? '').trim()
+  const validDeadline =
+    /^\d{4}-\d{2}-\d{2}$/.test(deadline) && new Date(`${deadline}T23:59:59+09:00`) > new Date()
+      ? deadline
+      : null
+
   // status='discussion' で挿入、discussion_start_at = now()
   // voting_start/end は finalize_voting/start_voting_if_due で後ほど設定
   const { data, error } = await supabase
@@ -45,6 +55,7 @@ export async function createProposal(input: CreateInput) {
       budget_size: input.budget_size,
       implementation_date: input.implementation_date,
       related_links: input.related_links.filter((l) => l.trim().length > 0),
+      voting_deadline_override: validDeadline,
       status: 'discussion',
       discussion_start_at: new Date().toISOString(),
     })

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { categoryLabel, budgetLabel, bindingMeta } from '@/lib/categories'
+import { categoryLabel, budgetLabel, bindingMeta, VOTE_CHOICES } from '@/lib/categories'
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   discussion: { label: '議論中', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' },
@@ -25,9 +25,8 @@ export type ProposalSummary = {
   voting_end_at: string | null
   created_at: string
   snapshot: {
-    yesPct: number | null   // 拘束: 賛成%、諮問: 協力できる%
-    noPct: number | null    // 拘束: 反対%、諮問: 難しい%
-    holdPct: number | null  // 拘束: 保留%、諮問: わからない%
+    // 選択肢キー（大賛成/賛成/無理/反対）→ 重み比率(%)。票が無ければ null
+    pcts: Record<string, number> | null
     totalVotes: number
   }
 }
@@ -172,7 +171,7 @@ export function ProposalsBrowser({
 
                   {(p.status === 'voting' || p.status === 'passed' || p.status === 'rejected' || p.status === 'closed')
                     && p.snapshot.totalVotes > 0 && meta && (
-                    <Snapshot snapshot={p.snapshot} bindingKey={meta.key} />
+                    <Snapshot snapshot={p.snapshot} />
                   )}
                 </Link>
               </li>
@@ -212,32 +211,24 @@ function TabChip({
   )
 }
 
-function Snapshot({
-  snapshot, bindingKey,
-}: {
-  snapshot: ProposalSummary['snapshot']
-  bindingKey: string
-}) {
-  const yesLabel = bindingKey === 'external' ? '協力できる' : '賛成'
-  const noLabel = bindingKey === 'external' ? '難しい' : '反対'
-  const holdLabel = bindingKey === 'external' ? 'わからない' : '保留'
+function Snapshot({ snapshot }: { snapshot: ProposalSummary['snapshot'] }) {
+  const pcts = snapshot.pcts
   return (
     <div className="space-y-1 mt-1">
       <div className="flex h-1.5 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
-        {snapshot.yesPct !== null && snapshot.yesPct > 0 && (
-          <div className="bg-emerald-500" style={{ width: `${snapshot.yesPct}%` }} />
-        )}
-        {snapshot.noPct !== null && snapshot.noPct > 0 && (
-          <div className="bg-rose-500" style={{ width: `${snapshot.noPct}%` }} />
-        )}
-        {snapshot.holdPct !== null && snapshot.holdPct > 0 && (
-          <div className="bg-slate-400" style={{ width: `${snapshot.holdPct}%` }} />
-        )}
+        {pcts && VOTE_CHOICES.map((c) => {
+          const pct = pcts[c.key] ?? 0
+          if (pct <= 0) return null
+          return <div key={c.key} className={c.color} style={{ width: `${pct}%` }} />
+        })}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
-        {snapshot.yesPct !== null  && <span><span className="inline-block w-2 h-2 rounded-sm bg-emerald-500 mr-1 align-middle" />{yesLabel} {Math.round(snapshot.yesPct)}%</span>}
-        {snapshot.noPct !== null   && <span><span className="inline-block w-2 h-2 rounded-sm bg-rose-500 mr-1 align-middle" />{noLabel} {Math.round(snapshot.noPct)}%</span>}
-        {snapshot.holdPct !== null && <span><span className="inline-block w-2 h-2 rounded-sm bg-slate-400 mr-1 align-middle" />{holdLabel} {Math.round(snapshot.holdPct)}%</span>}
+        {pcts && VOTE_CHOICES.map((c) => (
+          <span key={c.key}>
+            <span className={`inline-block w-2 h-2 rounded-sm ${c.color} mr-1 align-middle`} />
+            {c.key} {Math.round(pcts[c.key] ?? 0)}%
+          </span>
+        ))}
         <span className="ml-auto">{snapshot.totalVotes}票</span>
       </div>
     </div>

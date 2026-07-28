@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createProposal } from '../actions'
-import { PROPOSAL_CATEGORIES, BUDGET_SIZES, BINDING_TYPES } from '@/lib/categories'
+import { PROPOSAL_CATEGORIES, BUDGET_SIZES, BINDING_TYPES, VOTE_CHOICES, quarterEndAt, formatJstDate } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
 
 export default async function NewProposalPage() {
@@ -47,9 +47,17 @@ export default async function NewProposalPage() {
       budget_size: String(formData.get('budget_size') ?? 'small') as 'small' | 'medium' | 'large',
       implementation_date: String(formData.get('implementation_date') ?? ''),
       related_links: related,
+      voting_deadline_override: String(formData.get('voting_deadline_override') ?? '') || null,
       start_immediately: false,
     })
   }
+
+  // 議論期間48時間後に投票が始まる想定で、既定の締切（その四半期の末日）を案内する
+  // （Server Component の初回レンダーで一度だけ評価されるため現在時刻の参照で問題ない）
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now()
+  const defaultDeadline = quarterEndAt(new Date(now + 48 * 3600 * 1000))
+  const minDeadline = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10)
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -58,7 +66,7 @@ export default async function NewProposalPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
           <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">新しい提案</h1>
           <p className="text-sm text-slate-500 mt-2">
-            投稿後 48 時間の議論期間を経て、自動的に投票期間（小:3日 / 中:7日 / 大:14日）に移行します
+            投稿後 48 時間の議論期間を経て、自動的に投票期間へ移行します。投票の締切は四半期の末日が既定です
           </p>
         </header>
 
@@ -104,7 +112,7 @@ export default async function NewProposalPage() {
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
               >
                 {BUDGET_SIZES.map((b) => (
-                  <option key={b.key} value={b.key}>{b.label}（投票{b.votingDays}日）</option>
+                  <option key={b.key} value={b.key}>{b.label}</option>
                 ))}
               </select>
             </Field>
@@ -139,6 +147,32 @@ export default async function NewProposalPage() {
               className="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
             />
           </Field>
+
+          <Field label="投票締切（任意）">
+            <input
+              name="voting_deadline_override"
+              type="date"
+              min={minDeadline}
+              className="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              未入力なら四半期の末日（{formatJstDate(defaultDeadline)} 23:59）が締切になります。
+              急ぎの案件など、個別に早めたい場合のみ指定してください。
+            </p>
+          </Field>
+
+          <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded p-3 space-y-1">
+            <p className="font-medium text-slate-600 dark:text-slate-300">投票の選択肢（全種別共通）</p>
+            <ul className="space-y-0.5">
+              {VOTE_CHOICES.map((c) => (
+                <li key={c.key}>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{c.key}</span>
+                  <span className="text-slate-400 mx-1">:</span>
+                  {c.desc}
+                </li>
+              ))}
+            </ul>
+          </div>
 
           <Field label="関連リンク（最大3）">
             <div className="space-y-2">

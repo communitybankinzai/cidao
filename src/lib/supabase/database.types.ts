@@ -798,6 +798,7 @@ export type Database = {
           status: Database["public"]["Enums"]["proposal_status"]
           title: string
           updated_at: string
+          voting_deadline_override: string | null
           voting_end_at: string | null
           voting_start_at: string | null
         }
@@ -816,6 +817,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["proposal_status"]
           title: string
           updated_at?: string
+          voting_deadline_override?: string | null
           voting_end_at?: string | null
           voting_start_at?: string | null
         }
@@ -834,6 +836,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["proposal_status"]
           title?: string
           updated_at?: string
+          voting_deadline_override?: string | null
           voting_end_at?: string | null
           voting_start_at?: string | null
         }
