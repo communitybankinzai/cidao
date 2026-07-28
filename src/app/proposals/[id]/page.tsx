@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { categoryLabel, budgetLabel, bindingMeta, quarterEndAt, formatJstDate } from '@/lib/categories'
+import { categoryLabel, budgetLabel, bindingMeta, quarterEndAt, formatJstDate, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { finalizeVotingIfDue } from '../actions'
 import { VoteSection } from './_components/VoteSection'
 import { CommentSection } from './_components/CommentSection'
 import { LiveLayerBars } from './_components/LiveLayerBars'
+import { SupporterList, type Supporter } from './_components/SupporterList'
 
 const STATUS_LABEL: Record<string, string> = {
   discussion: '議論中',
@@ -53,15 +54,40 @@ export default async function ProposalDetailPage({
     .eq('proposal_id', id)
 
   // 自分の投票
-  let myVote: { choice: string; retracted_at: string | null } | null = null
+  let myVote: { choice: string; retracted_at: string | null; disclose_identity: boolean } | null = null
   if (user) {
     const { data } = await supabase
       .from('votes')
-      .select('choice, retracted_at')
+      .select('choice, retracted_at, disclose_identity')
       .eq('proposal_id', id)
       .eq('voter_id', user.id)
       .maybeSingle()
     myVote = data
+  }
+
+  // 提案者だけが見られる「協力したいと名乗り出た人」（RLS: votes_select_disclosed_supporter）
+  const isProposer = !!user && proposal.proposer_id === user.id
+  let supporters: Supporter[] = []
+  if (isProposer) {
+    const { data: supporterVotes } = await supabase
+      .from('votes')
+      .select('voter_id')
+      .eq('proposal_id', id)
+      .eq('choice', STRONG_SUPPORT_CHOICE)
+      .eq('disclose_identity', true)
+      .is('retracted_at', null)
+    const supporterIds = (supporterVotes ?? []).map((v) => v.voter_id)
+    if (supporterIds.length > 0) {
+      const { data: supporterMembers } = await supabase
+        .from('members')
+        .select('id, display_name, avatar_url')
+        .in('id', supporterIds)
+      supporters = (supporterMembers ?? []).map((m) => ({
+        id: m.id,
+        displayName: m.display_name,
+        avatarUrl: m.avatar_url,
+      }))
+    }
   }
 
   // コメント・質問・回答（議論 F14）
@@ -198,9 +224,17 @@ export default async function ProposalDetailPage({
             bindingType={proposal.binding_type}
             choices={[...meta.choices]}
             myChoice={myVote && !myVote.retracted_at ? myVote.choice : null}
+            myDisclosed={!!myVote && !myVote.retracted_at && !!myVote.disclose_identity}
             isLoggedIn={!!user}
+            isProposer={isProposer}
+            proposerName={proposer?.display_name ?? null}
             aggregates={aggregates ?? []}
           />
+        )}
+
+        {/* 提案者だけに見える、協力を申し出た人の一覧 */}
+        {isProposer && supporters.length > 0 && (
+          <SupporterList proposalId={id} supporters={supporters} />
         )}
 
         {/* 層別可視化（投票期間中・終了後） */}
@@ -223,6 +257,7 @@ export default async function ProposalDetailPage({
           isLoggedIn={!!user}
           myUserId={user?.id ?? null}
           myVoteChoice={myVote && !myVote.retracted_at ? myVote.choice : null}
+          isVoting={proposal.status === 'voting'}
           comments={comments}
           myLikedIds={myLikedIds}
           myIsAdmin={myIsAdmin}

@@ -1,16 +1,18 @@
 -- =============================================================
--- 投票の4択化 ＋ 投票締切の四半期デフォルト化（2026-07-29）
+-- 投票選択肢の統一 ＋ 投票締切の四半期デフォルト化（2026-07-29）
 --
---   選択肢（全 binding_type 共通）:
+--   選択肢（全 binding_type 共通の4択）:
 --     大賛成 = 是非協力したい / 賛成 = でも協力は難しい
---     無理   = 実現は無理そう / 反対 = 良いと思わない
---   可決判定: (大賛成 + 賛成) の重み合計 > (無理 + 反対) の重み合計
+--     保留   = もっと知りたい / 反対 = 良いと思わない
+--   可決判定: (大賛成 + 賛成) の重み合計 > 反対 の重み合計
+--     （保留は賛否のどちらにも数えず、定足数の分母にのみ算入）
 --   締切: proposals.voting_deadline_override があればその日の 23:59:59(JST)、
---         未指定なら投票開始が属する四半期の末日 23:59:59(JST)
+--         未指定なら投票開始が属する四半期の末日 23:59:59(JST)。
+--         ただし四半期末まで3日未満なら次の四半期末まで送る。
 --
 -- 既存の投票データ（賛成/反対/保留/協力できる/難しい/わからない）は書き換えない。
--- 「賛成」「反対」は文字列が一致するのでそのまま新判定に載る。
--- 「保留」「協力できる」「難しい」「わからない」は賛否には数えず、
+-- 「賛成」「反対」「保留」は文字列が一致するのでそのまま新選択肢として扱われる。
+-- 「協力できる」「難しい」「わからない」は賛否には数えず、
 -- 定足数（総重み）にのみカウントされる。
 -- =============================================================
 
@@ -43,7 +45,8 @@ grant execute on function public.quarter_end_at(timestamptz) to anon, authentica
 
 -- ===========================
 -- 議論期間 → 投票期間の自動遷移
--- 締切は budget_size ではなく override / 四半期末で決める
+-- 締切は budget_size ではなく override / 四半期末で決める。
+-- 四半期末まで3日を切っている場合は投票期間が実質なくなるため次の四半期末へ送る。
 -- ===========================
 create or replace function public.start_voting_if_due(p_proposal_id uuid)
 returns text
@@ -62,14 +65,18 @@ begin
   end if;
 
   if v_proposal.voting_deadline_override is not null then
-    -- 指定日の 23:59:59（JST）
+    -- 提案者が指定した日の 23:59:59（JST）。短くしたい意図を尊重し3日ガードは掛けない
     v_end := ((v_proposal.voting_deadline_override + 1)::timestamp - interval '1 second')
              at time zone 'Asia/Tokyo';
   end if;
 
-  -- 未指定、または指定日が既に過ぎている場合は四半期末にフォールバック
+  -- 未指定、または指定日が既に過ぎている場合は四半期末
   if v_end is null or v_end <= now() then
     v_end := public.quarter_end_at(now());
+    -- 残り3日未満なら次の四半期末へ送る
+    if v_end < now() + interval '3 days' then
+      v_end := public.quarter_end_at(v_end + interval '1 second');
+    end if;
   end if;
 
   update proposals
@@ -84,8 +91,8 @@ $$;
 
 -- ===========================
 -- 拘束的決議の有効性チェック（4択対応）
--- 定足数: アクティブ verified 会員の 30% 以上の重み参加
--- 可決:   大賛成+賛成 の重み > 無理+反対 の重み
+-- 定足数: アクティブ verified 会員の 30% 以上の重み参加（保留も分母に入る）
+-- 可決:   大賛成+賛成 の重み > 反対 の重み
 -- 諮問的（external）は参考扱いで status は変更しない（closed のみ）
 -- ===========================
 create or replace function public.finalize_voting(p_proposal_id uuid)
@@ -132,7 +139,7 @@ begin
   select coalesce(sum(weight_total), 0) into v_no_weight
     from vote_aggregates
    where proposal_id = p_proposal_id and tier = 'verified'
-     and choice in ('無理', '反対');
+     and choice = '反対';
 
   -- 定足数 = アクティブ verified の 30% の重み（verified は重み 1.0 なので人数換算）
   v_quorum_weight := v_active_count * 0.3;

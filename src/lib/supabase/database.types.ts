@@ -1023,6 +1023,7 @@ export type Database = {
         Row: {
           cast_at: string
           choice: string
+          disclose_identity: boolean
           id: string
           proposal_id: string
           retracted_at: string | null
@@ -1032,6 +1033,7 @@ export type Database = {
         Insert: {
           cast_at?: string
           choice: string
+          disclose_identity?: boolean
           id?: string
           proposal_id: string
           retracted_at?: string | null
@@ -1041,6 +1043,7 @@ export type Database = {
         Update: {
           cast_at?: string
           choice?: string
+          disclose_identity?: boolean
           id?: string
           proposal_id?: string
           retracted_at?: string | null

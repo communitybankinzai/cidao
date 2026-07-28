@@ -35,13 +35,20 @@ export function budgetLabel(key: string): string {
 // 投票の選択肢（2026-07-29 より全提案種別で共通の4択）
 // key は votes.choice / vote_aggregates.choice に保存される値そのもの。
 // side は拘束的決議の可決判定（finalize_voting）での賛否の振り分け。
+// 'neutral'（保留）は賛否のどちらにも数えず、定足数の分母にだけ算入する。
 // ===========================
 export const VOTE_CHOICES = [
-  { key: '大賛成', desc: '是非協力したい',   side: 'yes', color: 'bg-emerald-600' },
-  { key: '賛成',   desc: 'でも協力は難しい', side: 'yes', color: 'bg-emerald-400' },
-  { key: '無理',   desc: '実現は無理そう',   side: 'no',  color: 'bg-amber-500' },
-  { key: '反対',   desc: '良いと思わない',   side: 'no',  color: 'bg-rose-500' },
+  { key: '大賛成', desc: '是非協力したい',   side: 'yes',     color: 'bg-emerald-600' },
+  { key: '賛成',   desc: 'でも協力は難しい', side: 'yes',     color: 'bg-emerald-400' },
+  { key: '保留',   desc: 'もっと知りたい',   side: 'neutral', color: 'bg-slate-400' },
+  { key: '反対',   desc: '良いと思わない',   side: 'no',      color: 'bg-rose-500' },
 ] as const
+
+// 「是非協力したい」票。提案者へ名乗り出て連絡できる唯一の選択肢
+export const STRONG_SUPPORT_CHOICE = '大賛成'
+
+// 判断がつかない票。提案者への質問動線を強調する（仕様§3.3.4）
+export const NEUTRAL_CHOICE = '保留'
 
 export type VoteChoiceKey = typeof VOTE_CHOICES[number]['key']
 
@@ -55,19 +62,19 @@ export const BINDING_TYPES = [
   {
     key: 'internal',
     label: 'CBI 内部事項（拘束的）',
-    desc: '年会費・運営方針など。大賛成/賛成/無理/反対 で投票',
+    desc: '年会費・運営方針など。大賛成/賛成/保留/反対 で投票',
     choices: VOTE_CHOICE_KEYS,
   },
   {
     key: 'hosted',
     label: 'CBI 主催事業（拘束的）',
-    desc: '企画採用・予算配分など。大賛成/賛成/無理/反対 で投票',
+    desc: '企画採用・予算配分など。大賛成/賛成/保留/反対 で投票',
     choices: VOTE_CHOICE_KEYS,
   },
   {
     key: 'external',
     label: '外部・市政提案（諮問的）',
-    desc: '市への要望・他事業提案。大賛成/賛成/無理/反対 で意向把握',
+    desc: '市への要望・他事業提案。大賛成/賛成/保留/反対 で意向把握',
     choices: VOTE_CHOICE_KEYS,
   },
 ] as const

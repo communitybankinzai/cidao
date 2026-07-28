@@ -2,22 +2,30 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { voteChoiceMeta } from '@/lib/categories'
+import { voteChoiceMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { castVote, retractVote } from '../../actions'
+import { sendProposalSupportMessage } from '@/app/talent/actions'
 
 export function VoteSection({
   proposalId,
   status,
   choices,
   myChoice,
+  myDisclosed,
   isLoggedIn,
+  isProposer,
+  proposerName,
 }: {
   proposalId: string
   status: string
   bindingType: string
   choices: string[]
   myChoice: string | null
+  /** 自分の票が「大賛成 かつ 提案者に名乗る」になっているか */
+  myDisclosed: boolean
   isLoggedIn: boolean
+  isProposer: boolean
+  proposerName: string | null
   aggregates: { tier: string; choice: string; count: number; weight_total: number }[]
 }) {
   const [pending, startTransition] = useTransition()
@@ -26,6 +34,7 @@ export function VoteSection({
   // 完了後は数秒だけ「受け付けました」を出す（disabled だけでは反応が分からないため）
   const [busyChoice, setBusyChoice] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const [disclose, setDisclose] = useState(myDisclosed)
 
   function run(label: string, fn: () => Promise<void>) {
     setError(null)
@@ -74,6 +83,16 @@ export function VoteSection({
     )
   }
 
+  if (isProposer) {
+    return (
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center">
+        <p className="text-sm text-slate-500">自分の提案には投票できません</p>
+      </section>
+    )
+  }
+
+  const strongSupportSelected = myChoice === STRONG_SUPPORT_CHOICE
+
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
       <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">あなたの投票</h2>
@@ -87,7 +106,7 @@ export function VoteSection({
               variant={selected ? 'default' : 'outline'}
               disabled={pending}
               aria-busy={busyChoice === choice}
-              onClick={() => run(choice, () => castVote(proposalId, choice))}
+              onClick={() => run(choice, () => castVote(proposalId, choice, disclose))}
               className="h-auto flex-col gap-0.5 whitespace-normal py-2.5 text-center"
             >
               <span className="text-sm font-semibold">
@@ -98,6 +117,33 @@ export function VoteSection({
           )
         })}
       </div>
+
+      {/* 名乗り出しの選択。大賛成のときだけ意味を持つ */}
+      <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={disclose}
+          disabled={pending}
+          onChange={(e) => {
+            const next = e.target.checked
+            setDisclose(next)
+            // 既に大賛成で投票済みなら、その場で名乗り状態を更新する
+            if (strongSupportSelected) {
+              run(STRONG_SUPPORT_CHOICE, () => castVote(proposalId, STRONG_SUPPORT_CHOICE, next))
+            }
+          }}
+          className="mt-0.5"
+        />
+        <span>
+          「大賛成」で投票するとき、提案者{proposerName ? `（${proposerName}さん）` : ''}に
+          <span className="font-medium text-slate-800 dark:text-slate-200">名前を伝えて</span>
+          メッセージのやりとりができるようにする
+          <span className="block text-[11px] text-slate-400 mt-0.5">
+            チェックしない場合、誰が投票したかは提案者にも分かりません。他の選択肢では名前は伝わりません。
+          </span>
+        </span>
+      </label>
+
       {myChoice && (
         <div className="flex justify-between items-center text-xs text-slate-500">
           <span>選択中: <span className="font-mono text-slate-700 dark:text-slate-300">{myChoice}</span>（投票期間中はいつでも変更可）</span>
@@ -119,6 +165,79 @@ export function VoteSection({
       {error && (
         <p className="text-xs text-rose-600">{error}</p>
       )}
+
+      {strongSupportSelected && myDisclosed && (
+        <SupportMessageForm proposalId={proposalId} proposerName={proposerName} />
+      )}
     </section>
+  )
+}
+
+/**
+ * 大賛成で名乗り出た人から提案者へのメッセージ。
+ * 送信後のやりとりは既存の「届いた声がけ」受信箱（/me/inbox）で続く。
+ */
+function SupportMessageForm({
+  proposalId,
+  proposerName,
+}: {
+  proposalId: string
+  proposerName: string | null
+}) {
+  const [message, setMessage] = useState('')
+  const [pending, startTransition] = useTransition()
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function submit() {
+    const trimmed = message.trim()
+    if (trimmed.length < 1) {
+      setError('メッセージを入力してください')
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      try {
+        await sendProposalSupportMessage(proposalId, trimmed)
+        setMessage('')
+        setSent(true)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+
+  return (
+    <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
+      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+        提案者{proposerName ? `（${proposerName}さん）` : ''}にメッセージを送る
+      </p>
+      <p className="text-[11px] text-slate-400">
+        どんな形で協力できそうか伝えると話が進みます。返信は
+        <a href="/me/inbox" className="underline mx-0.5">受信箱</a>
+        に届きます。
+      </p>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        maxLength={600}
+        rows={3}
+        disabled={pending}
+        placeholder="例：週末なら会場設営を手伝えます。まず一度お話しできますか。"
+        className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-slate-400">{message.length}/600</span>
+        <Button size="sm" disabled={pending} onClick={submit}>
+          {pending ? '送信中…' : 'メッセージを送る'}
+        </Button>
+      </div>
+      {sent && (
+        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          ✓ 送信しました。返信は受信箱に届きます
+        </p>
+      )}
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+    </div>
   )
 }

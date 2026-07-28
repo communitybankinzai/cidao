@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
+import { NEUTRAL_CHOICE } from '@/lib/categories'
 import { postComment, likeComment, deleteComment } from '../../actions'
 
 type Comment = {
@@ -22,6 +23,7 @@ export function CommentSection({
   isLoggedIn,
   myUserId,
   myVoteChoice,
+  isVoting,
   comments,
   myLikedIds,
   myIsAdmin,
@@ -31,6 +33,8 @@ export function CommentSection({
   isLoggedIn: boolean
   myUserId: string | null
   myVoteChoice: string | null
+  /** 投票期間中か（未投票者に質問を促すかの判定に使う） */
+  isVoting: boolean
   comments: Comment[]
   myLikedIds: string[]
   myIsAdmin: boolean
@@ -40,9 +44,13 @@ export function CommentSection({
   const [kind, setKind] = useState<'question' | 'comment'>('comment')
   const [body, setBody] = useState('')
 
-  // 「わからない」投票者には質問動線を強調 (§3.3.4)
+  // 判断がつかない人を議論に呼び込む動線 (§3.3.4)。
+  // 「保留（もっと知りたい）」を選んだ人と、投票期間中でまだ投票していない人が対象
   const showQuestionPrompt =
-    myVoteChoice === 'わからない' && kind !== 'question'
+    isLoggedIn &&
+    myUserId !== proposerId &&
+    kind !== 'question' &&
+    (myVoteChoice === NEUTRAL_CHOICE || (isVoting && !myVoteChoice))
 
   // スレッド構造: ルート（質問／コメント）＋各ノードの下に返信を再帰表示
   const questions = comments.filter((c) => c.kind === 'question' && !c.parent_id)
@@ -100,7 +108,9 @@ export function CommentSection({
       {showQuestionPrompt && (
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
           <p className="text-sky-900 dark:text-sky-100">
-            「わからない」と投票しましたね。提案者に質問してみませんか？
+            {myVoteChoice === NEUTRAL_CHOICE
+              ? '「保留（もっと知りたい）」を選びましたね。提案者に質問してみませんか？'
+              : 'まだ投票していませんね。判断に迷う点があれば、提案者に質問してみませんか？'}
           </p>
           <button
             type="button"

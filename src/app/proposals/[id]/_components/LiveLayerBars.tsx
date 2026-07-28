@@ -12,8 +12,8 @@ const TIER_LABEL: Record<string, string> = {
 
 const CHOICE_COLORS: Record<string, string> = {
   ...Object.fromEntries(VOTE_CHOICES.map((c) => [c.key, c.color])),
-  // 4択化（2026-07-29）以前に投じられた票の色。集計には残るため表示だけ維持する
-  '保留': 'bg-slate-400',
+  // 選択肢統一（2026-07-29）以前の諮問的提案で投じられた票の色。
+  // 集計には残るため表示だけ維持する
   '協力できる': 'bg-emerald-500',
   '難しい': 'bg-amber-400',
   'わからない': 'bg-slate-400',

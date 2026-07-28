@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { bindingMeta } from '@/lib/categories'
+import { bindingMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { insertNotification } from '@/lib/notify'
 
 type CreateInput = {
@@ -68,7 +68,14 @@ export async function createProposal(input: CreateInput) {
   redirect(`/proposals/${data.id}`)
 }
 
-export async function castVote(proposalId: string, choice: string) {
+/**
+ * 投票する（同じ提案に投票済みなら上書き）。
+ *
+ * discloseIdentity は「大賛成（是非協力したい）」のときだけ意味を持ち、
+ * true なら提案者に名前を伝えて連絡できる状態にする。それ以外の選択肢、
+ * および名乗らない場合は従来どおり誰が投票したかを伝えない。
+ */
+export async function castVote(proposalId: string, choice: string, discloseIdentity = false) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
@@ -87,6 +94,9 @@ export async function castVote(proposalId: string, choice: string) {
     throw new Error(`不正な投票選択肢: ${choice}`)
   }
 
+  // 名乗り出は「大賛成」のときだけ有効
+  const disclose = choice === STRONG_SUPPORT_CHOICE && discloseIdentity
+
   // upsert（既存票があれば更新、なければ新規）
   const { error } = await supabase
     .from('votes')
@@ -97,25 +107,44 @@ export async function castVote(proposalId: string, choice: string) {
         choice,
         weight: 0,  // トリガー calc_vote_weight が再計算する
         retracted_at: null,
+        disclose_identity: disclose,
       },
       { onConflict: 'proposal_id,voter_id' }
     )
   if (error) throw new Error(`投票に失敗: ${error.message}`)
 
-  // アプリ内通知（best-effort）：提案者へ。投票の秘密のため誰が投票したかは載せない
+  // アプリ内通知（best-effort）：提案者へ
   const { data: forNotify } = await supabase
     .from('proposals')
     .select('proposer_id, title')
     .eq('id', proposalId)
     .single()
   if (forNotify && forNotify.proposer_id !== user.id) {
-    await insertNotification({
-      recipientId: forNotify.proposer_id,
-      // actor_id は保存しない（通知行から投票者が特定できてしまうため）
-      kind: 'vote',
-      title: `あなたの提案「${forNotify.title}」に新しい投票がありました`,
-      linkUrl: `/proposals/${proposalId}`,
-    })
+    if (disclose) {
+      // 本人が名乗ることを選んだ場合のみ、名前つきで知らせる
+      const { data: me } = await supabase
+        .from('members')
+        .select('display_name')
+        .eq('id', user.id)
+        .single()
+      await insertNotification({
+        recipientId: forNotify.proposer_id,
+        actorId: user.id,
+        kind: 'vote',
+        title: `${me?.display_name ?? 'メンバー'}さんが提案「${forNotify.title}」に大賛成し、協力したいと名乗り出ました`,
+        body: '提案ページからメッセージのやりとりができます',
+        linkUrl: `/proposals/${proposalId}`,
+      })
+    } else {
+      // 投票の秘密のため誰が投票したかは載せない
+      await insertNotification({
+        recipientId: forNotify.proposer_id,
+        // actor_id は保存しない（通知行から投票者が特定できてしまうため）
+        kind: 'vote',
+        title: `あなたの提案「${forNotify.title}」に新しい投票がありました`,
+        linkUrl: `/proposals/${proposalId}`,
+      })
+    }
   }
 
   revalidatePath(`/proposals/${proposalId}`)

@@ -181,6 +181,205 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
 }
 
 /**
+ * 提案に「大賛成（是非協力したい）」を投じた人から、その提案の提案者へメッセージを送る。
+ *
+ * - 人材バンクの「声がけ」と同じ talent_inquiries / 受信箱を流用し、proposal_id で文脈を持たせる
+ * - RLS（talent_inquiries_insert_proposal_supporter）が「大賛成を投じているか」「宛先が
+ *   その提案の提案者か」を検証するため、提案者が人材バンクに公開していなくても送れる
+ * - 返信は人材バンクと同じ replyTalentInquiry でスレッドに続く
+ */
+export async function sendProposalSupportMessage(proposalId: string, message: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const trimmed = message.trim()
+  if (trimmed.length < 1 || trimmed.length > 600) {
+    throw new Error('メッセージは 1〜600 字で入力してください')
+  }
+
+  const { data: proposal } = await supabase
+    .from('proposals')
+    .select('id, title, proposer_id')
+    .eq('id', proposalId)
+    .single()
+  if (!proposal) throw new Error('提案が見つかりません')
+  if (proposal.proposer_id === user.id) throw new Error('自分の提案には送信できません')
+
+  const [{ data: senderMember }, { data: targetMember }] = await Promise.all([
+    supabase.from('members').select('display_name, tier').eq('id', user.id).single(),
+    supabase.from('members').select('display_name').eq('id', proposal.proposer_id).single(),
+  ])
+  if (!senderMember) throw new Error('メンバー情報が見つかりません')
+  if (senderMember.tier === 'light') {
+    throw new Error('本登録（プロフィール完成）後にメッセージを送れます')
+  }
+  if (!targetMember) throw new Error('提案者のメンバー情報が見つかりません')
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('talent_inquiries')
+    .insert({
+      to_member_id: proposal.proposer_id,
+      from_member_id: user.id,
+      message: trimmed,
+      proposal_id: proposal.id,
+    })
+    .select('id')
+    .single()
+  if (insertErr) {
+    // RLS で弾かれる主因は「大賛成を投じていない／撤回済み」
+    throw new Error(`メッセージの送信に失敗しました（提案に「大賛成」で投票済みか確認してください）: ${insertErr.message}`)
+  }
+
+  await insertNotification({
+    recipientId: proposal.proposer_id,
+    actorId: user.id,
+    kind: 'comment',
+    title: `${senderMember.display_name}さんから提案「${proposal.title}」についてメッセージが届きました`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
+    linkUrl: '/me/inbox',
+  })
+
+  const senderEmail = user.email ?? '(連絡先非公開)'
+  const { emailSentAt, emailError } = await sendInquiryEmail({
+    toMemberId: proposal.proposer_id,
+    subject: `【CiDAO】${senderMember.display_name} さんがあなたの提案に協力を申し出ています`,
+    text: [
+      `${targetMember.display_name} 様`,
+      ``,
+      `あなたの提案に「大賛成（是非協力したい）」を投じた ${senderMember.display_name} さんから、メッセージが届いています。`,
+      ``,
+      `─────────────────────────────`,
+      `提案: ${proposal.title}`,
+      `差出人: ${senderMember.display_name}`,
+      `連絡先: ${senderEmail}`,
+      `─────────────────────────────`,
+      `メッセージ：`,
+      ``,
+      trimmed,
+      ``,
+      `─────────────────────────────`,
+      ``,
+      `受信箱で確認・返信: https://cidao.vercel.app/me/inbox`,
+      `提案ページ: https://cidao.vercel.app/proposals/${proposal.id}`,
+      ``,
+      `※ このメールは CiDAO の提案・投票機能による自動通知です。`,
+      `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
+      ``,
+      `Community Bank INZAI (CBI) / CiDAO`,
+    ].join('\n'),
+    replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
+  })
+
+  if (inserted) {
+    await supabase
+      .from('talent_inquiries')
+      .update({ email_sent_at: emailSentAt, email_error: emailError })
+      .eq('id', inserted.id)
+  }
+
+  revalidatePath(`/proposals/${proposalId}`)
+  return { ok: true, emailSent: !!emailSentAt, emailError }
+}
+
+/**
+ * 提案者から、その提案に「大賛成」で名乗り出た支援者へメッセージを送る。
+ * 支援者からの1通目を待たずに提案者側から声をかけられるようにするための経路で、
+ * RLS（talent_inquiries_insert_proposer_outreach）が宛先の名乗り状態を検証する。
+ */
+export async function sendProposalOutreachMessage(
+  proposalId: string,
+  supporterId: string,
+  message: string
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const trimmed = message.trim()
+  if (trimmed.length < 1 || trimmed.length > 600) {
+    throw new Error('メッセージは 1〜600 字で入力してください')
+  }
+  if (supporterId === user.id) throw new Error('自分自身には送信できません')
+
+  const { data: proposal } = await supabase
+    .from('proposals')
+    .select('id, title, proposer_id')
+    .eq('id', proposalId)
+    .single()
+  if (!proposal) throw new Error('提案が見つかりません')
+  if (proposal.proposer_id !== user.id) throw new Error('この提案の提案者ではありません')
+
+  const [{ data: me }, { data: target }] = await Promise.all([
+    supabase.from('members').select('display_name').eq('id', user.id).single(),
+    supabase.from('members').select('display_name').eq('id', supporterId).single(),
+  ])
+  if (!me || !target) throw new Error('メンバー情報が見つかりません')
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('talent_inquiries')
+    .insert({
+      to_member_id: supporterId,
+      from_member_id: user.id,
+      message: trimmed,
+      proposal_id: proposal.id,
+    })
+    .select('id')
+    .single()
+  if (insertErr) throw new Error(`メッセージの送信に失敗: ${insertErr.message}`)
+
+  await insertNotification({
+    recipientId: supporterId,
+    actorId: user.id,
+    kind: 'comment',
+    title: `提案「${proposal.title}」の提案者 ${me.display_name}さんからメッセージが届きました`,
+    body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
+    linkUrl: '/me/inbox',
+  })
+
+  const senderEmail = user.email ?? '(連絡先非公開)'
+  const { emailSentAt, emailError } = await sendInquiryEmail({
+    toMemberId: supporterId,
+    subject: `【CiDAO】提案「${proposal.title}」の提案者からメッセージが届いています`,
+    text: [
+      `${target.display_name} 様`,
+      ``,
+      `あなたが「大賛成（是非協力したい）」を投じた提案の提案者 ${me.display_name} さんから、メッセージが届いています。`,
+      ``,
+      `─────────────────────────────`,
+      `提案: ${proposal.title}`,
+      `差出人: ${me.display_name}`,
+      `連絡先: ${senderEmail}`,
+      `─────────────────────────────`,
+      `メッセージ：`,
+      ``,
+      trimmed,
+      ``,
+      `─────────────────────────────`,
+      ``,
+      `受信箱で確認・返信: https://cidao.vercel.app/me/inbox`,
+      `提案ページ: https://cidao.vercel.app/proposals/${proposal.id}`,
+      ``,
+      `※ このメールは CiDAO の提案・投票機能による自動通知です。`,
+      `※ 返信は、このメールに直接 Reply すると ${me.display_name} さんに直接届きます。`,
+      ``,
+      `Community Bank INZAI (CBI) / CiDAO`,
+    ].join('\n'),
+    replyTo: senderEmail !== '(連絡先非公開)' ? senderEmail : undefined,
+  })
+
+  if (inserted) {
+    await supabase
+      .from('talent_inquiries')
+      .update({ email_sent_at: emailSentAt, email_error: emailError })
+      .eq('id', inserted.id)
+  }
+
+  revalidatePath(`/proposals/${proposalId}`)
+  return { ok: true, emailSent: !!emailSentAt, emailError }
+}
+
+/**
  * 届いた声がけ（またはそのスレッド）に返信する。
  *
  * - reply_to_inquiry_id にはスレッドのルート声がけ ID を渡す
