@@ -24,6 +24,8 @@ export async function registerOrgCandidate(name: string) {
     .maybeSingle()
   if (exists) return { alreadyExists: true, id: exists.id }
 
+  // description は空のまま作る。暫定掲載である旨と本登録への導線は
+  // 団体ページのバナー（isAwaitingRepresentative）が担うため、説明文に書くと二重になる。
   const { data: org, error } = await supabase
     .from('organizations')
     .insert({
@@ -31,10 +33,6 @@ export async function registerOrgCandidate(name: string) {
       type: 'civic_group' as const,
       public_flag: true,
       representative_id: null,
-      description:
-        'CiDAO に登録されたイベントの主催者名から作成した暫定の団体ページです。' +
-        '団体の代表者・役員の方は、CiDAO にログイン後「プロフィール編集 → 所属団体」から' +
-        'この団体を追加し代表者申告をしてください。承認後、このページを直接編集できるようになります。',
     })
     .select('id')
     .single()
