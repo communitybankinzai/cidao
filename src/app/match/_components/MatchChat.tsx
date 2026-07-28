@@ -24,7 +24,7 @@ const CONFIG: Record<MatchMode, {
       'ボーイスカウト印西第1団について教えて',
     ],
     linkRegex: /\/orgs\/([0-9a-f-]{8,})/g,
-    footerNote: 'A7 は印西市内 219 団体の概要のみを根拠に回答します。詳しい連絡先や直近の予定は各団体ページ・公式 SNS をご確認ください。',
+    footerNote: 'A7 は CiDAO に登録され公開されている団体の概要のみを根拠に回答します。詳しい連絡先や直近の予定は各団体ページ・公式 SNS をご確認ください。',
   },
   members: {
     apiPath: '/api/agents/a7-members',

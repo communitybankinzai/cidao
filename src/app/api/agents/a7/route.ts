@@ -1,6 +1,8 @@
 // A7 (Match) — マッチング対話エージェント
-// 印西市内の市民活動団体 219 件のコンテキストを system prompt に乗せて
-// Claude Opus 4.7 と streaming で会話する。
+// 印西市内の公開団体（organizations.public_flag=true）のコンテキストを
+// system prompt に乗せて Claude Opus 4.7 と streaming で会話する。
+// ※ 画面に出す「団体数」は市民活動団体のみ（lib/org-count.ts）だが、
+//    A7 が参照するリストは企業・行政も含む全公開団体とする。
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
@@ -22,7 +24,7 @@ const A7_PERSONA = `あなたは CiDAO（印西市民 DAO）のマッチング�
 - 団体の詳細ページに誘導するときは「/orgs/<id>」というパス形式で示す。
 
 団体情報の使い方:
-- 後段の「団体リスト」に記載された 219 団体の情報のみを根拠に回答する。
+- 後段の「団体リスト」に記載された団体の情報のみを根拠に回答する。
 - 記載されていない団体について聞かれたら、推測せず「現時点では情報を持っていません」と正直に伝える。
 - カテゴリは PROPOSAL_CATEGORIES（machizukuri / kodomo / fukushi / kankyo / bunka / bosai / tabunka / sangyo / gyosei / other）で分類されている。
 

@@ -1,15 +1,23 @@
 import Link from 'next/link'
 import MatchChat, { type MatchMode } from './_components/MatchChat'
+import { createClient } from '@/lib/supabase/server'
+import { getCivicGroupCount } from '@/lib/org-count'
 
-const TABS: Array<{ key: MatchMode; label: string; subtitle: string }> = [
-  { key: 'orgs', label: '団体を探す', subtitle: '印西市内 219 団体から、あなたに合う活動先を AI と会話で絞り込みます。' },
-  { key: 'members', label: 'メンバーを探す', subtitle: '登録メンバーから、声をかけたい人を AI と会話で探します。' },
+const TABS: Array<{ key: MatchMode; label: string }> = [
+  { key: 'orgs', label: '団体を探す' },
+  { key: 'members', label: 'メンバーを探す' },
 ]
 
 export default async function MatchPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const sp = await searchParams
   const mode: MatchMode = sp.mode === 'members' ? 'members' : 'orgs'
-  const active = TABS.find((t) => t.key === mode) ?? TABS[0]
+
+  const supabase = await createClient()
+  const orgCount = await getCivicGroupCount(supabase)
+  const subtitle =
+    mode === 'members'
+      ? '登録メンバーから、声をかけたい人を AI と会話で探します。'
+      : `印西市内${orgCount ? ` ${orgCount} ` : 'の'}団体から、あなたに合う活動先を AI と会話で絞り込みます。`
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -44,7 +52,7 @@ export default async function MatchPage({ searchParams }: { searchParams: Promis
         </div>
 
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          {active.subtitle}
+          {subtitle}
         </p>
 
         <MatchChat mode={mode} />

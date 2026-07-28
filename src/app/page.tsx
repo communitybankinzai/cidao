@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { summarize } from '@/lib/contribution-summary'
+import { getCivicGroupCount } from '@/lib/org-count'
 
 const SITE_URL = 'https://cidao.vercel.app'
 
@@ -29,16 +30,13 @@ export default async function Home() {
     '943a665e-474d-46da-9f2d-a8cfa0f1bcaa', // 印西市公式登録（未認証プレースホルダー）
     '31f6bcf1-ce27-4825-a11c-591c5d3cd729', // イベント取込bot
   ]
-  const [{ count: memberCount }, { count: orgCount }] = await Promise.all([
+  const [{ count: memberCount }, orgCount] = await Promise.all([
     supabase
       .from('members')
       .select('id', { count: 'exact', head: true })
       .is('deleted_at', null)
       .not('id', 'in', `(${SYSTEM_MEMBER_IDS.join(',')})`),
-    supabase
-      .from('organizations')
-      .select('id', { count: 'exact', head: true })
-      .eq('public_flag', true),
+    getCivicGroupCount(supabase),
   ])
 
   // 会員証カード用データ（ログイン時のみ）
@@ -146,7 +144,7 @@ export default async function Home() {
                 → 活動・募集を探す
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                印西市内 {orgCount ?? 200} 以上の団体やイベントを、登録なしでもそのまま見られます。
+                印西市内{orgCount ? ` ${orgCount} ` : 'の'}団体の情報とイベントを、登録なしでもそのまま見られます。
               </p>
             </Link>
           </section>
@@ -263,7 +261,7 @@ export default async function Home() {
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">団体を探す</h4>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                印西市内 {orgCount ?? 219} 団体から、活動可能な時間・関心に合う団体を AI が提案します。
+                印西市内{orgCount ? ` ${orgCount} ` : 'の'}団体から、活動可能な時間・関心に合う団体を AI が提案します。
               </p>
             </Link>
             <Link
