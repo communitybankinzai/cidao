@@ -1,5 +1,5 @@
 -- 団体情報の自動拡充（Web/AI 由来）を保存する列を追加。
--- inzaiparque 由来の 220 件は description が 1 行＋免責テンプレで情報が薄いため、
+-- WEB 公開情報から取り込んだ 220 件は description が 1 行＋免責テンプレで情報が薄いため、
 -- 公式サイト・SNS・長文の活動説明・連絡先などを別列に provisional 保存する設計。
 -- 表示は info_verified バッジで「自動収集・未確認」を明示し、
 -- 代表者が claim/編集で確認したら info_verified=true に切り替える。

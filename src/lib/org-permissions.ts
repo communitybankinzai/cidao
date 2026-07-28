@@ -12,7 +12,7 @@ type OrgForPermission = {
 //   (a) representative_id == user
 //   (b) memberships で representative/officer かつ confirmed
 //   (c) organizations.contact_email が user の email と一致
-//      （inzaiparque 取込団体の代表者が CiDAO 未登録でも編集できる経路）
+//      （WEB 公開情報から取り込んだ団体の代表者が CiDAO 未登録でも編集できる経路）
 //   (d) CiDAO 管理者（members.admin_role が設定済み）は全団体を編集可能
 export async function canUserEditOrg(
   supabase: SupabaseClient,

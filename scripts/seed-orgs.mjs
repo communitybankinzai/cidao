@@ -1,4 +1,4 @@
-// CiDAO seed: 印西市市民活動団体（inzaiparque.com 抽出）の bulk insert
+// CiDAO seed: 印西市市民活動団体（WEB 公開情報から取得）の bulk insert
 //
 // Usage:
 //   node scripts/seed-orgs.mjs           # dry-run（DB に書かない、内容と件数表示のみ）
@@ -123,7 +123,7 @@ function buildDescription(orig, sourceCategory) {
   const base = orig || '（未掲載）'
   return (
     `${base}\n\n` +
-    `※ 印西市の市民活動団体登録情報を inzaiparque.com から抽出した暫定データです。代表者の方は claim 機能（準備中）から正式情報への更新をお待ちしています。\n` +
+    `※ 印西市の市民活動団体に関する WEB 公開情報から取得した暫定データです。代表者の方は claim 機能（準備中）から正式情報への更新をお待ちしています。\n` +
     `参照分野: ${sourceCategory}`
   )
 }
@@ -173,7 +173,7 @@ async function ensureSystemMember() {
         [],
         false,
         false,
-        'システム生成のプレースホルダーアカウント。inzaiparque.com 抽出データで作成された未認証団体の代表者欄を埋めるためのもの。各団体は代表者による claim を待っている状態。',
+        'システム生成のプレースホルダーアカウント。WEB 公開情報から取得したデータで作成された未認証団体の代表者欄を埋めるためのもの。各団体は代表者による claim を待っている状態。',
         'email',
       ],
     )

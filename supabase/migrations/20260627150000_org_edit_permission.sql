@@ -1,6 +1,6 @@
 -- 団体情報の編集権限を can_edit_org() で集約する。
 -- 既存 orgs_update_rep は「representative_id == auth.uid()」のみだったため、
--- inzaiparque 取込の 219 件（representative_id がプレースホルダー）は誰も編集できない状態。
+-- WEB 公開情報から取り込んだ 219 件（representative_id がプレースホルダー）は誰も編集できない状態。
 -- 自動拡充パイプライン（claude-haiku-4-5 + Web 検索）で集めた provisional な情報を
 -- 「本物の代表者」が確認/修正できる経路を開く。
 --
@@ -31,7 +31,7 @@ as $$
          and m.role in ('representative', 'officer')
          and m.left_at is null
     )
-    -- (c) contact_email が JWT email と一致（inzaiparque 取込団体の救済経路）
+    -- (c) contact_email が JWT email と一致（WEB 公開情報から取り込んだ団体の救済経路）
     or (
       o.contact_email is not null
       and lower(o.contact_email) = lower(coalesce(auth.jwt() ->> 'email', ''))

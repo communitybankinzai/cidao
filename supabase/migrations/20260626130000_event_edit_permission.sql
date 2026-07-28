@@ -5,7 +5,7 @@
 --      officer/rep も編集可（CiDAO の正規メンバー）
 --   2. 関連団体（organizer_id 紐付き or proxy で name 一致）の contact_email が
 --      auth.jwt() の email と一致するユーザーも編集可
---      ※ inzaiparque 由来の代表者連絡先など、CiDAO メンバー未登録でもメール照合で
+--      ※ WEB 公開情報由来の代表者連絡先など、CiDAO メンバー未登録でもメール照合で
 --        編集できるようにする
 
 create or replace function public.can_edit_event(event_row public.events)

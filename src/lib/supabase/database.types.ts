@@ -697,6 +697,35 @@ export type Database = {
           },
         ]
       }
+      org_name_exclusions: {
+        Row: {
+          excluded_at: string
+          excluded_by: string | null
+          name: string
+          reason: string | null
+        }
+        Insert: {
+          excluded_at?: string
+          excluded_by?: string | null
+          name: string
+          reason?: string | null
+        }
+        Update: {
+          excluded_at?: string
+          excluded_by?: string | null
+          name?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_name_exclusions_excluded_by_fkey"
+            columns: ["excluded_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_categories: {
         Row: {
           category: string

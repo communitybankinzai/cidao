@@ -1,6 +1,6 @@
 {
-  "_source": "inzaiparque.com /civicactivity（2026-06-25 WebFetch 抽出）。印西市市民活動団体登録のキュレーション。inzai-cac.org 公式は接続不能だったため次善とした。",
-  "_categories_note": "sourceCategory は inzaiparque.com の分類。cidao の PROPOSAL_CATEGORIES への mapping は seed-orgs.mjs 内 mapCategories で行う。",
+  "_source": "印西市市民活動団体登録に関する WEB 公開情報（2026-06-25 取得）。inzai-cac.org 公式は接続不能だったため次善とした。",
+  "_categories_note": "sourceCategory は取得元 WEB 公開情報の分類。cidao の PROPOSAL_CATEGORIES への mapping は seed-orgs.mjs 内 mapCategories で行う。",
   "_total": 207,
   "orgs": [
     { "name": "木下まち育て塾", "sourceCategory": "街づくり・地域活性化", "shortDescription": "木下・六軒地区の調査と活性化" },
