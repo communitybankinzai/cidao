@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { summarize } from '@/lib/contribution-summary'
 import { getCivicGroupCount } from '@/lib/org-count'
+import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
 
 const SITE_URL = 'https://cidao.vercel.app'
 
@@ -26,10 +27,6 @@ export default async function Home() {
   }
 
   // 登録者数・団体数（システムアカウントは除外）
-  const SYSTEM_MEMBER_IDS = [
-    '943a665e-474d-46da-9f2d-a8cfa0f1bcaa', // 印西市公式登録（未認証プレースホルダー）
-    '31f6bcf1-ce27-4825-a11c-591c5d3cd729', // イベント取込bot
-  ]
   const [{ count: memberCount }, orgCount] = await Promise.all([
     supabase
       .from('members')

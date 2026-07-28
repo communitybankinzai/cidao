@@ -6,6 +6,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditOrg } from '@/lib/org-permissions'
+import { isAwaitingRepresentative } from '@/lib/org-placeholder'
 import { TYPE_LABEL, legalFormLabel } from '@/lib/org-labels'
 import { requestJoinOrg, approveMembership, verifyOrgInfo } from '../actions'
 import { InterestForm } from './_components/InterestForm'
@@ -154,9 +155,9 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </header>
 
-        {!org.representative_id && (
-          <div className="text-xs px-3 py-2 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 rounded flex flex-wrap items-center gap-1">
-            <span>⚠ この団体はまだ代表者による本登録が行われていません（印西市の公開データを基にした暫定表示です）。</span>
+        {isAwaitingRepresentative(org.representative_id) && (
+          <div className="text-xs px-3 py-2 bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-1">
+            <span>ℹ️ この団体の情報は、公開されている資料をもとにした暫定的な掲載です。代表者の方による更新をお待ちしています。</span>
             <span>
               ご自身が代表者の場合は{' '}
               <Link href="/me/edit" className="underline font-medium">本登録できます →</Link>
