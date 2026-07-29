@@ -66,6 +66,8 @@ export default async function EditProfilePage({
       contact_permission: formData.get('contact_permission') === 'on',
       ranking_opt_in: formData.get('ranking_opt_in') === 'on',
       proposal_email: formData.get('proposal_email') === 'on',
+      notify_event: formData.get('notify_event') === 'on',
+      notify_freefree: formData.get('notify_freefree') === 'on',
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
     })
 
@@ -246,6 +248,30 @@ export default async function EditProfilePage({
                 <span>
                   提案・投票のメール通知を受け取る
                   <span className="block text-xs text-slate-500">投票開始・締切前・結果確定のお知らせが届きます</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  name="notify_event"
+                  defaultChecked={((member.contact_preferences ?? {}) as Record<string, unknown>).notify_event !== false}
+                  className="mt-1"
+                />
+                <span>
+                  イベント通知を受け取る
+                  <span className="block text-xs text-slate-500">新しいイベントが登録されたときにベル🔔でお知らせします（プッシュ通知を許可していればスマホにも届きます）</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  name="notify_freefree"
+                  defaultChecked={((member.contact_preferences ?? {}) as Record<string, unknown>).notify_freefree !== false}
+                  className="mt-1"
+                />
+                <span>
+                  FreeFree通知を受け取る
+                  <span className="block text-xs text-slate-500">FreeFree掲示板に新しい掲載があったときにベル🔔でお知らせします</span>
                 </span>
               </label>
               {wasLight && (

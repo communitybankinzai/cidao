@@ -46,6 +46,8 @@ type ProfileUpdate = {
   contact_permission: boolean
   ranking_opt_in: boolean
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
+  notify_event: boolean         // 新着イベントのベル🔔＋Webプッシュ（contact_preferences.notify_event）
+  notify_freefree: boolean      // FreeFree掲示板の新着（contact_preferences.notify_freefree）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
 
@@ -72,6 +74,8 @@ export async function updateProfile(input: ProfileUpdate) {
   const prefs = {
     ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
     proposal_email: input.proposal_email,
+    notify_event: input.notify_event,
+    notify_freefree: input.notify_freefree,
   }
 
   const update: Record<string, unknown> = {

@@ -74,6 +74,8 @@ export async function insertNotification(input: {
  *
  * 仕様
  * - 宛先は未退会メンバー全員（tier 不問）。actorId 本人だけは除外する
+ * - prefKey を指定すると、members.contact_preferences[prefKey] === false の人を宛先から外す
+ *   （/me/edit の「イベント通知を受け取る」等のチェック。未設定は受け取る扱い）
  * - notifications を INSERT_CHUNK 件ずつ一括 INSERT し、そのあと購読端末へまとめてプッシュ
  * - push: false ならベルのみ（更新系など、端末に鳴らすほどではない通知に使う）
  * - dedupeMinutes を指定すると、同じ kind・同じ linkUrl の全体通知が直近N分以内に
@@ -89,6 +91,7 @@ export async function notifyAllMembers(input: {
   actorId?: string | null
   push?: boolean
   dedupeMinutes?: number
+  prefKey?: string
 }): Promise<{ recipients: number; pushed: number; broadcastId: string | null }> {
   const empty = { recipients: 0, pushed: 0, broadcastId: null }
   try {
@@ -110,13 +113,19 @@ export async function notifyAllMembers(input: {
 
     const { data: members, error } = await admin
       .from('members')
-      .select('id')
+      .select('id, contact_preferences')
       .is('deleted_at', null)
     if (error || !members) return empty
 
-    const recipientIds = (members as { id: string }[])
+    const prefKey = input.prefKey
+    const recipientIds = (members as { id: string; contact_preferences: unknown }[])
+      .filter((m) => {
+        if (m.id === input.actorId) return false
+        if (!prefKey) return true
+        const prefs = (m.contact_preferences ?? {}) as Record<string, unknown>
+        return prefs[prefKey] !== false // 未設定は「受け取る」
+      })
       .map((m) => m.id)
-      .filter((id) => id !== input.actorId)
     if (recipientIds.length === 0) return empty
 
     const broadcastId = crypto.randomUUID()

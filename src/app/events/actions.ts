@@ -150,6 +150,7 @@ export async function createEvent(input: CreateInput) {
     await notifyAllMembers({
       kind: 'event',
       actorId: user.id,
+      prefKey: 'notify_event',
       title: `新しいイベント「${input.title}」が登録されました`,
       body: [shortJst(input.start_at), input.online_flag ? 'オンライン' : input.location?.trim()]
         .filter(Boolean)
@@ -217,6 +218,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
     await notifyAllMembers({
       kind: 'event',
       actorId: user.id,
+      prefKey: 'notify_event',
       title: `新しいイベント「${input.title}」が登録されました`,
       body: [
         list.length > 1 ? `${when} ほか全${list.length}回` : when,

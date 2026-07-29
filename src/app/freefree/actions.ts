@@ -110,6 +110,7 @@ export async function createFreefreePost(input: CreateInput) {
     await notifyAllMembers({
       kind: 'freefree',
       actorId: user.id,
+      prefKey: 'notify_freefree',
       title: `FreeFree掲示板に新しい掲載「${input.title}」`,
       body: [freefreeCategoryLabel(input.category), input.location?.trim()]
         .filter(Boolean)
