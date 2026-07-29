@@ -14,14 +14,21 @@ export function BugReportForm({
   source,
   isLoggedIn,
   defaultEmail,
+  contextLabel,
+  defaultPageUrl = '',
 }: {
   source: 'cbi_site' | 'cidao_app'
   isLoggedIn: boolean
   defaultEmail: string
+  /** 通知から来た場合の件名（「〇〇について」と画面に出し、本文の先頭にも入れる） */
+  contextLabel?: string
+  defaultPageUrl?: string
 }) {
-  const [category, setCategory] = useState<'bug' | 'feature_request' | 'other'>('bug')
+  const [category, setCategory] = useState<'bug' | 'feature_request' | 'other'>(
+    contextLabel ? 'other' : 'bug',
+  )
   const [description, setDescription] = useState('')
-  const [pageUrl, setPageUrl] = useState('')
+  const [pageUrl, setPageUrl] = useState(defaultPageUrl)
   const [reporterName, setReporterName] = useState('')
   const [reporterEmail, setReporterEmail] = useState(defaultEmail)
   const [pending, startTransition] = useTransition()
@@ -52,6 +59,13 @@ export function BugReportForm({
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg p-4 space-y-4">
+      {contextLabel && (
+        <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded p-3">
+          <p className="text-[10px] text-slate-500">この通知についてのご意見・ご報告</p>
+          <p className="text-sm font-medium mt-0.5">{contextLabel}</p>
+        </div>
+      )}
+
       <div className="space-y-1">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">種別</label>
         <div className="flex flex-col gap-1">
@@ -135,7 +149,10 @@ export function BugReportForm({
                 const r = await submitBugReport({
                   source,
                   category,
-                  description,
+                  // どの通知についての意見かを運営側で分かるように先頭へ付ける
+                  description: contextLabel
+                    ? `【通知「${contextLabel}」について】\n${description}`
+                    : description,
                   pageUrl: pageUrl.trim() || undefined,
                   reporterEmail: reporterEmail.trim() || undefined,
                   reporterName: reporterName.trim() || undefined,

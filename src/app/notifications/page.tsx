@@ -85,11 +85,19 @@ export default async function NotificationsPage() {
                 </p>
               )}
 
-              {r.link_url && (
-                <Link href={r.link_url} className="inline-block text-xs text-blue-600 hover:underline mt-2">
-                  開く →
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                {r.link_url && (
+                  <Link href={r.link_url} className="text-xs text-blue-600 hover:underline">
+                    開く →
+                  </Link>
+                )}
+                <Link
+                  href={`/bug-report?ref=${r.id}`}
+                  className="text-xs text-slate-500 hover:underline"
+                >
+                  この件について意見・不具合を送る
                 </Link>
-              )}
+              </div>
             </li>
           ))}
         </ul>

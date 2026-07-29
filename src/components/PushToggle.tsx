@@ -4,10 +4,33 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { savePushSubscription, deletePushSubscription } from '@/app/notifications/actions'
 
+/**
+ * VAPID公開鍵（base64url）を Uint8Array に変換する。
+ *
+ * 環境変数に引用符・改行・空白が混じったまま保存されていると atob が
+ * 「The string to be decoded is not correctly encoded」で落ちる。
+ * 利用者にはどうにもできないエラーなので、まず取り除いてから変換し、
+ * それでも駄目なら原因が分かる文言にして返す。
+ */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = atob(base64)
+  const cleaned = base64String
+    .trim()
+    .replace(/^["']|["']$/g, '') // 前後の引用符
+    .replace(/\s/g, '')          // 改行・空白
+  if (cleaned.length === 0) {
+    throw new Error('プッシュ通知の設定が未完了です（サーバー側の鍵が未設定）。運営にお知らせください')
+  }
+
+  const padding = '='.repeat((4 - (cleaned.length % 4)) % 4)
+  const base64 = (cleaned + padding).replace(/-/g, '+').replace(/_/g, '/')
+  let rawData: string
+  try {
+    rawData = atob(base64)
+  } catch {
+    throw new Error(
+      `プッシュ通知の鍵の形式が正しくありません（長さ${cleaned.length}）。運営にお知らせください`,
+    )
+  }
   const outputArray = new Uint8Array(rawData.length)
   for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i)
   return outputArray

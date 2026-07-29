@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { updateBugReportStatus } from './actions'
+import { updateBugReportStatus, replyToBugReport } from './actions'
 
 const STATUS_LABEL: Record<string, string> = {
   open: '未対応',
@@ -31,7 +31,7 @@ export default async function AdminBugReportsPage() {
 
   const { data: reports } = await supabase
     .from('bug_reports')
-    .select('id, source, category, description, page_url, reporter_name, reporter_email, status, admin_note, created_at')
+    .select('id, source, category, description, page_url, reporter_id, reporter_name, reporter_email, status, admin_note, reply_text, replied_at, created_at')
     .order('created_at', { ascending: false })
 
   type Row = NonNullable<typeof reports>[number]
@@ -43,6 +43,13 @@ export default async function AdminBugReportsPage() {
     const status = String(formData.get('status') ?? '')
     const adminNote = String(formData.get('admin_note') ?? '')
     if (id && status) await updateBugReportStatus(id, status, adminNote)
+  }
+
+  async function handleReply(formData: FormData) {
+    'use server'
+    const id = String(formData.get('id') ?? '')
+    const replyText = String(formData.get('reply_text') ?? '')
+    if (id && replyText.trim()) await replyToBugReport(id, replyText)
   }
 
   return (
@@ -128,6 +135,36 @@ export default async function AdminBugReportsPage() {
                     />
                   </div>
                   <Button type="submit" size="sm">更新</Button>
+                </form>
+
+                {/* 報告者への返信。対応メモ（内部用）とは別物で、ここに書いた文章だけが本人のベルに届く */}
+                <form action={handleReply} className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <input type="hidden" name="id" value={r.id} />
+                  <label className="text-[10px] text-slate-500 block">
+                    報告者への返信（送信すると本人のベル🔔に届きます。対応メモとは別です）
+                  </label>
+                  {r.replied_at && (
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                      返信済み（{new Date(r.replied_at).toLocaleString('ja-JP')}）：{r.reply_text}
+                    </p>
+                  )}
+                  {r.reporter_id ? (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <textarea
+                        name="reply_text"
+                        rows={2}
+                        maxLength={2000}
+                        placeholder="例）ご報告ありがとうございます。原因を確認し、修正しました。"
+                        className="flex-1 min-w-[220px] text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1"
+                      />
+                      <Button type="submit" size="sm" variant="outline">返信を送る</Button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400">
+                      未ログインでの報告のため、アプリ内で返信できません
+                      {r.reporter_email ? `（メール: ${r.reporter_email}）` : ''}
+                    </p>
+                  )}
                 </form>
               </li>
             ))}

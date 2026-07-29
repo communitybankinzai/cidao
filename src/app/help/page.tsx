@@ -115,6 +115,16 @@ export default function HelpPage() {
             ※ 提案・メンバー登録・団体・運営からのお知らせは、現在オフにできません。
           </p>
         </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">通知の内容に意見がある・うまく動かない</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            <Link href="/notifications" className="text-blue-600 hover:underline">通知の一覧</Link>
+            で、それぞれの通知の下にある「この件について意見・不具合を送る」から運営に送れます。
+            どの通知についてのご連絡かは自動で運営に伝わります。
+            運営が返信すると、その返事もベル🔔に届きます。
+          </p>
+        </div>
       </section>
 
       <p className="text-xs text-slate-500 text-center">
