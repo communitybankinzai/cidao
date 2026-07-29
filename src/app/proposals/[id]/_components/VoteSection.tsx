@@ -85,11 +85,28 @@ export function VoteSection({
   }
 
   if (status !== 'voting') {
+    // 締切後も、名乗り出た人と提案者のやりとりは続けられる
+    const canStillContact =
+      !isProposer && myChoice === STRONG_SUPPORT_CHOICE && myDisclosed
     return (
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center">
-        <p className="text-sm text-slate-500">投票期間は終了しました</p>
-        {myChoice && (
-          <p className="text-xs text-slate-400 mt-2">あなたの最終投票: <span className="font-mono">{myChoice}</span></p>
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-3">
+        <div className="text-center">
+          <p className="text-sm text-slate-500">投票期間は終了しました</p>
+          {myChoice && (
+            <p className="text-xs text-slate-400 mt-2">あなたの最終投票: <span className="font-mono">{myChoice}</span></p>
+          )}
+        </div>
+        {canStillContact && (
+          <>
+            <p className="text-[11px] text-slate-500 text-center">
+              「大賛成」で名乗り出ているため、投票が終わったあとも提案者に連絡できます。
+            </p>
+            <SupportMessageForm
+              proposalId={proposalId}
+              proposerName={proposerName}
+              afterVoting
+            />
+          </>
         )}
       </section>
     )
@@ -223,9 +240,12 @@ export function VoteSection({
 function SupportMessageForm({
   proposalId,
   proposerName,
+  afterVoting = false,
 }: {
   proposalId: string
   proposerName: string | null
+  /** 投票期間が終わったあとの表示か（案内文を切り替える） */
+  afterVoting?: boolean
 }) {
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
@@ -260,7 +280,9 @@ function SupportMessageForm({
         提案者{proposerName ? `（${nameWithSan(proposerName)}）` : ''}にメッセージを送る（任意）
       </p>
       <p className="text-[11px] text-slate-400">
-        投票はすでに完了しています。送らなくても「大賛成」の票と名乗り出は記録されています。
+        {afterVoting
+          ? '投票は終わっていますが、協力の話はここから続けられます。'
+          : '投票はすでに完了しています。送らなくても「大賛成」の票と名乗り出は記録されています。'}
         どんな形で協力できそうか伝えると話が進みます。返信は
         <a href="/me/inbox" className="underline mx-0.5">受信箱</a>
         に届きます。
