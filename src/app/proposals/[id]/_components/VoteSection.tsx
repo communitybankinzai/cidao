@@ -36,9 +36,24 @@ export function VoteSection({
   const [done, setDone] = useState<string | null>(null)
   const [disclose, setDisclose] = useState(myDisclosed)
 
+  // 「押した時点で完了」を即座に見せるため、投票状態はマウント時に props を
+  // 初期値として取り込み、以後は操作結果でローカルに更新する
+  // （サーバー再取得を待たずに表示が変わる）
+  const [effectiveChoice, setEffectiveChoice] = useState<string | null>(myChoice)
+  const [effectiveDisclosed, setEffectiveDisclosed] = useState(myDisclosed)
+
+  function applyVoted(choice: string | null, disclosed: boolean) {
+    setEffectiveChoice(choice)
+    setEffectiveDisclosed(disclosed)
+  }
+
   // server action は失敗理由を戻り値で返す（本番ビルドでは例外の本文が
   // クライアントに渡らないため）。想定外の例外も一応拾う
-  function run(label: string, fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+  function run(
+    label: string,
+    fn: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    onSuccess?: () => void
+  ) {
     setError(null)
     setDone(null)
     setBusyChoice(label)
@@ -49,6 +64,7 @@ export function VoteSection({
           setError(result.error)
           return
         }
+        onSuccess?.()
         setDone(label)
         setTimeout(() => setDone(null), 4000)
       } catch (e) {
@@ -97,14 +113,14 @@ export function VoteSection({
     )
   }
 
-  const strongSupportSelected = myChoice === STRONG_SUPPORT_CHOICE
+  const strongSupportSelected = effectiveChoice === STRONG_SUPPORT_CHOICE
 
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 space-y-4">
       <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">あなたの投票</h2>
       <div className="grid grid-cols-2 gap-2">
         {choices.map((choice) => {
-          const selected = myChoice === choice
+          const selected = effectiveChoice === choice
           const desc = voteChoiceMeta(choice)?.desc
           return (
             <Button
@@ -112,7 +128,11 @@ export function VoteSection({
               variant={selected ? 'default' : 'outline'}
               disabled={pending}
               aria-busy={busyChoice === choice}
-              onClick={() => run(choice, () => castVote(proposalId, choice, disclose))}
+              onClick={() => run(
+                choice,
+                () => castVote(proposalId, choice, disclose),
+                () => applyVoted(choice, choice === STRONG_SUPPORT_CHOICE && disclose)
+              )}
               className="h-auto flex-col gap-0.5 whitespace-normal py-2.5 text-center"
             >
               <span className="text-sm font-semibold">
@@ -135,7 +155,11 @@ export function VoteSection({
             setDisclose(next)
             // 既に大賛成で投票済みなら、その場で名乗り状態を更新する
             if (strongSupportSelected) {
-              run(STRONG_SUPPORT_CHOICE, () => castVote(proposalId, STRONG_SUPPORT_CHOICE, next))
+              run(
+                STRONG_SUPPORT_CHOICE,
+                () => castVote(proposalId, STRONG_SUPPORT_CHOICE, next),
+                () => applyVoted(STRONG_SUPPORT_CHOICE, next)
+              )
             }
           }}
           className="mt-0.5"
@@ -150,29 +174,46 @@ export function VoteSection({
         </span>
       </label>
 
-      {myChoice && (
-        <div className="flex justify-between items-center text-xs text-slate-500">
-          <span>選択中: <span className="font-mono text-slate-700 dark:text-slate-300">{myChoice}</span>（投票期間中はいつでも変更可）</span>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run('撤回', () => retractVote(proposalId))}
-            className="text-slate-400 hover:text-rose-500 underline"
-          >
-            {busyChoice === '撤回' ? '撤回中…' : '投票を撤回'}
-          </button>
+      {effectiveChoice ? (
+        <div className="rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                ✓ 投票済みです：{effectiveChoice}
+              </p>
+              <p className="text-[11px] text-emerald-800/80 dark:text-emerald-400/80 mt-0.5">
+                ボタンを押した時点で投票は完了しています。投票期間中は何度でも選び直せます。
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(
+                '撤回',
+                () => retractVote(proposalId),
+                () => applyVoted(null, false)
+              )}
+              className="shrink-0 text-xs text-emerald-700/70 dark:text-emerald-400/70 hover:text-rose-500 underline"
+            >
+              {busyChoice === '撤回' ? '撤回中…' : '投票を撤回'}
+            </button>
+          </div>
         </div>
+      ) : (
+        <p className="text-[11px] text-slate-500">
+          ボタンを押すと、その場で投票が確定します（投票期間中はいつでも選び直せます）。
+        </p>
       )}
-      {done && (
-        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-          {done === '撤回' ? '✓ 投票を取り消しました' : `✓ 「${done}」で投票を受け付けました`}
+      {done === '撤回' && (
+        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+          ✓ 投票を取り消しました
         </p>
       )}
       {error && (
         <p className="text-xs text-rose-600">{error}</p>
       )}
 
-      {strongSupportSelected && myDisclosed && (
+      {strongSupportSelected && effectiveDisclosed && (
         <SupportMessageForm proposalId={proposalId} proposerName={proposerName} />
       )}
     </section>
@@ -220,9 +261,10 @@ function SupportMessageForm({
   return (
     <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
       <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-        提案者{proposerName ? `（${proposerName}さん）` : ''}にメッセージを送る
+        提案者{proposerName ? `（${proposerName}さん）` : ''}にメッセージを送る（任意）
       </p>
       <p className="text-[11px] text-slate-400">
+        投票はすでに完了しています。送らなくても「大賛成」の票と名乗り出は記録されています。
         どんな形で協力できそうか伝えると話が進みます。返信は
         <a href="/me/inbox" className="underline mx-0.5">受信箱</a>
         に届きます。
