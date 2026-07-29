@@ -9,27 +9,32 @@
 -- 諮問的提案の票（協力できる／難しい／わからない）だけ。
 --
 -- 実行しない場合: それらは賛否判定にも保留にも数えられず、
---   定足数の分母にだけ残る（一覧・層別バーの内訳には出ない）
+--   定足数の分母にだけ残る（合算バーには「統一前の票」として表示される）
 --
--- 実行する場合の読み替え（意味の欠落があるため、実行可否は運用判断）:
+-- 読み替え（意味の欠落があるため、実行可否は運用判断）:
 --   協力できる → 大賛成
 --   難しい     → 賛成
 --   わからない → 保留
 --
 -- 注意:
---   1. vote_aggregates は PK(proposal_id, tier, choice) のため単純 UPDATE では
---      衝突する。votes を書き換えたうえで集計を作り直す。
---   2. tier は「投票時点」ではなく「現在」の members.tier で再集計される。
---   3. 20260729150000_vote_support_followup.sql を先に適用しておくこと
---      （集計の作り直しと weight の再計算がそちらに入っている）。
+--   ・vote_aggregates は PK(proposal_id, tier, choice) のため単純 UPDATE では
+--     衝突する。votes を書き換えたうえで集計を作り直す。
+--   ・tier は「投票時点」ではなく「現在」の members.tier で再集計される。
+--   ・20260729150000 / 20260729160000 を先に適用しておくこと。
+--   ・取り消せない。実行前に「1_変更前」の結果を控えておくこと。
 --
--- Supabase SQL Editor で実行すること。begin; 〜 select で結果を確認し、
--- 問題なければ commit;、戻したければ rollback; とすること。
+-- Supabase SQL Editor に全文を貼って Run。末尾に結果が表示される。
 -- =============================================================
 
-begin;
+-- 変更前の対象を記録（結果表の「1_変更前」）
+create temporary table _before_choices as
+select choice, count(*) as cnt
+  from public.votes
+ where choice in ('協力できる', '難しい', 'わからない')
+   and retracted_at is null
+ group by choice;
 
--- 諮問的提案の意向を新しい選択肢に読み替える
+-- 読み替え
 update public.votes
    set choice = case choice
                   when '協力できる' then '大賛成'
@@ -54,10 +59,14 @@ select v.proposal_id,
  where v.retracted_at is null
  group by v.proposal_id, m.tier, v.choice;
 
--- 確認用
-select proposal_id, tier, choice, count, weight_total
-  from public.vote_aggregates
- order by proposal_id, tier, choice;
+-- PostgREST にスキーマ再読込（念のため）
+notify pgrst, 'reload schema';
 
--- 問題なければ commit; 戻すなら rollback;
--- commit;
+-- 結果
+select '1_変更前' as 区分, choice as 選択肢, cnt::text as 件数, '' as 重み
+  from _before_choices
+union all
+select '2_変更後の全集計', choice, sum(count)::text, sum(weight_total)::text
+  from public.vote_aggregates
+ group by choice
+order by 1, 2;

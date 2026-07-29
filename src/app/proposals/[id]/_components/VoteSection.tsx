@@ -106,14 +106,6 @@ export function VoteSection({
     )
   }
 
-  if (isProposer) {
-    return (
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center">
-        <p className="text-sm text-slate-500">自分の提案には投票できません</p>
-      </section>
-    )
-  }
-
   const strongSupportSelected = effectiveChoice === STRONG_SUPPORT_CHOICE
 
   return (
@@ -145,7 +137,9 @@ export function VoteSection({
         })}
       </div>
 
-      {/* 名乗り出しの選択。大賛成のときだけ意味を持つ */}
+      {/* 名乗り出しの選択。大賛成のときだけ意味を持つ。
+          提案者自身は名乗る相手が自分になるので出さない */}
+      {!isProposer && (
       <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
         <input
           type="checkbox"
@@ -174,6 +168,7 @@ export function VoteSection({
           </span>
         </span>
       </label>
+      )}
 
       {effectiveChoice ? (
         <div className="rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
@@ -214,7 +209,7 @@ export function VoteSection({
         <p className="text-xs text-rose-600">{error}</p>
       )}
 
-      {strongSupportSelected && effectiveDisclosed && (
+      {!isProposer && strongSupportSelected && effectiveDisclosed && (
         <SupportMessageForm proposalId={proposalId} proposerName={proposerName} />
       )}
     </section>

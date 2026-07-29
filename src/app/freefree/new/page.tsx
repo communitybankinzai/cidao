@@ -53,6 +53,7 @@ export default async function NewFreefreePage() {
       poster_kind,
       org_id,
       sns_share: formData.get('sns_share') === 'on',
+      sns_display_name: String(formData.get('sns_display_name') ?? '').trim() || undefined,
       title: String(formData.get('title') ?? ''),
       body: String(formData.get('body') ?? ''),
       category: String(formData.get('category') ?? 'event'),

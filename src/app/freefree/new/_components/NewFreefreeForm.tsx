@@ -26,6 +26,7 @@ export default function NewFreefreeForm({
 }) {
   const [posterKind, setPosterKind] = useState<string>('member')
   const [couponEnabled, setCouponEnabled] = useState(false)
+  const [snsShare, setSnsShare] = useState(true)
   const currentKindMeta = posterKinds.find((k) => k.key === posterKind)
   const needsOrg = !!currentKindMeta?.needsOrg
 
@@ -127,7 +128,13 @@ export default function NewFreefreeForm({
           </div>
         )}
         <label className="flex items-start gap-2 text-sm pt-2">
-          <input type="checkbox" name="sns_share" defaultChecked className="mt-1" />
+          <input
+            type="checkbox"
+            name="sns_share"
+            checked={snsShare}
+            onChange={(e) => setSnsShare(e.target.checked)}
+            className="mt-1"
+          />
           <span>
             SNSでの紹介を許可する
             <span className="block text-xs text-slate-500">
@@ -135,6 +142,27 @@ export default function NewFreefreeForm({
             </span>
           </span>
         </label>
+        {snsShare && !needsOrg && (
+          <div className="pl-6 border-l-2 border-sky-200 dark:border-sky-800">
+            <L label="SNSで名前・屋号を出す場合（任意・40字）">
+              <input
+                name="sns_display_name"
+                maxLength={40}
+                placeholder="例: 印西バレエスタジオ"
+                className={inp}
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                入力すると「CBIは、◯◯さんの地域での活動を応援しています。」という形でSNSに投稿されます。
+                空欄のままなら名前は出さず、活動そのものを紹介します。掲示板の詳細ページの表示は変わりません。
+              </p>
+            </L>
+          </div>
+        )}
+        {snsShare && needsOrg && (
+          <p className="pl-6 text-[11px] text-slate-500">
+            団体としての掲載のため、SNSでは団体名で紹介されます。
+          </p>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>

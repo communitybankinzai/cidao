@@ -78,13 +78,15 @@ async function fetchTarget(
   if (target_type === 'freefree') {
     const { data } = await supabase
       .from('freefree_posts')
-      .select('id, title, body, category, location, status, poster_type, poster_id')
+      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name')
       .eq('id', target_id)
       .maybeSingle()
     if (!data || data.status !== 'active') return null
 
-    // 団体掲載のときだけ団体名を名指しで応援する。個人・個人事業の掲載者名は
-    // 掲示板の詳細ページでも表示していないため、SNS でも出さない。
+    // 名指しできるのは次の2通りだけ。
+    //   団体掲載          → organizations.name（もともと掲示板で公開している名前）
+    //   個人・個人事業掲載 → 掲載者が「SNSで出してよい」と自分で入力した表示名
+    // members.display_name は掲示板の詳細ページでも出していないため使わない。
     let poster_name: string | null = null
     if (data.poster_type === 'org') {
       const { data: org } = await supabase
@@ -93,6 +95,8 @@ async function fetchTarget(
         .eq('id', data.poster_id)
         .maybeSingle()
       poster_name = (org?.name as string | undefined) ?? null
+    } else {
+      poster_name = (data.sns_display_name as string | null) ?? null
     }
 
     return {
