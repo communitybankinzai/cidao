@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { insertNotification } from '@/lib/notify'
-import { nameWithSan } from '@/lib/honorific'
+import { nameWithSan, nameWithSama } from '@/lib/honorific'
 
 /**
  * 相手メンバーのメール (auth.users.email) を service_role で解決し、
@@ -139,7 +139,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     toMemberId: targetMemberId,
     subject: `【CiDAO 登録メンバー】${nameWithSan(senderMember.display_name)}から「活動の声がけ」が届いています`,
     text: [
-      `${targetMember.display_name} 様`,
+      nameWithSama(targetMember.display_name),
       ``,
       `CiDAO の登録メンバーのプロフィールをご覧になった ${nameWithSan(senderMember.display_name)}から、活動への声がけが届いています。`,
       ``,
@@ -255,7 +255,7 @@ export async function sendProposalSupportMessage(
     toMemberId: proposal.proposer_id,
     subject: `【CiDAO】${nameWithSan(senderMember.display_name)}があなたの提案に協力を申し出ています`,
     text: [
-      `${targetMember.display_name} 様`,
+      nameWithSama(targetMember.display_name),
       ``,
       `あなたの提案に「大賛成（是非協力したい）」を投じた ${nameWithSan(senderMember.display_name)}から、メッセージが届いています。`,
       ``,
@@ -356,7 +356,7 @@ export async function sendProposalOutreachMessage(
     toMemberId: supporterId,
     subject: `【CiDAO】提案「${proposal.title}」の提案者からメッセージが届いています`,
     text: [
-      `${target.display_name} 様`,
+      nameWithSama(target.display_name),
       ``,
       `あなたが「大賛成（是非協力したい）」を投じた提案の提案者 ${nameWithSan(me.display_name)}から、メッセージが届いています。`,
       ``,
@@ -456,7 +456,7 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
     toMemberId: otherMemberId,
     subject: `【CiDAO 登録メンバー】${nameWithSan(me.display_name)}から返信が届いています`,
     text: [
-      `${other.display_name} 様`,
+      nameWithSama(other.display_name),
       ``,
       `CiDAO「活動の声がけ」に ${nameWithSan(me.display_name)}から返信が届いています。`,
       ``,
