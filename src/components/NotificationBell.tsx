@@ -6,13 +6,7 @@ import {
   markAllNotificationsRead,
   type NotificationRow,
 } from '@/app/notifications/actions'
-
-const KIND_ICON: Record<string, string> = {
-  comment: '💬',
-  vote: '🗳️',
-  proposal: '📋',
-  system: '🔧',
-}
+import { KIND_ICON } from '@/lib/notification-kinds'
 
 /**
  * 全ページ右上に固定表示するアプリ内通知ベル。
@@ -92,32 +86,47 @@ export function NotificationBell() {
             <p className="p-4 text-sm text-slate-400 text-center">通知はまだありません</p>
           ) : (
             <ul className="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-              {rows.map((r) => (
-                <li key={r.id}>
-                  <a
-                    href={r.link_url ?? '#'}
-                    className={
-                      'block px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition ' +
-                      (!r.read_at ? 'bg-sky-50/60 dark:bg-sky-950/40' : '')
-                    }
-                  >
-                    <div className="flex gap-2">
-                      <span aria-hidden className="shrink-0">{KIND_ICON[r.kind] ?? '🔔'}</span>
-                      <div className="min-w-0">
-                        <p className="text-xs text-slate-900 dark:text-slate-100 leading-snug">{r.title}</p>
-                        {r.body && (
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">{r.body}</p>
-                        )}
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          {new Date(r.created_at).toLocaleString('ja-JP')}
+              {rows.map((r) => {
+                const cls =
+                  'block px-3 py-2.5 ' +
+                  (r.link_url ? 'hover:bg-slate-50 dark:hover:bg-slate-800 transition ' : '') +
+                  (!r.read_at ? 'bg-sky-50/60 dark:bg-sky-950/40' : '')
+                const inner = (
+                  <div className="flex gap-2">
+                    <span aria-hidden className="shrink-0">{KIND_ICON[r.kind] ?? '🔔'}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-900 dark:text-slate-100 leading-snug">{r.title}</p>
+                      {/* 本文は3行まで。続きは一覧ページで全文を読む */}
+                      {r.body && (
+                        <p className="text-[11px] text-slate-500 line-clamp-3 whitespace-pre-wrap mt-0.5">
+                          {r.body}
                         </p>
-                      </div>
+                      )}
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {new Date(r.created_at).toLocaleString('ja-JP')}
+                      </p>
                     </div>
-                  </a>
-                </li>
-              ))}
+                  </div>
+                )
+                return (
+                  <li key={r.id}>
+                    {/* リンク先の無い通知（一斉お知らせ等）は a にしない。'#' へ飛ばさないため */}
+                    {r.link_url ? (
+                      <a href={r.link_url} className={cls}>{inner}</a>
+                    ) : (
+                      <div className={cls}>{inner}</div>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
+          <a
+            href="/notifications"
+            className="block px-3 py-2 text-center text-xs text-blue-600 dark:text-blue-400 border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+          >
+            すべての通知を見る →
+          </a>
         </div>
       )}
     </div>
