@@ -78,16 +78,30 @@ async function fetchTarget(
   if (target_type === 'freefree') {
     const { data } = await supabase
       .from('freefree_posts')
-      .select('id, title, body, category, location, status')
+      .select('id, title, body, category, location, status, poster_type, poster_id')
       .eq('id', target_id)
       .maybeSingle()
     if (!data || data.status !== 'active') return null
+
+    // 団体掲載のときだけ団体名を名指しで応援する。個人・個人事業の掲載者名は
+    // 掲示板の詳細ページでも表示していないため、SNS でも出さない。
+    let poster_name: string | null = null
+    if (data.poster_type === 'org') {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', data.poster_id)
+        .maybeSingle()
+      poster_name = (org?.name as string | undefined) ?? null
+    }
+
     return {
       target_type, target_id,
       title: String(data.title),
       body: data.body as string | null,
       category: data.category as string | null,
       location: data.location as string | null,
+      poster_name,
     }
   }
   if (target_type === 'event') {
