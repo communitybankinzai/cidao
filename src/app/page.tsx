@@ -301,6 +301,15 @@ export default async function Home() {
           </span>
         </Link>
 
+        <Link
+          href="/help"
+          className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 hover:border-slate-400 dark:hover:border-slate-600 transition text-center"
+        >
+          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            📖 使い方ヘルプ（通知の受け取り方・止め方）→
+          </span>
+        </Link>
+
         <footer className="flex gap-3">
           {userId ? (
             <>
