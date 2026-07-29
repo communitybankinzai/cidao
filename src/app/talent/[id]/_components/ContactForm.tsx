@@ -57,14 +57,27 @@ export function ContactForm({
         <p className="font-semibold text-emerald-900 dark:text-emerald-100">
           ✓ メッセージを送信しました
         </p>
+        {/*
+          メールの成否にかかわらず、相手のベル🔔＋Webプッシュには届いている
+          （sendTalentInquiry が insertNotification を先に実行している）。
+          メールはあくまで補助なので、届かなかったことを失敗のように見せない。
+        */}
+        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          {nameWithSan(targetName)}の通知（ベル🔔）に届きました。返事は「届いた声がけ」から返ってきます。
+        </p>
         {result.emailSent && (
           <p className="text-xs text-emerald-700 dark:text-emerald-300">
-            {nameWithSan(targetName)}の登録メールに通知が送られました。返事は直接メールで届きます。
+            登録メールにも通知が送られました。返事が直接メールで届く場合もあります。
           </p>
         )}
-        {!result.emailSent && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            メッセージは記録されました。ただし通知メールは送信できませんでした（{result.emailError ?? 'unknown'}）。
+        {!result.emailSent && result.emailError === 'target email lookup failed' && (
+          <p className="text-xs text-slate-500">
+            ※ {nameWithSan(targetName)}はメールアドレスを登録していないため、メールでの通知は送っていません。
+          </p>
+        )}
+        {!result.emailSent && result.emailError !== 'target email lookup failed' && (
+          <p className="text-xs text-slate-500">
+            ※ メールでの通知は送れませんでした（アプリ内の通知は届いています）。
           </p>
         )}
         <button
