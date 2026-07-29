@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
+import SnsDraftEditor from './_components/SnsDraftEditor'
 
 type NextTarget = {
   target_type: 'freefree' | 'event' | 'org'
@@ -37,10 +38,13 @@ export default async function AdminSnsPage() {
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
   const { data: logs } = await supabase
     .from('sns_post_logs')
-    .select('id, target_type, target_id, medium, status, posted_at, error_message, created_at')
+    .select('id, target_type, target_id, medium, status, posted_at, error_message, created_at, content, approved_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(100)
+
+  // 未送信のものが承認待ちの対象。ここで本文を確認・修正・承認する
+  const awaiting = (logs ?? []).filter((l) => l.status === 'pending')
 
   const total = logs?.length ?? 0
   const success = logs?.filter((l) => l.status === 'success').length ?? 0
@@ -83,6 +87,36 @@ export default async function AdminSnsPage() {
         </header>
 
         <SnsActions />
+
+        <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">✍️ 投稿文の確認・承認（{awaiting.length} 件）</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            立ち上げ期は運営が事前に本文を確認する運用です（開発仕様書 v2.1 §3.11.4）。
+            <strong className="font-medium">承認したものだけが実際に配信されます。</strong>
+          </p>
+          {awaiting.length > 0 ? (
+            <ul className="space-y-3 max-h-[36rem] overflow-y-auto">
+              {awaiting.map((l) => (
+                <SnsDraftEditor
+                  key={l.id}
+                  log={{
+                    id: l.id,
+                    target_type: l.target_type,
+                    target_id: l.target_id,
+                    medium: l.medium,
+                    content: (l.content as string | null) ?? null,
+                    approved_at: (l.approved_at as string | null) ?? null,
+                    title: titleOf(l.target_type, l.target_id),
+                    mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
+                    targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
+                  }}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-4">承認待ちの投稿はありません</p>
+          )}
+        </section>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
           <h2 className="text-lg font-semibold mb-3">📊 過去 30 日の投稿ログ</h2>

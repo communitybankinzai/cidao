@@ -1,0 +1,92 @@
+'use server'
+
+// 管理画面「SNS 定期紹介」の下書き作成・承認まわり。
+// 開発仕様書 v2.1 §3.11.4「立ち上げ期：運営事前承認」に対応する。
+
+import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
+import { generateSnsContent } from '@/lib/sns-template'
+import { fetchSnsTarget } from '@/lib/sns-target'
+
+type LogRow = {
+  id: string
+  target_type: 'freefree' | 'event' | 'org'
+  target_id: string
+  medium: 'x' | 'facebook' | 'line'
+}
+
+async function requireAdmin() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (!isAdmin) throw new Error('権限がありません')
+  return { supabase, user }
+}
+
+// テンプレートから下書きを作り直す（掲載内容を直したあとの作り直しにも使う）
+export async function regenerateDraft(logId: string) {
+  const { supabase } = await requireAdmin()
+
+  const { data: log } = await supabase
+    .from('sns_post_logs')
+    .select('id, target_type, target_id, medium')
+    .eq('id', logId)
+    .maybeSingle()
+  if (!log) throw new Error('投稿ログが見つかりません')
+
+  const row = log as LogRow
+  const target = await fetchSnsTarget(supabase, row.target_type, row.target_id)
+  if (!target) throw new Error('紹介対象が削除されたか、公開が終了しています')
+
+  const content = generateSnsContent(target, row.medium)
+  const { error } = await supabase
+    .from('sns_post_logs')
+    // 本文が変わったので承認は取り消す（承認した文面と違うものが飛ばないように）
+    .update({ content, approved_at: null, approved_by: null })
+    .eq('id', logId)
+  if (error) throw new Error(`下書きの保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+}
+
+// 運営が手で直した本文を保存する（承認はしない）
+export async function saveDraft(logId: string, content: string) {
+  const { supabase } = await requireAdmin()
+  const text = content.trim()
+  if (!text) throw new Error('本文が空です')
+
+  const { error } = await supabase
+    .from('sns_post_logs')
+    .update({ content: text, approved_at: null, approved_by: null })
+    .eq('id', logId)
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+}
+
+// 承認する。承認された行だけが /api/sns/dispatch の配信対象になる
+export async function approveDraft(logId: string, content: string) {
+  const { supabase, user } = await requireAdmin()
+  const text = content.trim()
+  if (!text) throw new Error('本文が空のままでは承認できません')
+
+  const { error } = await supabase
+    .from('sns_post_logs')
+    .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
+    .eq('id', logId)
+  if (error) throw new Error(`承認に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+}
+
+export async function unapproveDraft(logId: string) {
+  const { supabase } = await requireAdmin()
+  const { error } = await supabase
+    .from('sns_post_logs')
+    .update({ approved_at: null, approved_by: null })
+    .eq('id', logId)
+  if (error) throw new Error(`承認の取り消しに失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+}

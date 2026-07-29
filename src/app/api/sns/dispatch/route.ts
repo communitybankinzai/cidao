@@ -1,5 +1,6 @@
 // POST /api/sns/dispatch
-// sns_post_logs の pending 行を読み、各媒体 API を呼んで実投稿する。
+// sns_post_logs のうち「未送信かつ運営承認済み」の行を読み、各媒体 API を呼んで実投稿する。
+// 本文は管理画面（/admin/sns）で確認・承認されたものをそのまま送る。
 // 認証情報が未設定の媒体は pending のまま error_message='credentials missing' にする。
 //
 // 環境変数:
@@ -9,7 +10,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateSnsContent, type SnsTarget } from '@/lib/sns-template'
 
 type Log = {
   id: string
@@ -17,6 +17,7 @@ type Log = {
   target_id: string
   medium: 'x' | 'facebook' | 'line'
   status: 'success' | 'failed' | 'pending'
+  content: string | null
 }
 
 export async function POST(request: Request) {
@@ -34,10 +35,13 @@ export async function POST(request: Request) {
     }
   } catch { /* default */ }
 
+  // 運営が承認した本文だけを配信する（開発仕様書 v2.1 §3.11.4）。
+  // 未承認のものは管理画面（/admin/sns）で確認・修正・承認するまで送らない。
   const { data: pendings, error } = await supabase
     .from('sns_post_logs')
-    .select('id, target_type, target_id, medium, status')
+    .select('id, target_type, target_id, medium, status, content')
     .eq('status', 'pending')
+    .not('approved_at', 'is', null)
     .order('created_at', { ascending: true })
     .limit(maxLogs)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -45,14 +49,14 @@ export async function POST(request: Request) {
   const results: Array<{ id: string; medium: string; outcome: string; message?: string }> = []
 
   for (const log of (pendings ?? []) as Log[]) {
-    // ターゲット情報取得
-    const target = await fetchTarget(supabase, log.target_type, log.target_id)
-    if (!target) {
-      await markLog(supabase, log.id, 'failed', 'target not found or removed')
-      results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: 'target not found' })
+    // 承認済みの本文をそのまま送る。承認した文面と実際に飛ぶ文面がずれないよう、
+    // ここでテンプレートから作り直すことはしない。
+    const content = (log.content ?? '').trim()
+    if (!content) {
+      await markLog(supabase, log.id, 'failed', 'approved but content is empty')
+      results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: 'content empty' })
       continue
     }
-    const content = generateSnsContent(target, log.medium)
 
     try {
       const out = await postToMedium(log.medium, content)
@@ -70,73 +74,8 @@ export async function POST(request: Request) {
 
 type AnySupabase = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
 
-async function fetchTarget(
-  supabase: AnySupabase,
-  target_type: 'freefree' | 'event' | 'org',
-  target_id: string,
-): Promise<SnsTarget | null> {
-  if (target_type === 'freefree') {
-    const { data } = await supabase
-      .from('freefree_posts')
-      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name')
-      .eq('id', target_id)
-      .maybeSingle()
-    if (!data || data.status !== 'active') return null
-
-    // 名指しできるのは次の2通りだけ。
-    //   団体掲載          → organizations.name（もともと掲示板で公開している名前）
-    //   個人・個人事業掲載 → 掲載者が「SNSで出してよい」と自分で入力した表示名
-    // members.display_name は掲示板の詳細ページでも出していないため使わない。
-    let poster_name: string | null = null
-    if (data.poster_type === 'org') {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('name')
-        .eq('id', data.poster_id)
-        .maybeSingle()
-      poster_name = (org?.name as string | undefined) ?? null
-    } else {
-      poster_name = (data.sns_display_name as string | null) ?? null
-    }
-
-    return {
-      target_type, target_id,
-      title: String(data.title),
-      body: data.body as string | null,
-      category: data.category as string | null,
-      location: data.location as string | null,
-      poster_name,
-    }
-  }
-  if (target_type === 'event') {
-    const { data } = await supabase
-      .from('events')
-      .select('id, title, description, location, start_at, organizer_name, status')
-      .eq('id', target_id)
-      .maybeSingle()
-    if (!data || data.status !== 'open') return null
-    return {
-      target_type, target_id,
-      title: String(data.title),
-      body: data.description as string | null,
-      location: data.location as string | null,
-      start_at: data.start_at as string | null,
-      organizer_name: data.organizer_name as string | null,
-    }
-  }
-  // org
-  const { data } = await supabase
-    .from('organizations')
-    .select('id, name, description')
-    .eq('id', target_id)
-    .maybeSingle()
-  if (!data) return null
-  return {
-    target_type, target_id,
-    title: String(data.name),
-    body: data.description as string | null,
-  }
-}
+// 紹介対象の取得と本文の組み立ては下書き生成側（src/lib/sns-target.ts と
+// /admin/sns）に移した。ここでは承認済みの本文をそのまま送るだけ。
 
 async function markLog(
   supabase: AnySupabase,
