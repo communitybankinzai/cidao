@@ -288,7 +288,7 @@ export default async function Home() {
           <NavCard href="/events"    label="イベント" />
           <NavCard href="/orgs"      label="団体一覧・検索" />
           <NavCard href="/talent"    label="登録メンバー" />
-          <NavCard href="/freefree"  label="FreeFree" />
+          <NavCard href="/freefree"  label="FreeFree掲示板" />
           <NavCard href="/ranking"   label="ランキング" />
         </section>
 
