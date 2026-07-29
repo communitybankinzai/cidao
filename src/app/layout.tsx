@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { NotificationBell } from '@/components/NotificationBell'
 import { HomeButton } from '@/components/HomeButton'
+import { AdminLink } from '@/components/AdminLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 
 const geistSans = Geist({
@@ -52,6 +53,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ButtonFeedback />
         <HomeButton />
+        <AdminLink />
         <NotificationBell />
         {children}
       </body>
