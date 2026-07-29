@@ -1,11 +1,14 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { nameWithSan } from '@/lib/honorific'
+import { notifyAllMembers } from '@/lib/notify'
+import { TYPE_LABEL } from '@/lib/org-labels'
 
 type OrgInput = {
   name: string
@@ -75,6 +78,21 @@ export async function createOrganization(input: OrgInput) {
     await supabase.from('organization_categories').insert(
       input.categories.map((c, i) => ({ org_id: org.id, category: c, is_primary: i === 0 })),
     )
+  }
+
+  // 全メンバーへ新着通知（ベル＋Webプッシュ）。
+  // 一般ユーザーの申告は承認待ち（public_flag=false）なので、ここでは通知しない。
+  // その場合は管理者が approveClaim で公開した時点で通知される
+  if (isAdmin) {
+    after(async () => {
+      await notifyAllMembers({
+        kind: 'org',
+        actorId: user.id,
+        title: `新しい団体「${input.name}」が登録されました`,
+        body: TYPE_LABEL[input.type] ?? undefined,
+        linkUrl: `/orgs/${org.id}`,
+      })
+    })
   }
 
   revalidatePath('/orgs')
@@ -350,7 +368,7 @@ export async function approveClaim(orgId: string, memberId: string) {
   if (row?.role === 'representative') {
     const { data: org } = await supabase
       .from('organizations')
-      .select('representative_id, public_flag')
+      .select('representative_id, public_flag, name, type')
       .eq('id', orgId)
       .single()
     if (org) {
@@ -359,6 +377,18 @@ export async function approveClaim(orgId: string, memberId: string) {
       if (!org.public_flag) updates.public_flag = true
       if (Object.keys(updates).length > 0) {
         await supabase.from('organizations').update(updates).eq('id', orgId)
+      }
+      // 承認によって初めて公開された団体だけ、全メンバーへ新着通知を出す
+      if (updates.public_flag) {
+        after(async () => {
+          await notifyAllMembers({
+            kind: 'org',
+            actorId: user.id,
+            title: `新しい団体「${org.name}」が登録されました`,
+            body: TYPE_LABEL[org.type] ?? undefined,
+            linkUrl: `/orgs/${orgId}`,
+          })
+        })
       }
     }
   }
@@ -456,7 +486,7 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id, representative_id, contact_email, name')
+    .select('id, representative_id, contact_email, name, public_flag')
     .eq('id', orgId)
     .single()
   if (!org) throw new Error('団体が見つかりません')
@@ -496,6 +526,22 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
 
   const { error } = await supabase.from('organizations').update(updates).eq('id', orgId)
   if (error) throw new Error(`更新失敗: ${error.message}`)
+
+  // 公開済みの団体だけ、更新をベルで知らせる。
+  // 更新は編集のたびに起きるので Webプッシュは鳴らさず（push: false）、
+  // さらに同じ団体は6時間に1回までに抑える（連続編集で通知が埋まるのを防ぐ）
+  if (org.public_flag) {
+    after(async () => {
+      await notifyAllMembers({
+        kind: 'org',
+        actorId: user.id,
+        title: `団体「${org.name}」の情報が更新されました`,
+        linkUrl: `/orgs/${orgId}`,
+        push: false,
+        dedupeMinutes: 360,
+      })
+    })
+  }
 
   revalidatePath(`/orgs/${orgId}`)
   revalidatePath('/orgs')

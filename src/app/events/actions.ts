@@ -1,9 +1,11 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
+import { notifyAllMembers } from '@/lib/notify'
 
 type CreateInput = {
   title: string
@@ -28,6 +30,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 type Occurrence = { start_at: string; end_at: string }
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+// 通知本文用の簡易日時整形。'YYYY-MM-DDTHH:mm'（JSTローカル）→ '8月5日 10:00'
+function shortJst(local: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local)
+  if (!m) return local
+  return `${Number(m[2])}月${Number(m[3])}日 ${m[4]}:${m[5]}`
+}
 
 type OrganizerResolution = {
   organizer_type: 'member' | 'org'
@@ -136,6 +145,19 @@ export async function createEvent(input: CreateInput) {
     })
   }
 
+  // 全メンバーへ新着通知（ベル＋Webプッシュ）。after() でレスポンス後に回す
+  after(async () => {
+    await notifyAllMembers({
+      kind: 'event',
+      actorId: user.id,
+      title: `新しいイベント「${input.title}」が登録されました`,
+      body: [shortJst(input.start_at), input.online_flag ? 'オンライン' : input.location?.trim()]
+        .filter(Boolean)
+        .join(' / ') || undefined,
+      linkUrl: `/events/${data.id}`,
+    })
+  })
+
   revalidatePath('/events')
   redirect(`/events/${data.id}`)
 }
@@ -186,6 +208,25 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
       })
     }
   }
+
+  // 複数日程でも通知は1本にまとめる（同じ内容が何通も届かないようにする）
+  const bulkId = firstId
+  after(async () => {
+    if (!bulkId) return
+    const when = shortJst(list[0].start_at)
+    await notifyAllMembers({
+      kind: 'event',
+      actorId: user.id,
+      title: `新しいイベント「${input.title}」が登録されました`,
+      body: [
+        list.length > 1 ? `${when} ほか全${list.length}回` : when,
+        input.online_flag ? 'オンライン' : input.location?.trim(),
+      ]
+        .filter(Boolean)
+        .join(' / ') || undefined,
+      linkUrl: `/events/${bulkId}`,
+    })
+  })
 
   revalidatePath('/events')
   redirect(`/events/${firstId}`)

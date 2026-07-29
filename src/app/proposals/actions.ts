@@ -1,11 +1,12 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { bindingMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { nameWithSan } from '@/lib/honorific'
-import { insertNotification } from '@/lib/notify'
+import { insertNotification, notifyAllMembers } from '@/lib/notify'
 
 type CreateInput = {
   title: string
@@ -64,6 +65,17 @@ export async function createProposal(input: CreateInput) {
     .single()
 
   if (error) throw new Error(`提案作成に失敗: ${error.message}`)
+
+  // 全メンバーへ新着通知（ベル＋Webプッシュ）。議論期間に参加してもらうための入口
+  after(async () => {
+    await notifyAllMembers({
+      kind: 'proposal',
+      actorId: user.id,
+      title: `新しい提案「${input.title}」が投稿されました`,
+      body: '議論期間中です。コメントで意見を寄せられます',
+      linkUrl: `/proposals/${data.id}`,
+    })
+  })
 
   revalidatePath('/proposals')
   redirect(`/proposals/${data.id}`)

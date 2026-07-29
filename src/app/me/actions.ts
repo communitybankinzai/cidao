@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { insertNotification } from '@/lib/notify'
+import { insertNotification, notifyAllMembers } from '@/lib/notify'
+import { nameWithSan } from '@/lib/honorific'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -101,6 +103,19 @@ export async function updateProfile(input: ProfileUpdate) {
   // 「一覧掲載には公開PRの作成が必要」をベル通知＋Webプッシュで案内する。
   // 登録確認メールが存在しない（LINEログイン一本化）ため、これが全員に届く唯一の案内経路
   if (input.upgradeToEmailOnly && current?.tier === 'light') {
+    // 全メンバーへ「新しい仲間が増えた」通知（ベル＋Webプッシュ）。
+    // 本登録の瞬間だけ。以後のプロフィール編集では飛ばさない
+    const newName = input.display_name.trim()
+    after(async () => {
+      await notifyAllMembers({
+        kind: 'member',
+        actorId: user.id,
+        title: `${nameWithSan(newName)}が新しくメンバー登録しました`,
+        body: '登録メンバー一覧から、興味分野やできそうな貢献を見られます',
+        linkUrl: '/talent',
+      })
+    })
+
     const { data: myPr } = await supabase
       .from('member_profiles_pr')
       .select('member_id')

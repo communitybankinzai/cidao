@@ -1,10 +1,12 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { canUserEditOrg } from '@/lib/org-permissions'
-import { periodToDays, type FreefreePosterKind } from '@/lib/freefree-categories'
+import { periodToDays, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
+import { notifyAllMembers } from '@/lib/notify'
 
 type CouponInput = {
   content: string
@@ -101,6 +103,20 @@ export async function createFreefreePost(input: CreateInput) {
       expires_at: couponExpires,
     })
   }
+
+  // 全メンバーへ新着通知（ベル＋Webプッシュ）。
+  // after() でレスポンス後に回すので、掲載者を待たせない。失敗しても掲載は成立する。
+  after(async () => {
+    await notifyAllMembers({
+      kind: 'freefree',
+      actorId: user.id,
+      title: `FreeFree掲示板に新しい掲載「${input.title}」`,
+      body: [freefreeCategoryLabel(input.category), input.location?.trim()]
+        .filter(Boolean)
+        .join(' / ') || undefined,
+      linkUrl: `/freefree/${data.id}`,
+    })
+  })
 
   revalidatePath('/freefree')
   redirect(`/freefree/${data.id}`)

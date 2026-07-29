@@ -22,6 +22,15 @@ export default async function AdminHomePage() {
         <ul className="grid gap-3 sm:grid-cols-2">
           <li>
             <Link
+              href="/admin/notice"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">お知らせ配信</h2>
+              <p className="text-sm text-slate-500">登録メンバー全員のベル🔔・Webプッシュへ一斉配信、配信履歴の確認</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/changelog"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
