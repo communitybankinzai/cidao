@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from './FreefreeImagesUpload'
+import FreefreeFlyerScan from './FreefreeFlyerScan'
 
 type PosterKindOpt = { key: string; label: string; needsOrg: boolean }
 type EditableOrg = { id: string; name: string; type: 'civic_group' | 'business' | 'government' }
@@ -27,6 +28,14 @@ export default function NewFreefreeForm({
   const [posterKind, setPosterKind] = useState<string>('member')
   const [couponEnabled, setCouponEnabled] = useState(false)
   const [snsShare, setSnsShare] = useState(true)
+
+  // チラシ読み取りで書き換わる項目。読み取り後も掲載者が直せるよう制御コンポーネントにする
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [category, setCategory] = useState(categories[0]?.key ?? 'event')
+  const [location, setLocation] = useState('')
+  const [snsDisplayName, setSnsDisplayName] = useState('')
+  const [couponContent, setCouponContent] = useState('')
   const currentKindMeta = posterKinds.find((k) => k.key === posterKind)
   const needsOrg = !!currentKindMeta?.needsOrg
 
@@ -38,6 +47,20 @@ export default function NewFreefreeForm({
 
   return (
     <form action={action} className="space-y-4">
+      <FreefreeFlyerScan
+        onScanned={(d) => {
+          if (d.title) setTitle(d.title.slice(0, 40))
+          if (d.body) setBody(d.body.slice(0, 1000))
+          if (d.category && categories.some((c) => c.key === d.category)) setCategory(d.category)
+          if (d.location) setLocation(d.location)
+          // 屋号・教室名が読み取れたときだけ。個人氏名は API 側で null にしている
+          if (d.sns_display_name) setSnsDisplayName(d.sns_display_name.slice(0, 40))
+          if (d.coupon_content) {
+            setCouponContent(d.coupon_content.slice(0, 80))
+            setCouponEnabled(true)
+          }
+        }}
+      />
       <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
         <L label="掲載者" req>
           <select
@@ -65,13 +88,36 @@ export default function NewFreefreeForm({
             )
           )}
         </L>
-        <L label="タイトル（40字）" req><input name="title" required maxLength={40} className={inp} /></L>
+        <L label="タイトル（40字）" req>
+          <input
+            name="title"
+            required
+            maxLength={40}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={inp}
+          />
+        </L>
         <L label="本文（1000字、Markdown 可）" req>
-          <textarea name="body" required maxLength={1000} rows={6} className={inp} />
+          <textarea
+            name="body"
+            required
+            maxLength={1000}
+            rows={6}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className={inp}
+          />
         </L>
         <div className="grid md:grid-cols-2 gap-3">
           <L label="カテゴリ" req>
-            <select name="category" required className={inp}>
+            <select
+              name="category"
+              required
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={inp}
+            >
               {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </L>
@@ -81,7 +127,15 @@ export default function NewFreefreeForm({
             </select>
           </L>
         </div>
-        <L label="場所"><input name="location" placeholder="例: 印西市草深" className={inp} /></L>
+        <L label="場所">
+          <input
+            name="location"
+            placeholder="例: 印西市草深"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className={inp}
+          />
+        </L>
         <FreefreeImagesUpload userId={userId} />
       </div>
 
@@ -101,6 +155,8 @@ export default function NewFreefreeForm({
               <input
                 name="coupon_content"
                 placeholder="例: ドリンク1杯無料 / 全品10%オフ"
+                value={couponContent}
+                onChange={(e) => setCouponContent(e.target.value)}
                 maxLength={80}
                 required={couponEnabled}
                 className={inp}
@@ -149,6 +205,8 @@ export default function NewFreefreeForm({
                 name="sns_display_name"
                 maxLength={40}
                 placeholder="例: 印西バレエスタジオ"
+                value={snsDisplayName}
+                onChange={(e) => setSnsDisplayName(e.target.value)}
                 className={inp}
               />
               <p className="mt-1 text-[11px] text-slate-500">
