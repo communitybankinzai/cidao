@@ -47,7 +47,7 @@ export default async function ProposalDetailPage({
     .eq('id', proposal.proposer_id)
     .single()
 
-  // 層別集計
+  // 登録区分別の集計
   const { data: aggregates } = await supabase
     .from('vote_aggregates')
     .select('tier, choice, count, weight_total')
@@ -237,10 +237,10 @@ export default async function ProposalDetailPage({
           <SupporterList proposalId={id} supporters={supporters} />
         )}
 
-        {/* 層別可視化（投票期間中・終了後） */}
+        {/* 登録区分別の可視化（投票期間中・終了後） */}
         {meta && (proposal.status === 'voting' || proposal.status === 'passed' || proposal.status === 'rejected' || proposal.status === 'closed') && (
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
-            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase mb-4">層別投票状況</h2>
+            <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase mb-4">登録区分別投票状況</h2>
             <LiveLayerBars
               proposalId={id}
               initialAggregates={aggregates ?? []}
