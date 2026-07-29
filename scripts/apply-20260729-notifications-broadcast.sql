@@ -1,12 +1,15 @@
 -- =============================================================
--- 貼付用: 20260729190000_notifications_broadcast.sql の適用 + 適用確認
+-- Apply: 20260729190000_notifications_broadcast.sql (+ verification)
 --
--- Supabase Dashboard → SQL Editor に全文を貼って Run。
--- 最後の SELECT が結果テーブルに出るので、3列すべて true なら適用成功。
--- 何度実行しても安全（drop if exists / add column if not exists）。
+-- Paste the whole file into Supabase SQL Editor and press Run.
+-- The final SELECT returns one row; all three columns must be true.
+-- Safe to run repeatedly (drop if exists / add column if not exists).
+--
+-- NOTE: ASCII only on purpose. Japanese comments got mojibake through
+-- the Windows clipboard and broke the statements.
 -- =============================================================
 
--- 1. kind に 'freefree' | 'event' | 'member' | 'org' を追加
+-- 1) allow new kinds: freefree / event / member / org
 alter table public.notifications
   drop constraint if exists notifications_kind_check;
 
@@ -17,7 +20,7 @@ alter table public.notifications
     'freefree', 'event', 'member', 'org'
   ));
 
--- 2. broadcast_id（1回の一斉送信＝1グループ）
+-- 2) broadcast_id: one broadcast = one group of rows
 alter table public.notifications
   add column if not exists broadcast_id uuid;
 
@@ -25,7 +28,7 @@ create index if not exists idx_notifications_broadcast
   on public.notifications(broadcast_id, created_at desc)
   where broadcast_id is not null;
 
--- 3. 送信履歴ビュー（管理画面 /admin/notice が service_role で読む）
+-- 3) history view for /admin/notice (read with service_role only)
 drop view if exists public.notification_broadcasts;
 
 create view public.notification_broadcasts as
@@ -46,7 +49,7 @@ revoke all on public.notification_broadcasts from anon, authenticated;
 grant select on public.notification_broadcasts to service_role;
 
 -- =============================================================
--- 適用確認：3列すべて true なら成功
+-- Verification: all three columns must be true
 -- =============================================================
 select
   exists (
@@ -54,14 +57,14 @@ select
     where table_schema = 'public'
       and table_name = 'notifications'
       and column_name = 'broadcast_id'
-  ) as broadcast_id列あり,
+  ) as has_broadcast_id,
   exists (
     select 1 from pg_constraint
     where conname = 'notifications_kind_check'
       and pg_get_constraintdef(oid) like '%freefree%'
-  ) as kind制約更新済み,
+  ) as kind_check_updated,
   exists (
     select 1 from information_schema.views
     where table_schema = 'public'
       and table_name = 'notification_broadcasts'
-  ) as 履歴ビューあり;
+  ) as has_history_view;
