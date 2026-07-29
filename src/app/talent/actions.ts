@@ -188,14 +188,18 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
  *   その提案の提案者か」を検証するため、提案者が人材バンクに公開していなくても送れる
  * - 返信は人材バンクと同じ replyTalentInquiry でスレッドに続く
  */
-export async function sendProposalSupportMessage(proposalId: string, message: string) {
+export async function sendProposalSupportMessage(
+  proposalId: string,
+  message: string
+): Promise<{ ok: true; emailSent: boolean } | { ok: false; error: string }> {
+  // 本番ビルドでは例外の本文がクライアントに渡らないため、失敗理由は戻り値で返す
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('未ログイン')
+  if (!user) return { ok: false, error: '未ログインです' }
 
   const trimmed = message.trim()
   if (trimmed.length < 1 || trimmed.length > 600) {
-    throw new Error('メッセージは 1〜600 字で入力してください')
+    return { ok: false, error: 'メッセージは 1〜600 字で入力してください' }
   }
 
   const { data: proposal } = await supabase
@@ -203,18 +207,20 @@ export async function sendProposalSupportMessage(proposalId: string, message: st
     .select('id, title, proposer_id')
     .eq('id', proposalId)
     .single()
-  if (!proposal) throw new Error('提案が見つかりません')
-  if (proposal.proposer_id === user.id) throw new Error('自分の提案には送信できません')
+  if (!proposal) return { ok: false, error: '提案が見つかりません' }
+  if (proposal.proposer_id === user.id) {
+    return { ok: false, error: '自分の提案には送信できません' }
+  }
 
   const [{ data: senderMember }, { data: targetMember }] = await Promise.all([
     supabase.from('members').select('display_name, tier').eq('id', user.id).single(),
     supabase.from('members').select('display_name').eq('id', proposal.proposer_id).single(),
   ])
-  if (!senderMember) throw new Error('メンバー情報が見つかりません')
+  if (!senderMember) return { ok: false, error: 'メンバー情報が見つかりません' }
   if (senderMember.tier === 'light') {
-    throw new Error('本登録（プロフィール完成）後にメッセージを送れます')
+    return { ok: false, error: '本登録（プロフィール完成）後にメッセージを送れます' }
   }
-  if (!targetMember) throw new Error('提案者のメンバー情報が見つかりません')
+  if (!targetMember) return { ok: false, error: '提案者のメンバー情報が見つかりません' }
 
   const { data: inserted, error: insertErr } = await supabase
     .from('talent_inquiries')
@@ -228,7 +234,10 @@ export async function sendProposalSupportMessage(proposalId: string, message: st
     .single()
   if (insertErr) {
     // RLS で弾かれる主因は「大賛成を投じていない／撤回済み」
-    throw new Error(`メッセージの送信に失敗しました（提案に「大賛成」で投票済みか確認してください）: ${insertErr.message}`)
+    return {
+      ok: false,
+      error: `メッセージの送信に失敗しました（提案に「大賛成」で投票済みか確認してください）: ${insertErr.message}`,
+    }
   }
 
   await insertNotification({
@@ -279,7 +288,7 @@ export async function sendProposalSupportMessage(proposalId: string, message: st
   }
 
   revalidatePath(`/proposals/${proposalId}`)
-  return { ok: true, emailSent: !!emailSentAt, emailError }
+  return { ok: true, emailSent: !!emailSentAt }
 }
 
 /**
@@ -291,30 +300,32 @@ export async function sendProposalOutreachMessage(
   proposalId: string,
   supporterId: string,
   message: string
-) {
+): Promise<{ ok: true; emailSent: boolean } | { ok: false; error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('未ログイン')
+  if (!user) return { ok: false, error: '未ログインです' }
 
   const trimmed = message.trim()
   if (trimmed.length < 1 || trimmed.length > 600) {
-    throw new Error('メッセージは 1〜600 字で入力してください')
+    return { ok: false, error: 'メッセージは 1〜600 字で入力してください' }
   }
-  if (supporterId === user.id) throw new Error('自分自身には送信できません')
+  if (supporterId === user.id) return { ok: false, error: '自分自身には送信できません' }
 
   const { data: proposal } = await supabase
     .from('proposals')
     .select('id, title, proposer_id')
     .eq('id', proposalId)
     .single()
-  if (!proposal) throw new Error('提案が見つかりません')
-  if (proposal.proposer_id !== user.id) throw new Error('この提案の提案者ではありません')
+  if (!proposal) return { ok: false, error: '提案が見つかりません' }
+  if (proposal.proposer_id !== user.id) {
+    return { ok: false, error: 'この提案の提案者ではありません' }
+  }
 
   const [{ data: me }, { data: target }] = await Promise.all([
     supabase.from('members').select('display_name').eq('id', user.id).single(),
     supabase.from('members').select('display_name').eq('id', supporterId).single(),
   ])
-  if (!me || !target) throw new Error('メンバー情報が見つかりません')
+  if (!me || !target) return { ok: false, error: 'メンバー情報が見つかりません' }
 
   const { data: inserted, error: insertErr } = await supabase
     .from('talent_inquiries')
@@ -326,7 +337,9 @@ export async function sendProposalOutreachMessage(
     })
     .select('id')
     .single()
-  if (insertErr) throw new Error(`メッセージの送信に失敗: ${insertErr.message}`)
+  if (insertErr) {
+    return { ok: false, error: `メッセージの送信に失敗しました: ${insertErr.message}` }
+  }
 
   await insertNotification({
     recipientId: supporterId,
@@ -376,7 +389,7 @@ export async function sendProposalOutreachMessage(
   }
 
   revalidatePath(`/proposals/${proposalId}`)
-  return { ok: true, emailSent: !!emailSentAt, emailError }
+  return { ok: true, emailSent: !!emailSentAt }
 }
 
 /**

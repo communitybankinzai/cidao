@@ -36,13 +36,19 @@ export function VoteSection({
   const [done, setDone] = useState<string | null>(null)
   const [disclose, setDisclose] = useState(myDisclosed)
 
-  function run(label: string, fn: () => Promise<void>) {
+  // server action は失敗理由を戻り値で返す（本番ビルドでは例外の本文が
+  // クライアントに渡らないため）。想定外の例外も一応拾う
+  function run(label: string, fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null)
     setDone(null)
     setBusyChoice(label)
     startTransition(async () => {
       try {
-        await fn()
+        const result = await fn()
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
         setDone(label)
         setTimeout(() => setDone(null), 4000)
       } catch (e) {
@@ -198,7 +204,11 @@ function SupportMessageForm({
     setError(null)
     startTransition(async () => {
       try {
-        await sendProposalSupportMessage(proposalId, trimmed)
+        const result = await sendProposalSupportMessage(proposalId, trimmed)
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
         setMessage('')
         setSent(true)
       } catch (e) {

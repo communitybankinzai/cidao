@@ -75,10 +75,17 @@ export async function createProposal(input: CreateInput) {
  * true なら提案者に名前を伝えて連絡できる状態にする。それ以外の選択肢、
  * および名乗らない場合は従来どおり誰が投票したかを伝えない。
  */
-export async function castVote(proposalId: string, choice: string, discloseIdentity = false) {
+export async function castVote(
+  proposalId: string,
+  choice: string,
+  discloseIdentity = false
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // 本番ビルドでは server action が投げた例外の本文がクライアントに渡らず
+  // 「An error occurred in the Server Components render」しか出ないため、
+  // 失敗理由は戻り値で返して画面に表示できるようにする
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('未ログイン')
+  if (!user) return { ok: false, error: '未ログインです' }
 
   // proposal の binding_type に応じた choice 検証
   const { data: proposal } = await supabase
@@ -86,12 +93,12 @@ export async function castVote(proposalId: string, choice: string, discloseIdent
     .select('binding_type, status, voting_start_at, voting_end_at')
     .eq('id', proposalId)
     .single()
-  if (!proposal) throw new Error('提案が見つかりません')
-  if (proposal.status !== 'voting') throw new Error('投票期間外です')
+  if (!proposal) return { ok: false, error: '提案が見つかりません' }
+  if (proposal.status !== 'voting') return { ok: false, error: '投票期間外です' }
 
   const meta = bindingMeta(proposal.binding_type)
   if (!meta || !(meta.choices as readonly string[]).includes(choice)) {
-    throw new Error(`不正な投票選択肢: ${choice}`)
+    return { ok: false, error: `不正な投票選択肢: ${choice}` }
   }
 
   // 名乗り出は「大賛成」のときだけ有効
@@ -111,7 +118,7 @@ export async function castVote(proposalId: string, choice: string, discloseIdent
       },
       { onConflict: 'proposal_id,voter_id' }
     )
-  if (error) throw new Error(`投票に失敗: ${error.message}`)
+  if (error) return { ok: false, error: `投票の保存に失敗しました: ${error.message}` }
 
   // アプリ内通知（best-effort）：提案者へ
   const { data: forNotify } = await supabase
@@ -148,12 +155,15 @@ export async function castVote(proposalId: string, choice: string, discloseIdent
   }
 
   revalidatePath(`/proposals/${proposalId}`)
+  return { ok: true }
 }
 
-export async function retractVote(proposalId: string) {
+export async function retractVote(
+  proposalId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('未ログイン')
+  if (!user) return { ok: false, error: '未ログインです' }
 
   const { error } = await supabase
     .from('votes')
@@ -162,8 +172,9 @@ export async function retractVote(proposalId: string) {
     .eq('voter_id', user.id)
     .is('retracted_at', null)
 
-  if (error) throw new Error(`撤回に失敗: ${error.message}`)
+  if (error) return { ok: false, error: `撤回に失敗しました: ${error.message}` }
   revalidatePath(`/proposals/${proposalId}`)
+  return { ok: true }
 }
 
 export async function finalizeVotingIfDue(proposalId: string) {

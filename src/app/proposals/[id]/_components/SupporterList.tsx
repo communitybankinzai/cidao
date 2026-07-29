@@ -69,7 +69,11 @@ function SupporterRow({
     setError(null)
     startTransition(async () => {
       try {
-        await sendProposalOutreachMessage(proposalId, supporter.id, trimmed)
+        const result = await sendProposalOutreachMessage(proposalId, supporter.id, trimmed)
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
         setMessage('')
         setSent(true)
         setOpen(false)
