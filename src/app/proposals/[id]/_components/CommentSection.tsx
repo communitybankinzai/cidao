@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { NEUTRAL_CHOICE } from '@/lib/categories'
+import { nameWithSan } from '@/lib/honorific'
 import { postComment, likeComment, deleteComment } from '../../actions'
 
 type Comment = {
@@ -314,7 +315,7 @@ function ThreadNode({
             value={replyBody}
             onChange={(e) => setReplyBody(e.target.value)}
             rows={2}
-            placeholder={`${comment.author_name} さんへ返信`}
+            placeholder={`${nameWithSan(comment.author_name)}へ返信`}
             className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-sm"
           />
           {replyError && <p className="text-xs text-rose-600">{replyError}</p>}

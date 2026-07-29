@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { bindingMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
+import { nameWithSan } from '@/lib/honorific'
 import { insertNotification } from '@/lib/notify'
 
 type CreateInput = {
@@ -138,7 +139,7 @@ export async function castVote(
         recipientId: forNotify.proposer_id,
         actorId: user.id,
         kind: 'vote',
-        title: `${me?.display_name ?? 'メンバー'}さんが提案「${forNotify.title}」に大賛成し、協力したいと名乗り出ました`,
+        title: `${nameWithSan(me?.display_name)}が提案「${forNotify.title}」に大賛成し、協力したいと名乗り出ました`,
         body: '提案ページからメッセージのやりとりができます',
         linkUrl: `/proposals/${proposalId}`,
       })
@@ -230,7 +231,7 @@ export async function postComment(input: CommentInput) {
     .select('display_name')
     .eq('id', user.id)
     .single()
-  const actorName = me?.display_name ?? 'メンバー'
+  const actorName = nameWithSan(me?.display_name)
   const kindLabel = { question: '質問', answer: '回答', comment: 'コメント' }[input.kind]
   const preview = trimmed.slice(0, 80) + (trimmed.length > 80 ? '…' : '')
   if (proposal) {
@@ -238,7 +239,7 @@ export async function postComment(input: CommentInput) {
       recipientId: proposal.proposer_id,
       actorId: user.id,
       kind: 'comment',
-      title: `あなたの提案「${proposal.title}」に${actorName}さんから${kindLabel}が届きました`,
+      title: `あなたの提案「${proposal.title}」に${actorName}から${kindLabel}が届きました`,
       body: preview,
       linkUrl: `/proposals/${input.proposalId}`,
     })
@@ -248,7 +249,7 @@ export async function postComment(input: CommentInput) {
       recipientId: input.recipientId,
       actorId: user.id,
       kind: 'comment',
-      title: `${actorName}さんからあなた宛の${kindLabel}が届きました`,
+      title: `${actorName}からあなた宛の${kindLabel}が届きました`,
       body: preview,
       linkUrl: `/proposals/${input.proposalId}`,
     })
@@ -271,7 +272,7 @@ export async function postComment(input: CommentInput) {
         recipientId: parent.author_id,
         actorId: user.id,
         kind: 'comment',
-        title: `${actorName}さんがあなたの投稿に返信しました`,
+        title: `${actorName}があなたの投稿に返信しました`,
         body: preview,
         linkUrl: `/proposals/${input.proposalId}`,
       })
@@ -332,7 +333,7 @@ export async function likeComment(commentId: string, proposalId: string): Promis
         recipientId: target.author_id,
         actorId: user.id,
         kind: 'comment',
-        title: `${me?.display_name ?? 'メンバー'}さんがあなたの投稿に👍いいねしました`,
+        title: `${nameWithSan(me?.display_name)}があなたの投稿に👍いいねしました`,
         body: target.body.slice(0, 80) + (target.body.length > 80 ? '…' : ''),
         linkUrl: `/proposals/${proposalId}`,
       })

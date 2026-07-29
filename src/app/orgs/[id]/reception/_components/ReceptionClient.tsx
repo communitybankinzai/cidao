@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import jsQR from 'jsqr'
 import { Button } from '@/components/ui/button'
 import { receptionCheckin, searchMembersForReception } from '../../../actions'
+import { nameWithSan } from '@/lib/honorific'
 
 type EventOption = { id: string; title: string; startAt: string }
 type CheckinRow = {
@@ -69,9 +70,9 @@ export function ReceptionClient({
         if (!res.ok) {
           setFeedback({ kind: 'error', message: res.error ?? '受付に失敗しました' })
         } else if (res.alreadyCheckedIn) {
-          setFeedback({ kind: 'already', message: `${res.memberName} さんは受付済みです` })
+          setFeedback({ kind: 'already', message: `${nameWithSan(res.memberName)}は受付済みです` })
         } else {
-          setFeedback({ kind: 'ok', message: `${res.memberName} さんを受付しました` })
+          setFeedback({ kind: 'ok', message: `${nameWithSan(res.memberName)}を受付しました` })
           setCheckins((prev) => [
             {
               id: `local-${Date.now()}`,

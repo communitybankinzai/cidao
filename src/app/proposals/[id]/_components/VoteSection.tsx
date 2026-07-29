@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { voteChoiceMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
+import { nameWithSan } from '@/lib/honorific'
 import { castVote, retractVote } from '../../actions'
 import { sendProposalSupportMessage } from '@/app/talent/actions'
 
@@ -165,7 +166,7 @@ export function VoteSection({
           className="mt-0.5"
         />
         <span>
-          「大賛成」で投票するとき、提案者{proposerName ? `（${proposerName}さん）` : ''}に
+          「大賛成」で投票するとき、提案者{proposerName ? `（${nameWithSan(proposerName)}）` : ''}に
           <span className="font-medium text-slate-800 dark:text-slate-200">名前を伝えて</span>
           メッセージのやりとりができるようにする
           <span className="block text-[11px] text-slate-400 mt-0.5">
@@ -261,7 +262,7 @@ function SupportMessageForm({
   return (
     <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
       <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-        提案者{proposerName ? `（${proposerName}さん）` : ''}にメッセージを送る（任意）
+        提案者{proposerName ? `（${nameWithSan(proposerName)}）` : ''}にメッセージを送る（任意）
       </p>
       <p className="text-[11px] text-slate-400">
         投票はすでに完了しています。送らなくても「大賛成」の票と名乗り出は記録されています。

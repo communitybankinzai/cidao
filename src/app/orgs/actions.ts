@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { canUserEditOrg } from '@/lib/org-permissions'
+import { nameWithSan } from '@/lib/honorific'
 
 type OrgInput = {
   name: string
@@ -149,7 +150,7 @@ export async function expressInterest(orgId: string, message: string, contactOk:
         const { error: sendErr } = await resend.emails.send({
           from,
           to: org.contact_email,
-          subject: `【CiDAO 登録メンバー】${member.display_name} さんから「活動に参加したい」との申し出があります`,
+          subject: `【CiDAO 登録メンバー】${nameWithSan(member.display_name)}から「活動に参加したい」との申し出があります`,
           text: [
             `${org.name} ご担当者様`,
             ``,

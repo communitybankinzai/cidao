@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Avatar } from '@/components/ui/avatar'
+import { nameWithSan } from '@/lib/honorific'
 import { ContactForm } from './_components/ContactForm'
 
 export default async function TalentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -144,7 +145,7 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
             {pr?.message_acceptance !== 'closed' && (
               <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm space-y-2 opacity-90">
                 <p className="font-semibold text-slate-900 dark:text-slate-100">
-                  ✉️ {member.display_name} さんに声をかける
+                  ✉️ {nameWithSan(member.display_name)}に声をかける
                 </p>
                 <p className="text-xs text-slate-500">
                   送信ボタンを押すと、相手の登録メールアドレスにメッセージが届きます。返信はメールで直接やり取りできます。

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { insertNotification } from '@/lib/notify'
+import { nameWithSan } from '@/lib/honorific'
 
 /**
  * 相手メンバーのメール (auth.users.email) を service_role で解決し、
@@ -127,7 +128,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     recipientId: targetMemberId,
     actorId: user.id,
     kind: 'comment',
-    title: `${senderMember.display_name}さんから「活動の声がけ」が届きました`,
+    title: `${nameWithSan(senderMember.display_name)}から「活動の声がけ」が届きました`,
     body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
     linkUrl: '/me/inbox',
   })
@@ -136,11 +137,11 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
   const profileUrl = `https://cidao.vercel.app/talent/${targetMemberId}`
   const { emailSentAt, emailError } = await sendInquiryEmail({
     toMemberId: targetMemberId,
-    subject: `【CiDAO 登録メンバー】${senderMember.display_name} さんから「活動の声がけ」が届いています`,
+    subject: `【CiDAO 登録メンバー】${nameWithSan(senderMember.display_name)}から「活動の声がけ」が届いています`,
     text: [
       `${targetMember.display_name} 様`,
       ``,
-      `CiDAO の登録メンバーのプロフィールをご覧になった ${senderMember.display_name} さんから、活動への声がけが届いています。`,
+      `CiDAO の登録メンバーのプロフィールをご覧になった ${nameWithSan(senderMember.display_name)}から、活動への声がけが届いています。`,
       ``,
       `─────────────────────────────`,
       `差出人: ${senderMember.display_name}`,
@@ -156,7 +157,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
       `あなたのプロフィール: ${profileUrl}`,
       ``,
       `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
-      `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
+      `※ 返信は、このメールに直接 Reply すると ${nameWithSan(senderMember.display_name)}に直接届きます。`,
       `※ メッセージを今後受け取りたくない場合は CiDAO の /me/pr で『メッセージ受付』を『受け付けない』に変更してください。`,
       ``,
       `Community Bank INZAI (CBI) / CiDAO`,
@@ -244,7 +245,7 @@ export async function sendProposalSupportMessage(
     recipientId: proposal.proposer_id,
     actorId: user.id,
     kind: 'comment',
-    title: `${senderMember.display_name}さんから提案「${proposal.title}」についてメッセージが届きました`,
+    title: `${nameWithSan(senderMember.display_name)}から提案「${proposal.title}」についてメッセージが届きました`,
     body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
     linkUrl: '/me/inbox',
   })
@@ -252,11 +253,11 @@ export async function sendProposalSupportMessage(
   const senderEmail = user.email ?? '(連絡先非公開)'
   const { emailSentAt, emailError } = await sendInquiryEmail({
     toMemberId: proposal.proposer_id,
-    subject: `【CiDAO】${senderMember.display_name} さんがあなたの提案に協力を申し出ています`,
+    subject: `【CiDAO】${nameWithSan(senderMember.display_name)}があなたの提案に協力を申し出ています`,
     text: [
       `${targetMember.display_name} 様`,
       ``,
-      `あなたの提案に「大賛成（是非協力したい）」を投じた ${senderMember.display_name} さんから、メッセージが届いています。`,
+      `あなたの提案に「大賛成（是非協力したい）」を投じた ${nameWithSan(senderMember.display_name)}から、メッセージが届いています。`,
       ``,
       `─────────────────────────────`,
       `提案: ${proposal.title}`,
@@ -273,7 +274,7 @@ export async function sendProposalSupportMessage(
       `提案ページ: https://cidao.vercel.app/proposals/${proposal.id}`,
       ``,
       `※ このメールは CiDAO の提案・投票機能による自動通知です。`,
-      `※ 返信は、このメールに直接 Reply すると ${senderMember.display_name} さんに直接届きます。`,
+      `※ 返信は、このメールに直接 Reply すると ${nameWithSan(senderMember.display_name)}に直接届きます。`,
       ``,
       `Community Bank INZAI (CBI) / CiDAO`,
     ].join('\n'),
@@ -345,7 +346,7 @@ export async function sendProposalOutreachMessage(
     recipientId: supporterId,
     actorId: user.id,
     kind: 'comment',
-    title: `提案「${proposal.title}」の提案者 ${me.display_name}さんからメッセージが届きました`,
+    title: `提案「${proposal.title}」の提案者 ${nameWithSan(me.display_name)}からメッセージが届きました`,
     body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
     linkUrl: '/me/inbox',
   })
@@ -357,7 +358,7 @@ export async function sendProposalOutreachMessage(
     text: [
       `${target.display_name} 様`,
       ``,
-      `あなたが「大賛成（是非協力したい）」を投じた提案の提案者 ${me.display_name} さんから、メッセージが届いています。`,
+      `あなたが「大賛成（是非協力したい）」を投じた提案の提案者 ${nameWithSan(me.display_name)}から、メッセージが届いています。`,
       ``,
       `─────────────────────────────`,
       `提案: ${proposal.title}`,
@@ -374,7 +375,7 @@ export async function sendProposalOutreachMessage(
       `提案ページ: https://cidao.vercel.app/proposals/${proposal.id}`,
       ``,
       `※ このメールは CiDAO の提案・投票機能による自動通知です。`,
-      `※ 返信は、このメールに直接 Reply すると ${me.display_name} さんに直接届きます。`,
+      `※ 返信は、このメールに直接 Reply すると ${nameWithSan(me.display_name)}に直接届きます。`,
       ``,
       `Community Bank INZAI (CBI) / CiDAO`,
     ].join('\n'),
@@ -445,7 +446,7 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
     recipientId: otherMemberId,
     actorId: user.id,
     kind: 'comment',
-    title: `${me.display_name}さんから「活動の声がけ」への返信が届きました`,
+    title: `${nameWithSan(me.display_name)}から「活動の声がけ」への返信が届きました`,
     body: `${trimmed.slice(0, 80)}${trimmed.length > 80 ? '…' : ''}`,
     linkUrl: '/me/inbox',
   })
@@ -453,11 +454,11 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
   const senderEmail = user.email ?? '(連絡先非公開)'
   const { emailSentAt, emailError } = await sendInquiryEmail({
     toMemberId: otherMemberId,
-    subject: `【CiDAO 登録メンバー】${me.display_name} さんから返信が届いています`,
+    subject: `【CiDAO 登録メンバー】${nameWithSan(me.display_name)}から返信が届いています`,
     text: [
       `${other.display_name} 様`,
       ``,
-      `CiDAO「活動の声がけ」に ${me.display_name} さんから返信が届いています。`,
+      `CiDAO「活動の声がけ」に ${nameWithSan(me.display_name)}から返信が届いています。`,
       ``,
       `─────────────────────────────`,
       `差出人: ${me.display_name}`,
@@ -472,7 +473,7 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
       `受信箱で確認・返信: https://cidao.vercel.app/me/inbox`,
       ``,
       `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
-      `※ 返信は、このメールに直接 Reply すると ${me.display_name} さんに直接届きます。`,
+      `※ 返信は、このメールに直接 Reply すると ${nameWithSan(me.display_name)}に直接届きます。`,
       ``,
       `Community Bank INZAI (CBI) / CiDAO`,
     ].join('\n'),

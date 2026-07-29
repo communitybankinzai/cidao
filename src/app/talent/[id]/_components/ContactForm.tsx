@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { sendTalentInquiry } from '../../actions'
+import { nameWithSan } from '@/lib/honorific'
 
 export function ContactForm({
   targetMemberId,
@@ -28,7 +29,7 @@ export function ContactForm({
     return (
       <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 text-center space-y-2">
         <p className="text-sm text-slate-700 dark:text-slate-300">
-          <strong>{targetName}</strong> さんに声をかけたい場合はログインしてください
+          <strong>{nameWithSan(targetName)}</strong>に声をかけたい場合はログインしてください
         </p>
         <a href={`/login?next=/talent/${targetMemberId}`} className="inline-block">
           <Button>ログイン</Button>
@@ -58,7 +59,7 @@ export function ContactForm({
         </p>
         {result.emailSent && (
           <p className="text-xs text-emerald-700 dark:text-emerald-300">
-            {targetName} さんの登録メールに通知が送られました。返事は直接メールで届きます。
+            {nameWithSan(targetName)}の登録メールに通知が送られました。返事は直接メールで届きます。
           </p>
         )}
         {!result.emailSent && (
@@ -81,7 +82,7 @@ export function ContactForm({
     return (
       <div className="bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg p-4 text-sm space-y-2">
         <p className="font-semibold text-slate-900 dark:text-slate-100">
-          ✉️ {targetName} さんに声をかける
+          ✉️ {nameWithSan(targetName)}に声をかける
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           送信ボタンを押すと、相手の登録メールアドレスにあなたのメッセージが届きます。返信はメールで直接やり取りできます。
@@ -101,7 +102,7 @@ export function ContactForm({
   return (
     <div className="bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg p-4 space-y-3">
       <p className="font-semibold text-slate-900 dark:text-slate-100">
-        ✉️ {targetName} さんに声をかける
+        ✉️ {nameWithSan(targetName)}に声をかける
       </p>
       <p className="text-xs text-slate-500">
         自己紹介・どんな活動への参加を依頼したいか・連絡可能な時間帯などを書くと話が早いです。
@@ -111,7 +112,7 @@ export function ContactForm({
         onChange={(e) => setMessage(e.target.value)}
         rows={5}
         maxLength={600}
-        placeholder={`例: 印西市内で里山保全活動をしている『○○の会』の代表 ◯◯と申します。${targetName} さんのスキルにとても関心があり、ぜひ一度お話できればと思います。平日夜のオンライン or 週末の現地見学いずれでも対応可能です。`}
+        placeholder={`例: 印西市内で里山保全活動をしている『○○の会』の代表 ◯◯と申します。${nameWithSan(targetName)}のスキルにとても関心があり、ぜひ一度お話できればと思います。平日夜のオンライン or 週末の現地見学いずれでも対応可能です。`}
         className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
       />
       <p className="text-[10px] text-slate-400 text-right">

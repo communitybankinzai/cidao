@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { replyTalentInquiry } from '../../../talent/actions'
+import { nameWithSan } from '@/lib/honorific'
 
 export function ReplyForm({
   rootInquiryId,
@@ -39,7 +40,7 @@ export function ReplyForm({
         onChange={(e) => setMessage(e.target.value)}
         rows={4}
         maxLength={600}
-        placeholder={`${otherName} さんへの返信を書く…`}
+        placeholder={`${nameWithSan(otherName)}への返信を書く…`}
         className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
       />
       <p className="text-[10px] text-slate-400 text-right">{message.trim().length} / 600 字</p>
