@@ -108,15 +108,19 @@ export async function updateProfile(input: ProfileUpdate) {
   // 登録確認メールが存在しない（LINEログイン一本化）ため、これが全員に届く唯一の案内経路
   if (input.upgradeToEmailOnly && current?.tier === 'light') {
     // 全メンバーへ「新しい仲間が増えた」通知（ベル＋Webプッシュ）。
-    // 本登録の瞬間だけ。以後のプロフィール編集では飛ばさない
+    // 本登録の瞬間だけ。以後のプロフィール編集では飛ばさない。
+    //
+    // この時点では「登録メンバー」一覧（/talent）にはまだ載らない。
+    // 一覧は member_profiles_pr（公開PR）を起点にしているため。
+    // リンクを付けると押しても本人が居ないので付けず、そのことを本文で説明する。
+    // 一覧に載った瞬間の通知は /me/pr（公開PRの初回作成時）から別途出る
     const newName = input.display_name.trim()
     after(async () => {
       await notifyAllMembers({
         kind: 'member',
         actorId: user.id,
         title: `${nameWithSan(newName)}が新しくメンバー登録しました`,
-        body: '登録メンバー一覧から、興味分野やできそうな貢献を見られます',
-        linkUrl: '/talent',
+        body: '公開PRが作られると「登録メンバー」一覧にも掲載されます',
       })
     })
 

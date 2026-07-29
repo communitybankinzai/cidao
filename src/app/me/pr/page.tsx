@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
+import { notifyAllMembers } from '@/lib/notify'
+import { nameWithSan } from '@/lib/honorific'
 
 const AVAILABLE_TIMES = ['平日昼', '平日夜', '土日昼', '土日夜', 'オンラインのみ']
 
@@ -33,7 +36,35 @@ export default async function MyPrPage() {
       message_acceptance: String(formData.get('message_acceptance') ?? 'recommended_only') as 'open' | 'recommended_only' | 'closed',
       public_scope: String(formData.get('public_scope') ?? 'registered_only') as 'public' | 'registered_only' | 'consent_only',
     }
+    // 初回作成かどうかを保存前に判定する（編集での再通知を防ぐ）
+    const { data: existing } = await sb
+      .from('member_profiles_pr')
+      .select('member_id')
+      .eq('member_id', u.id)
+      .maybeSingle()
+
     await sb.from('member_profiles_pr').upsert(payload, { onConflict: 'member_id' })
+
+    // 公開PRを初めて作った＝「登録メンバー」一覧に載った瞬間に、全メンバーへ知らせる。
+    // message_acceptance='closed' は一覧に出ない（/talent が除外している）ので通知しない
+    if (!existing && payload.message_acceptance !== 'closed') {
+      const { data: me } = await sb
+        .from('members')
+        .select('display_name')
+        .eq('id', u.id)
+        .maybeSingle()
+      const myName = me?.display_name ?? null
+      after(async () => {
+        await notifyAllMembers({
+          kind: 'member',
+          actorId: u.id,
+          title: `${nameWithSan(myName)}が登録メンバー一覧に加わりました`,
+          body: 'できそうな貢献・資格・活動できる時間を見られます',
+          linkUrl: `/talent/${u.id}`,
+        })
+      })
+    }
+
     redirect('/me')
   }
 
