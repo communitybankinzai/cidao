@@ -5,6 +5,7 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { HomeButton } from '@/components/HomeButton'
 import { AdminLink } from '@/components/AdminLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
+import { PageViewTracker } from '@/components/PageViewTracker'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -52,6 +53,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <ButtonFeedback />
+        <PageViewTracker />
         <HomeButton />
         <AdminLink />
         <NotificationBell />

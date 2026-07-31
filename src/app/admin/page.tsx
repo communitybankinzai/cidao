@@ -22,6 +22,15 @@ export default async function AdminHomePage() {
         <ul className="grid gap-3 sm:grid-cols-2">
           <li>
             <Link
+              href="/admin/analytics"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">アクセス分析</h2>
+              <p className="text-sm text-slate-500">各ページのPV/VVを横断表示、前週比の増減とAIによる要因分析</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/notice"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
