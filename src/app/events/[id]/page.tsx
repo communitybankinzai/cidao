@@ -143,7 +143,22 @@ export default async function EventDetailPage({
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
           <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">参加</h2>
           {!user ? (
-            <Link href={`/login?next=/events/${id}`}><Button>ログインして参加</Button></Link>
+            /* SNSから来た未登録の人が最も離脱しやすい場所。
+               「なぜログインが要るのか」「どれだけ手軽か」をこの場で伝える。 */
+            <div className="space-y-3">
+              <Link href={`/login?next=/events/${id}`}><Button>ログインして参加</Button></Link>
+              <div className="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">はじめての方へ</p>
+                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                  参加の申し込みには、印西市の市民参加アプリ「CiDAO（シダオ）」への登録が必要です。
+                  <strong>LINEでワンタップ、登録も利用も無料</strong>。ニックネームで登録でき、
+                  メールアドレスや電話番号の入力もいりません。
+                </p>
+                <p className="text-xs text-slate-500">
+                  イベントを見るだけなら、登録は不要です。
+                </p>
+              </div>
+            </div>
           ) : myParticipation ? (
             <div className="flex gap-3 items-center">
               <span className="text-sm">あなたは {myParticipation.role === 'organizer' ? '主催者' : myParticipation.role === 'staff' ? 'スタッフ' : '参加者'} として登録中</span>

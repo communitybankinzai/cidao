@@ -103,8 +103,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             {!user && (
               <>
                 {' '}
+                <strong className="text-slate-800 dark:text-slate-200">閲覧に登録は不要です。</strong>
+                参加の申し込みやイベントの掲載をしたい方は{' '}
                 <Link href="/login" className="underline hover:text-slate-900 dark:hover:text-slate-100">ログイン</Link>
-                すると、ご自身のイベントを登録できます。
+                してください（LINEでワンタップ・無料）。
               </>
             )}
           </p>
