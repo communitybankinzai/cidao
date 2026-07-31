@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
+import { EventViewTracker } from '@/components/EventViewTracker'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
 export default async function EventDetailPage({
@@ -43,8 +44,17 @@ export default async function EventDetailPage({
   }
   const isFull = event.capacity != null && counts.participant >= event.capacity
 
+  // 閲覧数は主催者・運営にのみ表示する。
+  // 権限がない場合、関数側が0行を返すので viewStats は null のままになる。
+  const viewStats = canEdit
+    ? (await supabase.rpc('event_view_stats', { p_event_id: id }).maybeSingle()).data as
+        | { pv_today: number; vv_today: number; pv_total: number; vv_total: number }
+        | null
+    : null
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+      <EventViewTracker eventId={id} />
       <article className="max-w-3xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500"><Link href="/events" className="hover:underline">← イベント一覧</Link></nav>
 
@@ -138,6 +148,14 @@ export default async function EventDetailPage({
               </>
             )}
           </section>
+        )}
+
+        {viewStats && (
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 text-right leading-relaxed">
+            このページの閲覧　本日 {viewStats.pv_today ?? 0}回 / {viewStats.vv_today ?? 0}人
+            　｜　累計 {viewStats.pv_total ?? 0}回 / {viewStats.vv_total ?? 0}人
+            <span className="block">※ 主催者と運営にのみ表示されます</span>
+          </p>
         )}
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
