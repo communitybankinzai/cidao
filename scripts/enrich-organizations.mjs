@@ -46,7 +46,16 @@ const OPT = {
   reenrich: hasFlag('reenrich'),
   dryRun: hasFlag('dry-run'),
   sleepMs: Number(argValue('sleep') || 1500),
+  // --model claude-sonnet-4-6 でモデル比較試走（既定は Haiku）
+  model: argValue('model') || 'claude-haiku-4-5',
 }
+
+// $/1M tokens（input, output）。コスト概算表示用
+const MODEL_RATES = {
+  'claude-haiku-4-5': [1, 5],
+  'claude-sonnet-4-6': [3, 15],
+}
+const RATES = MODEL_RATES[OPT.model] || [1, 5]
 
 // ---- env / clients --------------------------------------------
 const env = loadEnv()
@@ -187,7 +196,7 @@ async function enrichOne(org) {
   let resp
   try {
     resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: OPT.model,
       max_tokens: 4096,
       system: SYSTEM,
       tools: [WEB_SEARCH_TOOL, SUBMIT_TOOL],
@@ -203,7 +212,7 @@ async function enrichOne(org) {
   const submit = resp.content.find((b) => b.type === 'tool_use' && b.name === 'submit_enrichment')
   const usage = resp.usage
   const cost =
-    ((usage.input_tokens || 0) * 1 + (usage.output_tokens || 0) * 5) / 1_000_000
+    ((usage.input_tokens || 0) * RATES[0] + (usage.output_tokens || 0) * RATES[1]) / 1_000_000
 
   if (!submit) {
     console.error(`  ✗ submit_enrichment が呼ばれなかった (stop_reason=${resp.stop_reason}, tokens in/out=${usage.input_tokens}/${usage.output_tokens}, $${cost.toFixed(4)})`)
@@ -285,7 +294,7 @@ async function writeBack(org, ext) {
   // メタデータは常に更新
   set('enriched_at', new Date().toISOString())
   set('enrichment_source', JSON.stringify({
-    model: 'claude-haiku-4-5',
+    model: OPT.model,
     fetched_at: new Date().toISOString(),
     sources: ext.sources || [],
     notes: ext.notes || null,
@@ -332,6 +341,16 @@ for (const [i, org] of orgs.entries()) {
       console.log(`    💾 DB更新`)
     } catch (e) {
       console.error(`    ✗ DB更新失敗: ${e.message}`)
+    }
+  } else {
+    // DRY-RUN でもハルシネート検証はする（捏造率比較用）。website_url / sns / sources 全URLを実 fetch
+    const urls = []
+    if (d.website_url) urls.push(['website_url', d.website_url])
+    for (const [k, v] of Object.entries(d.sns_links || {})) if (v) urls.push([`sns.${k}`, v])
+    for (const s of d.sources || []) if (s?.url) urls.push(['source', s.url])
+    for (const [label, u] of urls) {
+      const v = await isUrlAlive(u)
+      console.log(`    🔎 ${v.alive ? '✅' : `❌ ${v.reason}`} [${label}] ${u}`)
     }
   }
 
