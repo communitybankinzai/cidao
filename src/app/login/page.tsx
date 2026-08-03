@@ -9,14 +9,43 @@ import { Button } from '@/components/ui/button'
 // プロバイダIDはSupabaseダッシュボードの Custom Providers に登録した値と一致させること。
 const LINE_PROVIDER = 'custom:line'
 
+// 利用規約（参加のお約束）のバージョン。規約を改定したらこの日付を上げると、
+// 全員に再同意（チェック）を求める。同意済みかは localStorage に端末ごとに記憶する。
+const TERMS_VERSION = '2026-08-04'
+const TERMS_AGREED_KEY = 'cidao_terms_agreed'
+
 export default function LoginPage() {
   const [status, setStatus] = useState<'idle' | 'redirecting' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
   const [notice, setNotice] = useState<string | null>(null)
   const [inAppBrowser, setInAppBrowser] = useState(false)
-  // 利用規約（参加のお約束）への同意。チェックするまでログインボタンを押せない
+  // 利用規約（参加のお約束）への同意。チェックするまでログインボタンを押せない。
+  // 一度同意した端末では localStorage を見てチェック済みで初期表示する
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(TERMS_AGREED_KEY) === TERMS_VERSION) {
+        setAgreedToTerms(true)
+      }
+    } catch {
+      // プライベートモード等で localStorage が使えない場合は未チェックのまま
+    }
+  }, [])
+
+  function handleTermsChange(checked: boolean) {
+    setAgreedToTerms(checked)
+    try {
+      if (checked) {
+        localStorage.setItem(TERMS_AGREED_KEY, TERMS_VERSION)
+      } else {
+        localStorage.removeItem(TERMS_AGREED_KEY)
+      }
+    } catch {
+      // 保存できなくてもチェック自体は有効
+    }
+  }
 
   // LINEアプリ内蔵ブラウザ（WebView）は、OAuth往復でストレージが分離されることがあり
   // 「PKCE code verifier not found」エラーの主な原因になる。事前に検出して案内する。
@@ -131,7 +160,7 @@ export default function LoginPage() {
             <input
               type="checkbox"
               checked={agreedToTerms}
-              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              onChange={(e) => handleTermsChange(e.target.checked)}
               className="mt-0.5 accent-[#06C755]"
             />
             <span>
