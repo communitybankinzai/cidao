@@ -206,6 +206,13 @@ export async function extendVoting(
     return { ok: false, error: '日付の形式が不正です' }
   }
 
+  // 通知文言（再開/延長）の判定用に、実行前の状態とタイトルを取得しておく
+  const { data: before } = await supabase
+    .from('proposals')
+    .select('title, status')
+    .eq('id', proposalId)
+    .single()
+
   const { data, error } = await supabase.rpc('extend_voting', {
     p_proposal_id: proposalId,
     p_new_end: newEnd,
@@ -222,6 +229,23 @@ export async function extendVoting(
   if (typeof data === 'string' && data !== 'extended') {
     return { ok: false, error: MSG[data] ?? `延長できませんでした（${data}）` }
   }
+
+  // 全メンバーへ再開/延長を通知（ベル＋Webプッシュ）。運営操作なので実行者本人は除外
+  const wasReopen = before?.status === 'closed'
+  const title = before?.title ?? ''
+  const [, m, d] = newEnd.split('-')
+  const endLabel = `${Number(m)}月${Number(d)}日 23:59`
+  after(async () => {
+    await notifyAllMembers({
+      kind: 'proposal',
+      actorId: user.id,
+      title: wasReopen
+        ? `提案「${title}」の投票が再開されました`
+        : `提案「${title}」の投票締切が延長されました`,
+      body: `新しい締切は ${endLabel} です。まだの方はぜひご参加ください`,
+      linkUrl: `/proposals/${proposalId}`,
+    })
+  })
 
   revalidatePath(`/proposals/${proposalId}`)
   revalidatePath('/proposals')
