@@ -72,8 +72,12 @@ export default async function NewProposalPage() {
 
         <details className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
           <summary className="cursor-pointer select-none p-4 font-medium text-amber-900 dark:text-amber-200 hover:opacity-80">
-            こんな内容は市の窓口が近道です（開いて確認）
+            市の制度との使い分け（開いて確認）
           </summary>
+          <p className="px-4 pb-3 text-amber-800 dark:text-amber-300">
+            CiDAO は、まず気軽に声を出して、みんなの反応を見る場です。
+            いっぽう、次のような内容は市の窓口に直接届けるほうが早く確実です。
+          </p>
           <ul className="space-y-2 px-4 pb-4">
             <li>
               <p className="text-amber-800 dark:text-amber-300">
