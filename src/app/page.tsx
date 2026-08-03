@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { summarize } from '@/lib/contribution-summary'
 import { getCivicGroupCount } from '@/lib/org-count'
+import { PushNudge } from '@/components/PushNudge'
 import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
 
 const SITE_URL = 'https://cidao.vercel.app'
@@ -209,6 +210,9 @@ export default async function Home() {
             )}
           </section>
         )}
+
+        {/* プッシュ通知の購読案内（ログイン済み・未購読の人だけに表示） */}
+        {member && <PushNudge />}
 
         {/* 次の一歩ガイド（ログイン済み・PR未作成の人向け） */}
         {member && !hasPr && (
