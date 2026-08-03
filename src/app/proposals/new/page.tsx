@@ -70,22 +70,31 @@ export default async function NewProposalPage() {
           </p>
         </header>
 
-        <div className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-1">
-          <p className="font-medium text-amber-900 dark:text-amber-200">修繕の依頼は市の窓口へ</p>
-          <p className="text-amber-800 dark:text-amber-300">
-            道路の損傷・公園施設の破損・照明の不点灯など、市が修繕対応する案件は、投票を待たずに
-            印西市の市民協働投稿サービス「I（アイ）レポ」から直接報告できます。
-          </p>
-          <p>
-            <a
-              href="https://www.city.inzai.lg.jp/0000014728.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-amber-900 dark:text-amber-200 underline underline-offset-2 hover:opacity-80"
-            >
-              印西市「Iレポ」の案内ページを開く ↗
-            </a>
-          </p>
+        <div className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-3">
+          <p className="font-medium text-amber-900 dark:text-amber-200">こんな内容は市の窓口が近道です</p>
+          <ul className="space-y-2">
+            <li>
+              <p className="text-amber-800 dark:text-amber-300">
+                <span className="font-medium">道路の損傷・公園施設の破損・照明の不点灯などの修繕</span>
+                — 投票を待たずに、市民協働投稿サービス「I（アイ）レポ」から市へ直接報告できます。
+              </p>
+              <CityLink href="https://www.city.inzai.lg.jp/0000014728.html">印西市「Iレポ」の案内ページを開く ↗</CityLink>
+            </li>
+            <li>
+              <p className="text-amber-800 dark:text-amber-300">
+                <span className="font-medium">市の計画・条例案への意見</span>
+                — 市が募集期間を設けて意見を受け付けるパブリックコメント（市民意見公募）は、市が必ず受け付ける公式ルートです。
+              </p>
+              <CityLink href="https://www.city.inzai.lg.jp/category/2-14-0-0-0.html">印西市「市民参加」ページを開く ↗</CityLink>
+            </li>
+            <li>
+              <p className="text-amber-800 dark:text-amber-300">
+                <span className="font-medium">市民活動・協働事業の相談</span>
+                — 市民部市民活動推進課活動支援係（電話 0476-33-4431）が窓口です。
+              </p>
+              <CityLink href="https://www.city.inzai.lg.jp/soshiki/5-1-1-0-0_2.html">活動支援係のページを開く ↗</CityLink>
+            </li>
+          </ul>
         </div>
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
@@ -215,6 +224,19 @@ export default async function NewProposalPage() {
         </div>
       </form>
     </div>
+  )
+}
+
+function CityLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-amber-900 dark:text-amber-200 underline underline-offset-2 hover:opacity-80"
+    >
+      {children}
+    </a>
   )
 }
 
