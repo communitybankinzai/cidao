@@ -7,6 +7,7 @@ import { VoteSection } from './_components/VoteSection'
 import { CommentSection } from './_components/CommentSection'
 import { LiveLayerBars } from './_components/LiveLayerBars'
 import { SupporterList, type Supporter } from './_components/SupporterList'
+import { ExtendVotingForm } from './_components/ExtendVotingForm'
 
 const STATUS_LABEL: Record<string, string> = {
   discussion: '議論中',
@@ -192,6 +193,17 @@ export default async function ProposalDetailPage({
           <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm">
             投票期間中（残り {Math.floor(remainingVotingMin / 1440)}日 {Math.floor((remainingVotingMin % 1440) / 60)}時間）
           </div>
+        )}
+
+        {/* 運営（管理者）向け：投票締切の延長／諮問の再開 */}
+        {myIsAdmin &&
+          (proposal.status === 'voting' ||
+            (proposal.status === 'closed' && proposal.binding_type === 'external')) && (
+          <ExtendVotingForm
+            proposalId={id}
+            isReopen={proposal.status === 'closed'}
+            minDate={new Date(now + 24 * 3600 * 1000).toISOString().slice(0, 10)}
+          />
         )}
 
         {/* 本文 */}

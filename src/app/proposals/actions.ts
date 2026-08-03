@@ -190,6 +190,44 @@ export async function retractVote(
   return { ok: true }
 }
 
+/**
+ * 運営（管理者）による投票締切の延長。
+ * 諮問で集計済（closed）の提案は投票中に戻して再開する。
+ * 権限チェック・状態チェックは DB 関数 extend_voting（SECURITY DEFINER）側で行う。
+ */
+export async function extendVoting(
+  proposalId: string,
+  newEnd: string  // YYYY-MM-DD（この日の 23:59 JST が新しい締切）
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: '未ログインです' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newEnd)) {
+    return { ok: false, error: '日付の形式が不正です' }
+  }
+
+  const { data, error } = await supabase.rpc('extend_voting', {
+    p_proposal_id: proposalId,
+    p_new_end: newEnd,
+  })
+  if (error) return { ok: false, error: `延長に失敗しました: ${error.message}` }
+
+  const MSG: Record<string, string> = {
+    'error:not_admin':      '管理者権限がありません',
+    'error:not_found':      '提案が見つかりません',
+    'error:not_extendable': 'この提案は延長できません（可決・否決済み、または議論中）',
+    'error:past_date':      '過去の日付には設定できません',
+    'error:not_later':      '現在の締切より後の日付を指定してください',
+  }
+  if (typeof data === 'string' && data !== 'extended') {
+    return { ok: false, error: MSG[data] ?? `延長できませんでした（${data}）` }
+  }
+
+  revalidatePath(`/proposals/${proposalId}`)
+  revalidatePath('/proposals')
+  return { ok: true }
+}
+
 export async function finalizeVotingIfDue(proposalId: string) {
   const supabase = await createClient()
   // SECURITY DEFINER pg 関数を呼び出し
