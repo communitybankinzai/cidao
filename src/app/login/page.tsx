@@ -15,6 +15,8 @@ export default function LoginPage() {
 
   const [notice, setNotice] = useState<string | null>(null)
   const [inAppBrowser, setInAppBrowser] = useState(false)
+  // 利用規約（参加のお約束）への同意。チェックするまでログインボタンを押せない
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
 
   // LINEアプリ内蔵ブラウザ（WebView）は、OAuth往復でストレージが分離されることがあり
   // 「PKCE code verifier not found」エラーの主な原因になる。事前に検出して案内する。
@@ -125,14 +127,38 @@ export default function LoginPage() {
               <p className="text-xs text-emerald-900 dark:text-emerald-100">{notice}</p>
             </div>
           )}
+          <label className="flex items-start justify-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className="mt-0.5 accent-[#06C755]"
+            />
+            <span>
+              <a
+                href="https://communitybankinzai.github.io/cbi-site/terms/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-slate-900 dark:hover:text-slate-100"
+              >
+                参加のお約束（利用規約）
+              </a>
+              {' '}に同意します
+            </span>
+          </label>
           <Button
             type="button"
             onClick={handleLineLogin}
-            disabled={status === 'redirecting'}
+            disabled={status === 'redirecting' || !agreedToTerms}
             className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white"
           >
             {status === 'redirecting' ? 'LINEへ移動中…' : 'LINEでログイン'}
           </Button>
+          {!agreedToTerms && (
+            <p className="text-[11px] text-slate-400 text-center">
+              上の「参加のお約束」に同意いただくとログインできます
+            </p>
+          )}
           <p className="text-[11px] text-slate-500 text-center">
             無料・パスワード不要。初めての方は自動でアカウントが作られます
           </p>
