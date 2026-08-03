@@ -70,9 +70,11 @@ export default async function NewProposalPage() {
           </p>
         </header>
 
-        <div className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-3">
-          <p className="font-medium text-amber-900 dark:text-amber-200">こんな内容は市の窓口が近道です</p>
-          <ul className="space-y-2">
+        <details className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
+          <summary className="cursor-pointer select-none p-4 font-medium text-amber-900 dark:text-amber-200 hover:opacity-80">
+            こんな内容は市の窓口が近道です（開いて確認）
+          </summary>
+          <ul className="space-y-2 px-4 pb-4">
             <li>
               <p className="text-amber-800 dark:text-amber-300">
                 <span className="font-medium">道路の損傷・公園施設の破損・照明の不点灯などの修繕</span>
@@ -95,7 +97,7 @@ export default async function NewProposalPage() {
               <CityLink href="https://www.city.inzai.lg.jp/soshiki/5-1-1-0-0_2.html">活動支援係のページを開く ↗</CityLink>
             </li>
           </ul>
-        </div>
+        </details>
 
         <div className="space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
           <Field label="タイトル（60字以内）" required>
