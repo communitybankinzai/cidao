@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
 import SnsDraftEditor from './_components/SnsDraftEditor'
+import AutoPostToggle from './_components/AutoPostToggle'
 
 type NextTarget = {
   target_type: 'freefree' | 'event' | 'org'
@@ -15,12 +16,15 @@ const TARGET_LABEL: Record<string, string> = {
   freefree: '🛍 FreeFree',
   event:    '📅 イベント',
   org:      '👥 団体',
+  proposal: '📮 提案',
 }
 
 const MEDIUM_LABEL: Record<string, string> = {
-  x:        '𝕏',
-  facebook: '📘 FB',
-  line:     '💬 LINE',
+  x:         '𝕏',
+  facebook:  '📘 FB',
+  line:      '💬 LINE',
+  threads:   '🧵 Threads',
+  instagram: '📷 IG',
 }
 
 export default async function AdminSnsPage() {
@@ -33,6 +37,14 @@ export default async function AdminSnsPage() {
 
   // 次に紹介される 7 件
   const { data: nextTargets } = await supabase.rpc('pick_next_sns_targets', { per_kind: 7 })
+
+  // 提案告知の全自動フラグ
+  const { data: autoSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'sns_auto_post')
+    .maybeSingle()
+  const autoPostEnabled = (autoSetting?.value as { enabled?: boolean } | null)?.enabled === true
 
   // 過去30日の投稿ログ
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
@@ -52,7 +64,7 @@ export default async function AdminSnsPage() {
   const pending = logs?.filter((l) => l.status === 'pending').length ?? 0
 
   // ターゲット情報を一括取得（タイトル表示用）
-  const idSetByType: Record<string, Set<string>> = { freefree: new Set(), event: new Set(), org: new Set() }
+  const idSetByType: Record<string, Set<string>> = { freefree: new Set(), event: new Set(), org: new Set(), proposal: new Set() }
   ;(nextTargets ?? []).forEach((t: NextTarget) => idSetByType[t.target_type]?.add(t.target_id))
   ;(logs ?? []).forEach((l) => idSetByType[l.target_type]?.add(l.target_id))
 
@@ -69,6 +81,10 @@ export default async function AdminSnsPage() {
     const { data } = await supabase.from('organizations').select('id, name').in('id', Array.from(idSetByType.org))
     ;(data ?? []).forEach((r) => titles.set(`org:${r.id}`, r.name))
   }
+  if (idSetByType.proposal.size > 0) {
+    const { data } = await supabase.from('proposals').select('id, title').in('id', Array.from(idSetByType.proposal))
+    ;(data ?? []).forEach((r) => titles.set(`proposal:${r.id}`, r.title))
+  }
 
   function titleOf(type: string, id: string): string {
     return titles.get(`${type}:${id}`) ?? `(${id.slice(0, 8)}…)`
@@ -80,11 +96,14 @@ export default async function AdminSnsPage() {
         <nav className="text-xs text-slate-500"><Link href="/admin" className="hover:underline">← 管理画面</Link></nav>
         <header>
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin / SNS</p>
-          <h1 className="text-3xl font-serif font-bold">SNS 定期紹介</h1>
+          <h1 className="text-3xl font-serif font-bold">SNS 定期紹介・提案告知</h1>
           <p className="text-sm text-slate-500 mt-1">
-            FreeFree・イベント・団体を X / Facebook / LINE にローテーション投稿。毎日 JST 9時に 1サイクル自動実行。
+            FreeFree・イベント・団体を X / Facebook / LINE にローテーション投稿（毎日 JST 9時）。
+            CiDAO の新しい提案は Threads / Facebook / Instagram へ告知（作成時に下書き自動生成）。
           </p>
         </header>
+
+        <AutoPostToggle initialEnabled={autoPostEnabled} />
 
         <SnsActions />
 
@@ -169,6 +188,8 @@ export default async function AdminSnsPage() {
           <div className="font-medium text-slate-700 dark:text-slate-300">💡 認証情報の状態</div>
           <div>📘 Facebook: <code>FACEBOOK_PAGE_ID</code> + <code>FACEBOOK_PAGE_ACCESS_TOKEN</code> 環境変数で接続。未設定なら pending のまま。</div>
           <div>💬 LINE: <code>LINE_CHANNEL_ACCESS_TOKEN</code> 環境変数で接続（Messaging API broadcast）。未設定なら pending のまま。</div>
+          <div>🧵 Threads: <code>THREADS_USER_ID</code> + <code>THREADS_ACCESS_TOKEN</code> 環境変数で接続。未設定なら pending のまま。</div>
+          <div>📷 Instagram: 画像必須のため未接続（告知画像の生成整備後に接続予定）。現状は常に pending 扱い。</div>
           <div>𝕏 X: API 有料化のため Phase 2 で接続予定。現状は常に pending 扱い。</div>
         </section>
       </div>

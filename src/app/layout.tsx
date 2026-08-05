@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'),
   title: 'CiDAO - 市民DAO',
   description: '印西市民による提案・投票・貢献度プラットフォーム',
   applicationName: 'CiDAO',

@@ -8,11 +8,11 @@ const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 const BOARD_URL = `${SITE_BASE}/freefree`
 
 export type SnsTarget = {
-  target_type: 'freefree' | 'event' | 'org'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal'
   target_id: string
   // 以下は呼び出し側で DB から取得した上で渡す
   title: string
-  body?: string | null      // freefree.body / event.description / org.description
+  body?: string | null      // freefree.body / event.description / org.description / proposal.body
   category?: string | null
   location?: string | null
   organizer_name?: string | null
@@ -21,17 +21,25 @@ export type SnsTarget = {
   // 個人・個人事業の掲載者名は掲示板の詳細ページでも公開していないため、
   // SNS で新たに氏名を露出させないよう、ここには入れない（null のまま）。
   poster_name?: string | null
+  // proposal 用。議論・投票の締切（表示用）
+  deadline?: string | null
 }
+
+export type SnsMedium = 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
 
 const FREEFREE_HASHTAGS = ['#印西市', '#FreeFree', '#印西応援']
 const EVENT_HASHTAGS = ['#印西市', '#イベント情報']
 const ORG_HASHTAGS = ['#印西市', '#市民活動']
+const PROPOSAL_HASHTAGS = ['#印西市', '#CiDAO']
 
-function url(target: SnsTarget): string {
+function url(target: SnsTarget, medium?: SnsMedium): string {
   switch (target.target_type) {
     case 'freefree': return `${SITE_BASE}/freefree/${target.target_id}`
     case 'event':    return `${SITE_BASE}/events/${target.target_id}`
     case 'org':      return `${SITE_BASE}/orgs/${target.target_id}`
+    case 'proposal':
+      // 提案告知は SNS からの流入を媒体別に測りたいので UTM を付ける
+      return `${SITE_BASE}/proposals/${target.target_id}?utm_source=${medium ?? 'sns'}&utm_medium=social&utm_campaign=proposal_announce`
   }
 }
 
@@ -63,8 +71,8 @@ function freefreePrefix(category?: string | null): string {
   }
 }
 
-export function generateSnsContent(target: SnsTarget, medium: 'x' | 'facebook' | 'line'): string {
-  const link = url(target)
+export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string {
+  const link = url(target, medium)
   let prefix = ''
   let body = ''
   let hashtags: string[] = []
@@ -91,6 +99,15 @@ export function generateSnsContent(target: SnsTarget, medium: 'x' | 'facebook' |
       hashtags = ORG_HASHTAGS
       break
     }
+    case 'proposal': {
+      prefix = '【CiDAOに新しい提案📮】'
+      const until = target.deadline
+        ? `\n意見募集は ${new Date(target.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} まで。`
+        : ''
+      body = `${target.title}\n${truncate(target.body ?? '', 120)}${until}`
+      hashtags = PROPOSAL_HASHTAGS
+      break
+    }
   }
 
   const tagLine = hashtags.join(' ')
@@ -110,9 +127,13 @@ export function generateSnsContent(target: SnsTarget, medium: 'x' | 'facebook' |
     return compact
   }
 
-  // Facebook / LINE は字数に余裕があるため、掲示板そのものへの導線も添える
+  // Facebook / LINE / Threads / Instagram は字数に余裕があるため、導線も添える
+  // （Threads は500字・Instagram キャプションは2200字まで。下記は十分収まる）
   if (target.target_type === 'freefree') {
     return `${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${BOARD_URL}\n${tagLine}`
+  }
+  if (target.target_type === 'proposal') {
+    return `${prefix}\n${body}\n\n▶ 提案の全文と議論はこちら\n${link}\n\n意見・投票への参加には CiDAO（印西の市民DAO）への登録が必要です。登録は無料です。\n${tagLine}`
   }
   return `${prefix}\n${body}\n\n▶ ${link}\n${tagLine}`
 }

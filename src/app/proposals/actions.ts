@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { bindingMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { nameWithSan } from '@/lib/honorific'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
+import { announceProposalToSns } from '@/lib/sns-announce'
 
 type CreateInput = {
   title: string
@@ -74,6 +75,14 @@ export async function createProposal(input: CreateInput) {
       title: `新しい提案「${input.title}」が投稿されました`,
       body: '議論期間中です。コメントで意見を寄せられます',
       linkUrl: `/proposals/${data.id}`,
+    })
+    // SNS 告知の下書き作成（半自動：承認待ち＋管理者へ通知／全自動：即配信）。
+    // best-effort：失敗しても提案作成には影響させない
+    await announceProposalToSns({
+      id: data.id,
+      title: input.title,
+      body: input.body,
+      category: input.category,
     })
   })
 

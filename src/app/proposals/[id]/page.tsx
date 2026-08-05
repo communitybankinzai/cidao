@@ -18,6 +18,35 @@ const STATUS_LABEL: Record<string, string> = {
   draft:      '下書き',
 }
 
+// SNS でリンクを貼ったときにタイトルと概要のカードが出るようにする
+// （提案告知の SNS 投稿からの流入導線。OG 画像は未整備）
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data: proposal } = await supabase
+    .from('proposals')
+    .select('title, body, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (!proposal) return { title: 'CiDAO - 市民DAO' }
+
+  const description = `${String(proposal.body).slice(0, 90)}… — 印西の市民DAO「CiDAO」の提案です。登録すると意見・投票で参加できます。`
+  return {
+    title: `${proposal.title} | CiDAO 提案`,
+    description,
+    openGraph: {
+      title: `【${STATUS_LABEL[String(proposal.status)] ?? '提案'}】${proposal.title}`,
+      description,
+      siteName: 'CiDAO - 市民DAO',
+      type: 'article',
+    },
+  }
+}
+
 export default async function ProposalDetailPage({
   params,
 }: {

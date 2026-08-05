@@ -2,20 +2,19 @@
 // sns_post_logs のうち「未送信かつ運営承認済み」の行を読み、各媒体 API を呼んで実投稿する。
 // 本文は管理画面（/admin/sns）で確認・承認されたものをそのまま送る。
 // 認証情報が未設定の媒体は pending のまま error_message='credentials missing' にする。
-//
-// 環境変数:
-//   FACEBOOK_PAGE_ID + FACEBOOK_PAGE_ACCESS_TOKEN
-//   LINE_CHANNEL_ACCESS_TOKEN (Messaging API)
-//   X_BEARER_TOKEN (※ X API 有料化のため Phase 2 で接続予定)
+// 実際の投稿処理は src/lib/sns-dispatch.ts に共通化してある
+// （提案作成時の全自動配信と同じコードパスを通す）。
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { dispatchLogs } from '@/lib/sns-dispatch'
+import type { SnsMedium } from '@/lib/sns-template'
 
 type Log = {
   id: string
-  target_type: 'freefree' | 'event' | 'org'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal'
   target_id: string
-  medium: 'x' | 'facebook' | 'line'
+  medium: SnsMedium
   status: 'success' | 'failed' | 'pending'
   content: string | null
 }
@@ -46,89 +45,6 @@ export async function POST(request: Request) {
     .limit(maxLogs)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const results: Array<{ id: string; medium: string; outcome: string; message?: string }> = []
-
-  for (const log of (pendings ?? []) as Log[]) {
-    // 承認済みの本文をそのまま送る。承認した文面と実際に飛ぶ文面がずれないよう、
-    // ここでテンプレートから作り直すことはしない。
-    const content = (log.content ?? '').trim()
-    if (!content) {
-      await markLog(supabase, log.id, 'failed', 'approved but content is empty')
-      results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: 'content empty' })
-      continue
-    }
-
-    try {
-      const out = await postToMedium(log.medium, content)
-      await markLog(supabase, log.id, out.status, out.message, out.posted_id)
-      results.push({ id: log.id, medium: log.medium, outcome: out.status, message: out.message })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      await markLog(supabase, log.id, 'failed', msg)
-      results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: msg })
-    }
-  }
-
+  const results = await dispatchLogs(supabase, (pendings ?? []) as Log[])
   return NextResponse.json({ processed: results.length, results })
-}
-
-type AnySupabase = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
-
-// 紹介対象の取得と本文の組み立ては下書き生成側（src/lib/sns-target.ts と
-// /admin/sns）に移した。ここでは承認済みの本文をそのまま送るだけ。
-
-async function markLog(
-  supabase: AnySupabase,
-  id: string,
-  status: 'success' | 'failed' | 'pending',
-  message?: string,
-  posted_id?: string,
-) {
-  const payload: Record<string, unknown> = {
-    status,
-    error_message: status === 'success' ? null : (message ?? null),
-  }
-  if (status === 'success') {
-    payload.posted_at = new Date().toISOString()
-    if (posted_id) payload.posted_id = posted_id
-  }
-  await supabase.from('sns_post_logs').update(payload).eq('id', id)
-}
-
-type PostOutcome = { status: 'success' | 'failed' | 'pending'; message?: string; posted_id?: string }
-
-async function postToMedium(medium: 'x' | 'facebook' | 'line', content: string): Promise<PostOutcome> {
-  if (medium === 'facebook') {
-    const pageId = process.env.FACEBOOK_PAGE_ID
-    const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN
-    if (!pageId || !token) return { status: 'pending', message: 'credentials missing: FACEBOOK_PAGE_ID / FACEBOOK_PAGE_ACCESS_TOKEN' }
-    const r = await fetch(`https://graph.facebook.com/v22.0/${pageId}/feed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ message: content, access_token: token }),
-    })
-    const j = await r.json().catch(() => ({}))
-    if (!r.ok) return { status: 'failed', message: `FB ${r.status}: ${JSON.stringify(j).slice(0, 200)}` }
-    return { status: 'success', posted_id: String(j.id ?? '') }
-  }
-  if (medium === 'line') {
-    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-    if (!token) return { status: 'pending', message: 'credentials missing: LINE_CHANNEL_ACCESS_TOKEN' }
-    // LINE Messaging API broadcast（フォロワー全員に配信）
-    const r = await fetch('https://api.line.me/v2/bot/message/broadcast', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ messages: [{ type: 'text', text: content.slice(0, 5000) }] }),
-    })
-    if (!r.ok) {
-      const t = await r.text()
-      return { status: 'failed', message: `LINE ${r.status}: ${t.slice(0, 200)}` }
-    }
-    return { status: 'success' }
-  }
-  // x: 有料化のため Phase 2、現状は常に pending
-  return { status: 'pending', message: 'X (Twitter) API は有料化により未接続（Phase 2 で接続予定）' }
 }

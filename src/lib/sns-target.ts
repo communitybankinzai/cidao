@@ -10,9 +10,27 @@ type AnySupabase = Awaited<ReturnType<typeof import('@/lib/supabase/server').cre
 
 export async function fetchSnsTarget(
   supabase: AnySupabase,
-  target_type: 'freefree' | 'event' | 'org',
+  target_type: 'freefree' | 'event' | 'org' | 'proposal',
   target_id: string,
 ): Promise<SnsTarget | null> {
+  if (target_type === 'proposal') {
+    const { data } = await supabase
+      .from('proposals')
+      .select('id, title, body, category, status, voting_end_at')
+      .eq('id', target_id)
+      .maybeSingle()
+    // 議論中・投票中のものだけ告知する（取り下げ・終了後は流さない）
+    if (!data || !['discussion', 'voting'].includes(String(data.status))) return null
+    return {
+      target_type, target_id,
+      title: String(data.title),
+      body: data.body as string | null,
+      category: data.category as string | null,
+      deadline: (data.voting_end_at as string | null) ?? null,
+    }
+  }
+
+
   if (target_type === 'freefree') {
     const { data } = await supabase
       .from('freefree_posts')

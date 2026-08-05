@@ -10,9 +10,9 @@ import { fetchSnsTarget } from '@/lib/sns-target'
 
 type LogRow = {
   id: string
-  target_type: 'freefree' | 'event' | 'org'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal'
   target_id: string
-  medium: 'x' | 'facebook' | 'line'
+  medium: 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
 }
 
 async function requireAdmin() {
@@ -87,6 +87,25 @@ export async function unapproveDraft(logId: string) {
     .update({ approved_at: null, approved_by: null })
     .eq('id', logId)
   if (error) throw new Error(`承認の取り消しに失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+}
+
+// 提案告知の全自動モード切替。
+// ON: 提案作成と同時に承認なしで各SNSへ即配信する（A4運営ルールの承認を省略
+//     する運用になるため、切り替えは管理画面から明示的に行う）
+// OFF: 従来どおり承認待ちにして、管理者へ通知だけ飛ばす
+export async function setSnsAutoPost(enabled: boolean) {
+  const { supabase, user } = await requireAdmin()
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({
+      key: 'sns_auto_post',
+      value: { enabled },
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+  if (error) throw new Error(`設定の保存に失敗しました: ${error.message}`)
 
   revalidatePath('/admin/sns')
 }

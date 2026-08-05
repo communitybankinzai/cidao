@@ -165,9 +165,23 @@ export function CommentSection({
           {error && <p className="text-xs text-rose-600">{error}</p>}
         </form>
       ) : (
-        <p className="text-sm text-slate-500 text-center py-4">
-          議論に参加するには <a href={`/login?next=/proposals/${proposalId}`} className="underline">ログイン</a> してください
-        </p>
+        <div className="text-center py-6 px-4 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-3">
+          <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">
+            この提案に意見・質問してみませんか？
+          </p>
+          <p className="text-xs text-slate-500">
+            CiDAO（印西の市民DAO）に登録すると、コメントや投票で提案に参加できます。登録は無料です。
+          </p>
+          <a
+            href={`/login?next=/proposals/${proposalId}`}
+            className="inline-flex items-center justify-center rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-5 py-2 transition-colors"
+          >
+            登録して議論に参加する（無料）
+          </a>
+          <p className="text-xs text-slate-400">
+            登録済みの方も同じボタンからログインできます
+          </p>
+        </div>
       )}
 
       {/* 質問スレッド */}
