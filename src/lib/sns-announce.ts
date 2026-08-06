@@ -90,7 +90,13 @@ export async function announceProposalToSns(
 
     const results = await dispatchLogs(
       supabase,
-      inserted.map((r) => ({ id: r.id as string, medium: r.medium as SnsMedium, content: r.content as string | null })),
+      inserted.map((r) => ({
+        id: r.id as string,
+        medium: r.medium as SnsMedium,
+        content: r.content as string | null,
+        target_type: 'proposal',
+        target_id: proposal.id,
+      })),
     )
     const dispatched = results.filter((r) => r.outcome === 'success').length
     return { created: inserted.length, dispatched, auto }

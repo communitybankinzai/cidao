@@ -128,6 +128,37 @@ export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
   return { username: String(j.username ?? ''), userId: resolvedId }
 }
 
+// Instagram の接続情報を検証して保存する（Instagram Login 方式・graph.instagram.com）
+export async function saveInstagramAuth(tokenInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const token = tokenInput.trim()
+  if (!token) throw new Error('アクセストークンが空です')
+
+  const r = await fetch(`https://graph.instagram.com/v22.0/me?fields=user_id,username&access_token=${encodeURIComponent(token)}`)
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !(j.user_id ?? j.id)) {
+    throw new Error(`Instagram API の検証に失敗しました: ${JSON.stringify(j?.error?.message ?? j).slice(0, 200)}`)
+  }
+
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_instagram_auth',
+    value: {
+      user_id: String(j.user_id ?? j.id),
+      access_token: token,
+      username: String(j.username ?? ''),
+      saved_at: new Date().toISOString(),
+      // 長期トークンは60日有効。自動リフレッシュ cron が更新のたびに延長する
+      expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+  return { username: String(j.username ?? ''), userId: String(j.user_id ?? j.id) }
+}
+
 // Facebook ページの接続情報を検証して保存する
 export async function saveFacebookAuth(pageIdInput: string, tokenInput: string) {
   const { supabase, user } = await requireAdmin()

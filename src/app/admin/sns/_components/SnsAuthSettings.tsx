@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { saveThreadsAuth, saveFacebookAuth } from '../actions'
+import { saveThreadsAuth, saveFacebookAuth, saveInstagramAuth } from '../actions'
 
 // SNS接続設定：運営が取得したトークンを貼り付けて保存する。
 // 保存時にサーバー側で実際に API を叩いて検証するため、貼り間違いはここで弾かれる。
@@ -11,6 +11,7 @@ import { saveThreadsAuth, saveFacebookAuth } from '../actions'
 export type SnsAuthStatus = {
   threads: { username: string; savedAt: string; expiresAt: string | null } | null
   facebook: { pageName: string; savedAt: string } | null
+  instagram: { username: string; savedAt: string; expiresAt: string | null } | null
 }
 
 export default function SnsAuthSettings({ status }: { status: SnsAuthStatus }) {
@@ -24,8 +25,62 @@ export default function SnsAuthSettings({ status }: { status: SnsAuthStatus }) {
         </p>
       </div>
       <ThreadsForm current={status.threads} />
+      <InstagramForm current={status.instagram} />
       <FacebookForm current={status.facebook} />
     </section>
+  )
+}
+
+function InstagramForm({ current }: { current: SnsAuthStatus['instagram'] }) {
+  const [token, setToken] = useState('')
+  const [pending, startTransition] = useTransition()
+  const [message, setMessage] = useState<string | null>(null)
+
+  function submit() {
+    setMessage(null)
+    startTransition(async () => {
+      try {
+        const r = await saveInstagramAuth(token)
+        setMessage(`✓ 保存しました（接続先: @${r.username}）`)
+        setToken('')
+      } catch (e) {
+        setMessage(`❌ ${e instanceof Error ? e.message : String(e)}`)
+      }
+    })
+  }
+
+  return (
+    <div className="border rounded p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm">📷 Instagram</h3>
+        {current ? (
+          <span className="text-xs text-emerald-600 dark:text-emerald-400">
+            ✓ 設定済み（@{current.username} / {new Date(current.savedAt).toLocaleDateString('ja-JP')} 保存
+            {current.expiresAt ? ` / ${new Date(current.expiresAt).toLocaleDateString('ja-JP')} 失効予定` : ''}）
+          </span>
+        ) : (
+          <span className="text-xs text-amber-600 dark:text-amber-400">未設定</span>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        投稿には告知カード画像（提案タイトル入り・自動生成）が使われます。トークンは Threads と同じアプリの
+        「Instagramでメッセージとコンテンツを管理」ユースケースから生成します。
+      </p>
+      <input
+        type="password"
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        placeholder="長期アクセストークン"
+        className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"
+        autoComplete="off"
+      />
+      <div className="flex items-center gap-3">
+        <Button onClick={submit} size="sm" disabled={pending || !token.trim()}>
+          {pending ? '検証中…' : current ? '検証して上書き保存' : '検証して保存'}
+        </Button>
+        {message && <span className="text-xs">{message}</span>}
+      </div>
+    </div>
   )
 }
 

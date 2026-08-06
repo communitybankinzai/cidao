@@ -21,6 +21,7 @@ export type PostOutcome = { status: 'success' | 'failed' | 'pending'; message?: 
 export type SnsCredentials = {
   threads: { user_id: string; access_token: string } | null
   facebook: { page_id: string; access_token: string } | null
+  instagram: { user_id: string; access_token: string } | null
 }
 
 export async function loadSnsCredentials(supabase: MinimalSupabase): Promise<SnsCredentials> {
@@ -29,7 +30,7 @@ export async function loadSnsCredentials(supabase: MinimalSupabase): Promise<Sns
     const { data } = await supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', ['sns_threads_auth', 'sns_facebook_auth'])
+      .in('key', ['sns_threads_auth', 'sns_facebook_auth', 'sns_instagram_auth'])
     rows = data ?? []
   } catch { /* DB が読めなくても env フォールバックで続行 */ }
 
@@ -51,10 +52,21 @@ export async function loadSnsCredentials(supabase: MinimalSupabase): Promise<Sns
         ? { page_id: process.env.FACEBOOK_PAGE_ID, access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN }
         : null
 
-  return { threads, facebook }
+  const ig = byKey.get('sns_instagram_auth') as { user_id?: string; access_token?: string } | undefined
+  const instagram =
+    ig?.user_id && ig?.access_token
+      ? { user_id: String(ig.user_id), access_token: String(ig.access_token) }
+      : null
+
+  return { threads, facebook, instagram }
 }
 
-export async function postToMedium(medium: SnsMedium, content: string, creds?: SnsCredentials): Promise<PostOutcome> {
+export async function postToMedium(
+  medium: SnsMedium,
+  content: string,
+  creds?: SnsCredentials,
+  opts?: { imageUrl?: string },
+): Promise<PostOutcome> {
   if (medium === 'facebook') {
     const pageId = creds?.facebook?.page_id ?? process.env.FACEBOOK_PAGE_ID
     const token = creds?.facebook?.access_token ?? process.env.FACEBOOK_PAGE_ACCESS_TOKEN
@@ -111,9 +123,36 @@ export async function postToMedium(medium: SnsMedium, content: string, creds?: S
   }
 
   if (medium === 'instagram') {
-    // Instagram Content Publishing は画像（JPEG・公開URL）が必須。
-    // 告知カード画像の生成パイプラインを整備してから接続する。
-    return { status: 'pending', message: 'Instagram は画像必須のため未接続（告知画像の生成整備後に接続予定）' }
+    const userId = creds?.instagram?.user_id
+    const token = creds?.instagram?.access_token
+    if (!userId || !token) return { status: 'pending', message: 'credentials missing: 管理画面のSNS接続設定（Instagram）' }
+    // Instagram は画像必須。告知カード画像（/api/og/proposal/[id]）の公開URLを渡す
+    if (!opts?.imageUrl) return { status: 'pending', message: 'Instagram は画像必須のため、この対象は未対応（提案告知のみ対応）' }
+    // 1. コンテナ作成（Instagram 側が image_url を取得しに来る）
+    const create = await fetch(`https://graph.instagram.com/v22.0/${userId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ image_url: opts.imageUrl, caption: content.slice(0, 2200), access_token: token }),
+    })
+    const cj = await create.json().catch(() => ({}))
+    if (!create.ok || !cj.id) return { status: 'failed', message: `IG create ${create.status}: ${JSON.stringify(cj).slice(0, 200)}` }
+    // 2. 処理完了までポーリング（画像は通常すぐ FINISHED になる）
+    for (let i = 0; i < 5; i++) {
+      const st = await fetch(`https://graph.instagram.com/v22.0/${cj.id}?fields=status_code&access_token=${encodeURIComponent(token)}`)
+      const sj = await st.json().catch(() => ({}))
+      if (sj.status_code === 'FINISHED') break
+      if (sj.status_code === 'ERROR') return { status: 'failed', message: `IG container error: ${JSON.stringify(sj).slice(0, 200)}` }
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    // 3. 公開
+    const publish = await fetch(`https://graph.instagram.com/v22.0/${userId}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ creation_id: String(cj.id), access_token: token }),
+    })
+    const pj = await publish.json().catch(() => ({}))
+    if (!publish.ok) return { status: 'failed', message: `IG publish ${publish.status}: ${JSON.stringify(pj).slice(0, 200)}` }
+    return { status: 'success', posted_id: String(pj.id ?? '') }
   }
 
   // x: 有料化のため Phase 2、現状は常に pending
@@ -142,10 +181,15 @@ export async function markLog(
   await supabase.from('sns_post_logs').update(payload).eq('id', id)
 }
 
+const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
+
 type DispatchableLog = {
   id: string
   medium: SnsMedium
   content: string | null
+  // Instagram の画像URL組み立てに使う。省略時は画像なし扱い（Instagram は pending になる）
+  target_type?: string
+  target_id?: string
 }
 
 // 承認済み・未送信のログ行を実際に配信して結果を記録する。
@@ -154,7 +198,7 @@ export async function dispatchLogs(
   logs: DispatchableLog[],
 ): Promise<Array<{ id: string; medium: string; outcome: string; message?: string }>> {
   const results: Array<{ id: string; medium: string; outcome: string; message?: string }> = []
-  const creds = logs.length > 0 ? await loadSnsCredentials(supabase) : { threads: null, facebook: null }
+  const creds = logs.length > 0 ? await loadSnsCredentials(supabase) : { threads: null, facebook: null, instagram: null }
   for (const log of logs) {
     // 承認済みの本文をそのまま送る。承認した文面と実際に飛ぶ文面がずれないよう、
     // ここでテンプレートから作り直すことはしない。
@@ -165,7 +209,12 @@ export async function dispatchLogs(
       continue
     }
     try {
-      const out = await postToMedium(log.medium, content, creds)
+      // 提案の Instagram 投稿には告知カード画像（公開URL・JPEG）を添える
+      const imageUrl =
+        log.medium === 'instagram' && log.target_type === 'proposal' && log.target_id
+          ? `${SITE_BASE}/api/og/proposal/${log.target_id}`
+          : undefined
+      const out = await postToMedium(log.medium, content, creds, { imageUrl })
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
       results.push({ id: log.id, medium: log.medium, outcome: out.status, message: out.message })
     } catch (e) {

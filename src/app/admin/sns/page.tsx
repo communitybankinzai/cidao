@@ -43,18 +43,22 @@ export default async function AdminSnsPage() {
   const { data: settingsRows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_facebook_auth'])
+    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_facebook_auth', 'sns_instagram_auth'])
   const settingOf = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, unknown> | null]))
   const autoPostEnabled = (settingOf.get('sns_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
 
   const thAuth = settingOf.get('sns_threads_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
   const fbAuth = settingOf.get('sns_facebook_auth') as { page_name?: string; saved_at?: string } | undefined
+  const igAuth = settingOf.get('sns_instagram_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
   const authStatus: SnsAuthStatus = {
     threads: thAuth?.saved_at
       ? { username: String(thAuth.username ?? ''), savedAt: String(thAuth.saved_at), expiresAt: thAuth.expires_at ? String(thAuth.expires_at) : null }
       : null,
     facebook: fbAuth?.saved_at
       ? { pageName: String(fbAuth.page_name ?? ''), savedAt: String(fbAuth.saved_at) }
+      : null,
+    instagram: igAuth?.saved_at
+      ? { username: String(igAuth.username ?? ''), savedAt: String(igAuth.saved_at), expiresAt: igAuth.expires_at ? String(igAuth.expires_at) : null }
       : null,
   }
 
@@ -200,9 +204,9 @@ export default async function AdminSnsPage() {
 
         <section className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs text-slate-600 dark:text-slate-400 space-y-1">
           <div className="font-medium text-slate-700 dark:text-slate-300">💡 認証情報の状態</div>
-          <div>🧵 Threads / 📘 Facebook: 上の「SNS接続設定」から保存（環境変数 <code>THREADS_*</code> / <code>FACEBOOK_*</code> はフォールバック）。未設定なら pending のまま。</div>
+          <div>🧵 Threads / 📷 Instagram / 📘 Facebook: 上の「SNS接続設定」から保存（環境変数 <code>THREADS_*</code> / <code>FACEBOOK_*</code> はフォールバック）。未設定なら pending のまま。</div>
           <div>💬 LINE: <code>LINE_CHANNEL_ACCESS_TOKEN</code> 環境変数で接続（Messaging API broadcast）。未設定なら pending のまま。</div>
-          <div>📷 Instagram: 画像必須のため未接続（告知画像の生成整備後に接続予定）。現状は常に pending 扱い。</div>
+          <div>📷 Instagram の投稿は提案告知のみ対応（告知カード画像を自動生成して添付。定期紹介は対象外）。</div>
           <div>𝕏 X: API 有料化のため Phase 2 で接続予定。現状は常に pending 扱い。</div>
         </section>
       </div>
