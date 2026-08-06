@@ -6,11 +6,12 @@ import { regenerateDraft, saveDraft, approveDraft, unapproveDraft } from '../act
 
 export type DraftLog = {
   id: string
-  target_type: 'freefree' | 'event' | 'org'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal'
   target_id: string
-  medium: 'x' | 'facebook' | 'line'
+  medium: 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
   content: string | null
   approved_at: string | null
+  created_at: string
   title: string
   mediumLabel: string
   targetLabel: string

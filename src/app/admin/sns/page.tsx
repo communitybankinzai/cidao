@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
-import SnsDraftEditor from './_components/SnsDraftEditor'
+import AwaitingList from './_components/AwaitingList'
 import AutoPostToggle from './_components/AutoPostToggle'
 import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
 
@@ -132,24 +132,20 @@ export default async function AdminSnsPage() {
             <strong className="font-medium">承認したものだけが実際に配信されます。</strong>
           </p>
           {awaiting.length > 0 ? (
-            <ul className="space-y-3 max-h-[36rem] overflow-y-auto">
-              {awaiting.map((l) => (
-                <SnsDraftEditor
-                  key={l.id}
-                  log={{
-                    id: l.id,
-                    target_type: l.target_type,
-                    target_id: l.target_id,
-                    medium: l.medium,
-                    content: (l.content as string | null) ?? null,
-                    approved_at: (l.approved_at as string | null) ?? null,
-                    title: titleOf(l.target_type, l.target_id),
-                    mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
-                    targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
-                  }}
-                />
-              ))}
-            </ul>
+            <AwaitingList
+              logs={awaiting.map((l) => ({
+                id: l.id,
+                target_type: l.target_type,
+                target_id: l.target_id,
+                medium: l.medium,
+                content: (l.content as string | null) ?? null,
+                approved_at: (l.approved_at as string | null) ?? null,
+                created_at: l.created_at,
+                title: titleOf(l.target_type, l.target_id),
+                mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
+                targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
+              }))}
+            />
           ) : (
             <p className="text-sm text-slate-400 text-center py-4">承認待ちの投稿はありません</p>
           )}
