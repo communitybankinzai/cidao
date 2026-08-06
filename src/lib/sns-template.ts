@@ -133,6 +133,12 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string
     return `${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${BOARD_URL}\n${tagLine}`
   }
   if (target.target_type === 'proposal') {
+    // Instagram はキャプション内のURLがクリックできないため、URL文字列は載せず
+    // プロフィールのリンク＋検索キーワードで誘導する。ハッシュタグもIGの文化に合わせて多めにする。
+    // 前提運用：@communitybankinzai のプロフィールのリンク欄に CiDAO の URL を設定しておくこと
+    if (medium === 'instagram') {
+      return `${prefix}\n${body}\n\nこの提案への意見・投票は、プロフィールのリンクからCiDAOへ。\n検索なら「CiDAO 印西」で。登録は無料です。\n\n#印西市 #印西 #CiDAO #市民参加 #まちづくり`
+    }
     return `${prefix}\n${body}\n\n▶ 提案の全文と議論はこちら\n${link}\n\n意見・投票への参加には CiDAO（印西の市民DAO）への登録が必要です。登録は無料です。\n${tagLine}`
   }
   return `${prefix}\n${body}\n\n▶ ${link}\n${tagLine}`
