@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/cost-alert",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/threads-refresh",
+      "schedule": "30 22 * * 1"
     }
   ]
 }

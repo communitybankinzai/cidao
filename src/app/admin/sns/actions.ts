@@ -91,6 +91,73 @@ export async function unapproveDraft(logId: string) {
   revalidatePath('/admin/sns')
 }
 
+// Threads の接続情報を検証して保存する。
+// トークンは Vercel の環境変数ではなく DB（app_settings）に保管する。
+// 運営が管理画面だけで更新でき、cron の自動リフレッシュも書き戻せるようにするため。
+export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const token = tokenInput.trim()
+  const userId = userIdInput.trim()
+  if (!token) throw new Error('アクセストークンが空です')
+
+  // 保存前に実際に API を叩いて検証する（貼り間違い・失効トークンの事故防止）。
+  // user_id 未入力なら /me から自動取得する
+  const r = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(token)}`)
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !j.id) {
+    throw new Error(`Threads API の検証に失敗しました: ${JSON.stringify(j?.error?.message ?? j).slice(0, 200)}`)
+  }
+  const resolvedId = userId || String(j.id)
+
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_threads_auth',
+    value: {
+      user_id: resolvedId,
+      access_token: token,
+      username: String(j.username ?? ''),
+      saved_at: new Date().toISOString(),
+      // 長期トークンは60日有効。自動リフレッシュ cron が更新のたびに延長する
+      expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+  return { username: String(j.username ?? ''), userId: resolvedId }
+}
+
+// Facebook ページの接続情報を検証して保存する
+export async function saveFacebookAuth(pageIdInput: string, tokenInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const token = tokenInput.trim()
+  const pageId = pageIdInput.trim()
+  if (!pageId || !token) throw new Error('ページIDとアクセストークンの両方を入力してください')
+
+  const r = await fetch(`https://graph.facebook.com/v22.0/${encodeURIComponent(pageId)}?fields=id,name&access_token=${encodeURIComponent(token)}`)
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !j.id) {
+    throw new Error(`Facebook API の検証に失敗しました: ${JSON.stringify(j?.error?.message ?? j).slice(0, 200)}`)
+  }
+
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_facebook_auth',
+    value: {
+      page_id: pageId,
+      access_token: token,
+      page_name: String(j.name ?? ''),
+      saved_at: new Date().toISOString(),
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+  return { pageName: String(j.name ?? '') }
+}
+
 // 提案告知の全自動モード切替。
 // ON: 提案作成と同時に承認なしで各SNSへ即配信する（A4運営ルールの承認を省略
 //     する運用になるため、切り替えは管理画面から明示的に行う）

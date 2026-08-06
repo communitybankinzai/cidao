@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
 import SnsDraftEditor from './_components/SnsDraftEditor'
 import AutoPostToggle from './_components/AutoPostToggle'
+import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
 
 type NextTarget = {
   target_type: 'freefree' | 'event' | 'org'
@@ -38,13 +39,24 @@ export default async function AdminSnsPage() {
   // 次に紹介される 7 件
   const { data: nextTargets } = await supabase.rpc('pick_next_sns_targets', { per_kind: 7 })
 
-  // 提案告知の全自動フラグ
-  const { data: autoSetting } = await supabase
+  // 提案告知の全自動フラグ＋SNS接続状態
+  const { data: settingsRows } = await supabase
     .from('app_settings')
-    .select('value')
-    .eq('key', 'sns_auto_post')
-    .maybeSingle()
-  const autoPostEnabled = (autoSetting?.value as { enabled?: boolean } | null)?.enabled === true
+    .select('key, value')
+    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_facebook_auth'])
+  const settingOf = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, unknown> | null]))
+  const autoPostEnabled = (settingOf.get('sns_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
+
+  const thAuth = settingOf.get('sns_threads_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
+  const fbAuth = settingOf.get('sns_facebook_auth') as { page_name?: string; saved_at?: string } | undefined
+  const authStatus: SnsAuthStatus = {
+    threads: thAuth?.saved_at
+      ? { username: String(thAuth.username ?? ''), savedAt: String(thAuth.saved_at), expiresAt: thAuth.expires_at ? String(thAuth.expires_at) : null }
+      : null,
+    facebook: fbAuth?.saved_at
+      ? { pageName: String(fbAuth.page_name ?? ''), savedAt: String(fbAuth.saved_at) }
+      : null,
+  }
 
   // 過去30日の投稿ログ
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
@@ -104,6 +116,8 @@ export default async function AdminSnsPage() {
         </header>
 
         <AutoPostToggle initialEnabled={autoPostEnabled} />
+
+        <SnsAuthSettings status={authStatus} />
 
         <SnsActions />
 
@@ -186,9 +200,8 @@ export default async function AdminSnsPage() {
 
         <section className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs text-slate-600 dark:text-slate-400 space-y-1">
           <div className="font-medium text-slate-700 dark:text-slate-300">💡 認証情報の状態</div>
-          <div>📘 Facebook: <code>FACEBOOK_PAGE_ID</code> + <code>FACEBOOK_PAGE_ACCESS_TOKEN</code> 環境変数で接続。未設定なら pending のまま。</div>
+          <div>🧵 Threads / 📘 Facebook: 上の「SNS接続設定」から保存（環境変数 <code>THREADS_*</code> / <code>FACEBOOK_*</code> はフォールバック）。未設定なら pending のまま。</div>
           <div>💬 LINE: <code>LINE_CHANNEL_ACCESS_TOKEN</code> 環境変数で接続（Messaging API broadcast）。未設定なら pending のまま。</div>
-          <div>🧵 Threads: <code>THREADS_USER_ID</code> + <code>THREADS_ACCESS_TOKEN</code> 環境変数で接続。未設定なら pending のまま。</div>
           <div>📷 Instagram: 画像必須のため未接続（告知画像の生成整備後に接続予定）。現状は常に pending 扱い。</div>
           <div>𝕏 X: API 有料化のため Phase 2 で接続予定。現状は常に pending 扱い。</div>
         </section>

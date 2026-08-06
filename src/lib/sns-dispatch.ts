@@ -14,11 +14,51 @@ import type { SnsMedium } from '@/lib/sns-template'
 
 export type PostOutcome = { status: 'success' | 'failed' | 'pending'; message?: string; posted_id?: string }
 
-export async function postToMedium(medium: SnsMedium, content: string): Promise<PostOutcome> {
+// 各媒体の認証情報。管理画面から保存した DB（app_settings）の値を優先し、
+// 無ければ環境変数にフォールバックする。DB 保管にしたのは、
+// (1) 運営が Vercel を触らずに管理画面だけでトークンを更新できる
+// (2) Threads の60日失効に対して cron が自動リフレッシュで書き戻せる ため。
+export type SnsCredentials = {
+  threads: { user_id: string; access_token: string } | null
+  facebook: { page_id: string; access_token: string } | null
+}
+
+export async function loadSnsCredentials(supabase: MinimalSupabase): Promise<SnsCredentials> {
+  let rows: Array<{ key: string; value: Record<string, unknown> | null }> = []
+  try {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['sns_threads_auth', 'sns_facebook_auth'])
+    rows = data ?? []
+  } catch { /* DB が読めなくても env フォールバックで続行 */ }
+
+  const byKey = new Map(rows.map((r) => [r.key, r.value]))
+
+  const th = byKey.get('sns_threads_auth') as { user_id?: string; access_token?: string } | undefined
+  const threads =
+    th?.user_id && th?.access_token
+      ? { user_id: String(th.user_id), access_token: String(th.access_token) }
+      : process.env.THREADS_USER_ID && process.env.THREADS_ACCESS_TOKEN
+        ? { user_id: process.env.THREADS_USER_ID, access_token: process.env.THREADS_ACCESS_TOKEN }
+        : null
+
+  const fb = byKey.get('sns_facebook_auth') as { page_id?: string; access_token?: string } | undefined
+  const facebook =
+    fb?.page_id && fb?.access_token
+      ? { page_id: String(fb.page_id), access_token: String(fb.access_token) }
+      : process.env.FACEBOOK_PAGE_ID && process.env.FACEBOOK_PAGE_ACCESS_TOKEN
+        ? { page_id: process.env.FACEBOOK_PAGE_ID, access_token: process.env.FACEBOOK_PAGE_ACCESS_TOKEN }
+        : null
+
+  return { threads, facebook }
+}
+
+export async function postToMedium(medium: SnsMedium, content: string, creds?: SnsCredentials): Promise<PostOutcome> {
   if (medium === 'facebook') {
-    const pageId = process.env.FACEBOOK_PAGE_ID
-    const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN
-    if (!pageId || !token) return { status: 'pending', message: 'credentials missing: FACEBOOK_PAGE_ID / FACEBOOK_PAGE_ACCESS_TOKEN' }
+    const pageId = creds?.facebook?.page_id ?? process.env.FACEBOOK_PAGE_ID
+    const token = creds?.facebook?.access_token ?? process.env.FACEBOOK_PAGE_ACCESS_TOKEN
+    if (!pageId || !token) return { status: 'pending', message: 'credentials missing: 管理画面のSNS接続設定（またはFACEBOOK_PAGE_ID / FACEBOOK_PAGE_ACCESS_TOKEN）' }
     const r = await fetch(`https://graph.facebook.com/v22.0/${pageId}/feed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -49,9 +89,9 @@ export async function postToMedium(medium: SnsMedium, content: string): Promise<
   }
 
   if (medium === 'threads') {
-    const userId = process.env.THREADS_USER_ID
-    const token = process.env.THREADS_ACCESS_TOKEN
-    if (!userId || !token) return { status: 'pending', message: 'credentials missing: THREADS_USER_ID / THREADS_ACCESS_TOKEN' }
+    const userId = creds?.threads?.user_id ?? process.env.THREADS_USER_ID
+    const token = creds?.threads?.access_token ?? process.env.THREADS_ACCESS_TOKEN
+    if (!userId || !token) return { status: 'pending', message: 'credentials missing: 管理画面のSNS接続設定（またはTHREADS_USER_ID / THREADS_ACCESS_TOKEN）' }
     // Threads API は 2 ステップ：コンテナ作成 → publish（テキスト投稿は 500 字まで）
     const create = await fetch(`https://graph.threads.net/v1.0/${userId}/threads`, {
       method: 'POST',
@@ -114,6 +154,7 @@ export async function dispatchLogs(
   logs: DispatchableLog[],
 ): Promise<Array<{ id: string; medium: string; outcome: string; message?: string }>> {
   const results: Array<{ id: string; medium: string; outcome: string; message?: string }> = []
+  const creds = logs.length > 0 ? await loadSnsCredentials(supabase) : { threads: null, facebook: null }
   for (const log of logs) {
     // 承認済みの本文をそのまま送る。承認した文面と実際に飛ぶ文面がずれないよう、
     // ここでテンプレートから作り直すことはしない。
@@ -124,7 +165,7 @@ export async function dispatchLogs(
       continue
     }
     try {
-      const out = await postToMedium(log.medium, content)
+      const out = await postToMedium(log.medium, content, creds)
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
       results.push({ id: log.id, medium: log.medium, outcome: out.status, message: out.message })
     } catch (e) {
