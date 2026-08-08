@@ -156,7 +156,8 @@ export default async function AdminFreefreePage() {
             被害届や捜査関係事項照会に応じる必要が出た場合は、ここから提出用データを取り出せます。
           </p>
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-3 mb-3 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
-            <p>⚠ <strong>IPアドレス・端末情報は現在記録していません。</strong>投稿者の手掛かりは会員IDとLINEアカウント識別子・表示名までです。</p>
+            <p>📌 提出用データには、投稿時のIPアドレス・端末情報（<strong>2026年8月8日以降の書き込みのみ</strong>）と、投稿者本人の直近の書き込み履歴が含まれます。それ以前の投稿にはIPの記録がありません。</p>
+            <p>⚠ 書き込み記録は<strong>90日で自動削除</strong>されます。必要な記録は期限内にダウンロードしてください。一覧は<Link href="/admin/audit" className="underline">書き込み記録</Link>で確認できます。</p>
             <p>⚠ 第三者（警察を含む）への提供は法令に基づく手続きが必要です。運用ルールは法務確認のうえ定めてください。</p>
           </div>
           {recordRows.length > 0 ? (

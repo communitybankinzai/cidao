@@ -13,6 +13,10 @@ import { pathsInBucket } from '@/lib/storage-path'
 const FREEFREE_BUCKET = 'freefree-images'
 const EVIDENCE_BUCKET = 'moderation-evidence'
 
+// 書き込み時のIPアドレス記録を開始した日（利用規約 2026-08-08 改定の施行日）。
+// これより前の投稿には投稿時のIPが存在しないため、提出用データにその旨を明記する。
+const IP_LOGGING_STARTED_AT = '2026-08-08'
+
 type ModerationAction = 'hidden' | 'restored' | 'images_deleted' | 'deleted'
 
 // 掲載内容と投稿者の識別子を凍結し、必要なら画像を非公開バケットへ退避してから記録を残す。
@@ -182,6 +186,39 @@ export async function exportModerationRecord(recordId: string) {
     evidence.push({ path: p, signedUrl: s?.signedUrl ?? null })
   }
 
+  // この掲載そのものに紐づく書き込み記録（投稿時のIP・端末情報）
+  const { data: onTarget } = await supabase
+    .from('audit_logs')
+    .select('action, ip, user_agent, timestamp')
+    .eq('target_id', rec.target_id)
+    .order('timestamp', { ascending: false })
+
+  // 投稿者本人の直近の書き込み履歴。
+  // 掲載自体が記録開始前でも、その後の書き込みがあれば本人の回線を辿れる
+  let byPoster: unknown[] = []
+  if (posterId) {
+    const { data } = await supabase
+      .from('audit_logs')
+      .select('action, target_type, target_id, ip, user_agent, timestamp')
+      .eq('actor_id', posterId)
+      .order('timestamp', { ascending: false })
+      .limit(50)
+    byPoster = data ?? []
+  }
+
+  const postedAt = (rec.snapshot as Record<string, unknown> | null)?.posted_at as string | undefined
+  const ipNotes: string[] = []
+  if ((onTarget ?? []).length === 0) {
+    ipNotes.push(
+      postedAt && new Date(postedAt) < new Date(IP_LOGGING_STARTED_AT)
+        ? `この掲載は書き込み記録の開始（${IP_LOGGING_STARTED_AT}）より前の投稿のため、投稿時のIPアドレスは存在しません。`
+        : '投稿時の書き込み記録が見つかりませんでした（記録は90日で自動削除されます）。',
+    )
+  }
+  if (byPoster.length === 0) {
+    ipNotes.push('この投稿者による書き込み記録は残っていません。')
+  }
+
   return {
     生成日時: new Date().toISOString(),
     記録ID: rec.id,
@@ -192,9 +229,13 @@ export async function exportModerationRecord(recordId: string) {
     掲載: { target_type: rec.target_type, target_id: rec.target_id, ...(rec.snapshot as object) },
     投稿者: { ...(rec.poster as object), email: posterEmail, email_note: emailNote },
     証拠画像: evidence,
+    投稿時の書き込み記録: onTarget ?? [],
+    投稿者の書き込み履歴: byPoster,
+    書き込み記録についての注記: ipNotes,
     注記: [
       '証拠画像のURLは1時間で失効します。保存が必要な場合は期限内にダウンロードしてください。',
-      'IPアドレス・端末情報は現在このシステムでは記録していません。',
+      `書き込み時のIPアドレス・端末情報は ${IP_LOGGING_STARTED_AT} から記録しています。取得から90日を経過した記録は自動削除されます。`,
+      '閲覧のみの利用と投票は記録していません（投票の秘密を守るため）。',
       '第三者への提供は法令に基づく手続きに従ってください（要法務確認）。',
     ],
   }
