@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { freefreeCategoryLabel } from '@/lib/freefree-categories'
 import FreefreeModerationRow, { type ModerationPost } from './_components/FreefreeModerationRow'
+import ModerationRecordRow, { type RecordRow } from './_components/ModerationRecordRow'
 
 // サンプル投稿の目印。seed-freefree.mjs が入れるものはタイトル先頭が [サンプル]
 const SAMPLE_MARK = /^\s*\[?サンプル\]?/
@@ -63,6 +64,35 @@ export default async function AdminFreefreePage() {
   const hidden = rows.filter((r) => r.status === 'removed')
   const samples = visible.filter((r) => r.looksLikeSample)
 
+  // 対応記録（証拠保全）。掲載が削除済みでも残る
+  const { data: records } = await supabase
+    .from('moderation_records')
+    .select('id, action, created_at, reason, snapshot, poster, evidence_paths, actor_id')
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  const actorIds = Array.from(new Set((records ?? []).map((r) => r.actor_id).filter(Boolean) as string[]))
+  const actorNames = new Map<string, string>()
+  if (actorIds.length > 0) {
+    const { data: as } = await supabase.from('members').select('id, display_name').in('id', actorIds)
+    ;(as ?? []).forEach((a) => actorNames.set(a.id, a.display_name))
+  }
+
+  const recordRows: RecordRow[] = (records ?? []).map((r) => {
+    const snap = (r.snapshot ?? {}) as Record<string, unknown>
+    const poster = (r.poster ?? {}) as Record<string, unknown>
+    return {
+      id: r.id,
+      action: r.action,
+      createdAt: r.created_at,
+      reason: r.reason,
+      title: String(snap.title ?? '(タイトル不明)'),
+      posterLabel: String(poster.org_name ?? poster.display_name ?? poster.poster_type ?? '不明'),
+      evidenceCount: ((r.evidence_paths as string[] | null) ?? []).length,
+      actorName: r.actor_id ? (actorNames.get(r.actor_id) ?? null) : null,
+    }
+  })
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -115,6 +145,26 @@ export default async function AdminFreefreePage() {
             </ul>
           ) : (
             <p className="text-sm text-slate-400 text-center py-4">非公開にした掲載はありません</p>
+          )}
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">🗂 対応記録（{recordRows.length} 件）</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            非公開・削除の操作をしたときに、掲載内容と投稿者の識別情報を凍結して残しています。
+            掲載を完全に削除したあとも記録は残り、画像は非公開の保管庫に退避されています。
+            被害届や捜査関係事項照会に応じる必要が出た場合は、ここから提出用データを取り出せます。
+          </p>
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-3 mb-3 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+            <p>⚠ <strong>IPアドレス・端末情報は現在記録していません。</strong>投稿者の手掛かりは会員IDとLINEアカウント識別子・表示名までです。</p>
+            <p>⚠ 第三者（警察を含む）への提供は法令に基づく手続きが必要です。運用ルールは法務確認のうえ定めてください。</p>
+          </div>
+          {recordRows.length > 0 ? (
+            <ul className="space-y-2 max-h-[32rem] overflow-y-auto">
+              {recordRows.map((r) => <ModerationRecordRow key={r.id} record={r} />)}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-4">対応記録はまだありません</p>
           )}
         </section>
       </div>
