@@ -158,6 +158,34 @@ export default function LoginPage() {
               <p className="text-xs text-emerald-900 dark:text-emerald-100">{notice}</p>
             </div>
           )}
+          <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-2">
+            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 text-center">
+              参加のお約束（この3つだけ）
+            </p>
+            <ol className="list-decimal pl-5 space-y-1.5 text-[13px] leading-relaxed text-slate-800 dark:text-slate-200">
+              <li>
+                <strong>他の方を不快にさせないこと。</strong>
+                誹謗中傷・ハラスメントは禁止です
+              </li>
+              <li>
+                <strong>宗教活動・政治活動、しつこい勧誘や強引な販売は禁止です。</strong>
+                これらを目的としたご提案もお断りしています
+              </li>
+              <li>
+                <strong>事務局からのお願いには、真摯にご対応ください</strong>
+              </li>
+            </ol>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center">
+              <a
+                href="https://communitybankinzai.github.io/cbi-site/terms/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                全文（よくある質問・利用規約）を読む ↗
+              </a>
+            </p>
+          </div>
           <label className="flex items-start justify-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
             <input
               type="checkbox"
@@ -165,17 +193,7 @@ export default function LoginPage() {
               onChange={(e) => handleTermsChange(e.target.checked)}
               className="mt-0.5 accent-[#06C755]"
             />
-            <span>
-              <a
-                href="https://communitybankinzai.github.io/cbi-site/terms/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-slate-900 dark:hover:text-slate-100"
-              >
-                参加のお約束（利用規約）
-              </a>
-              {' '}に同意します
-            </span>
+            <span>上記のお約束と利用規約に同意します</span>
           </label>
           <Button
             type="button"
