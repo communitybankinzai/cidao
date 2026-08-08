@@ -8,6 +8,7 @@ import { bindingMeta, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { nameWithSan } from '@/lib/honorific'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { announceProposalToSns } from '@/lib/sns-announce'
+import { recordWrite } from '@/lib/audit'
 
 type CreateInput = {
   title: string
@@ -84,6 +85,16 @@ export async function createProposal(input: CreateInput) {
       body: input.body,
       category: input.category,
     })
+  })
+
+  // redirect() は例外を投げるので、記録はその前に済ませる。
+  // なお投票（castVote）は投票の秘密のため記録しない
+  await recordWrite({
+    actorId: user.id,
+    action: 'proposal.create',
+    targetType: 'proposal',
+    targetId: data.id,
+    detail: { title: input.title, category: input.category },
   })
 
   revalidatePath('/proposals')

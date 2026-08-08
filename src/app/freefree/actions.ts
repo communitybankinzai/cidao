@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { periodToDays, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
 import { notifyAllMembers } from '@/lib/notify'
+import { recordWrite } from '@/lib/audit'
 
 type CouponInput = {
   content: string
@@ -119,6 +120,15 @@ export async function createFreefreePost(input: CreateInput) {
     })
   })
 
+  // redirect() は例外を投げるので、記録はその前に済ませる
+  await recordWrite({
+    actorId: user.id,
+    action: 'freefree.create',
+    targetType: 'freefree',
+    targetId: data.id,
+    detail: { title: input.title, poster_type: dbPosterType },
+  })
+
   revalidatePath('/freefree')
   redirect(`/freefree/${data.id}`)
 }
@@ -147,6 +157,7 @@ export async function likeFreefree(postId: string) {
     post_id: postId, member_id: user.id, kind: 'like',
   })
   if (error && !error.message.includes('duplicate')) throw new Error(`応援失敗: ${error.message}`)
+  await recordWrite({ actorId: user.id, action: 'freefree.like', targetType: 'freefree', targetId: postId })
   revalidatePath(`/freefree/${postId}`)
 }
 
@@ -159,5 +170,12 @@ export async function commentFreefree(postId: string, body: string) {
     post_id: postId, member_id: user.id, kind: 'comment', body: body.trim(),
   })
   if (error) throw new Error(`コメント失敗: ${error.message}`)
+  await recordWrite({
+    actorId: user.id,
+    action: 'freefree.comment',
+    targetType: 'freefree',
+    targetId: postId,
+    detail: { body: body.trim().slice(0, 200) },
+  })
   revalidatePath(`/freefree/${postId}`)
 }

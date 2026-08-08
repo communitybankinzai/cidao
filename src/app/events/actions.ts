@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 import { notifyAllMembers } from '@/lib/notify'
+import { recordWrite } from '@/lib/audit'
 
 type CreateInput = {
   title: string
@@ -159,6 +160,15 @@ export async function createEvent(input: CreateInput) {
     })
   })
 
+  // redirect() は例外を投げるので、記録はその前に済ませる
+  await recordWrite({
+    actorId: user.id,
+    action: 'event.create',
+    targetType: 'event',
+    targetId: data.id,
+    detail: { title: input.title },
+  })
+
   revalidatePath('/events')
   redirect(`/events/${data.id}`)
 }
@@ -228,6 +238,14 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
         .join(' / ') || undefined,
       linkUrl: `/events/${bulkId}`,
     })
+  })
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'event.create',
+    targetType: 'event',
+    targetId: firstId,
+    detail: { title: input.title, occurrences: list.length },
   })
 
   revalidatePath('/events')

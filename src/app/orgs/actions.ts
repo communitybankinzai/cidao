@@ -9,6 +9,7 @@ import { canUserEditOrg } from '@/lib/org-permissions'
 import { nameWithSan } from '@/lib/honorific'
 import { notifyAllMembers } from '@/lib/notify'
 import { TYPE_LABEL } from '@/lib/org-labels'
+import { recordWrite } from '@/lib/audit'
 
 type OrgInput = {
   name: string
@@ -94,6 +95,16 @@ export async function createOrganization(input: OrgInput) {
       })
     })
   }
+
+  // redirect() は例外を投げるので、記録はその前に済ませる
+  await recordWrite({
+    actorId: user.id,
+    action: 'org.create',
+    targetType: 'org',
+    targetId: org.id,
+    detail: { name: input.name, type: input.type },
+    isAdmin: !!isAdmin,
+  })
 
   revalidatePath('/orgs')
   revalidatePath('/admin/claims')

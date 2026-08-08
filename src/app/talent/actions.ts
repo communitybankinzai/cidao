@@ -5,6 +5,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { insertNotification } from '@/lib/notify'
 import { nameWithSan, nameWithSama } from '@/lib/honorific'
+import { recordWrite } from '@/lib/audit'
 
 /**
  * 相手メンバーのメール (auth.users.email) を service_role で解決し、
@@ -172,6 +173,14 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
       .update({ email_sent_at: emailSentAt, email_error: emailError })
       .eq('id', inserted.id)
   }
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'message.send',
+    targetType: 'member',
+    targetId: targetMemberId,
+    detail: { kind: 'talent_inquiry', body: message.trim().slice(0, 200) },
+  })
 
   revalidatePath(`/talent/${targetMemberId}`)
   return {
@@ -486,6 +495,14 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
       .update({ email_sent_at: emailSentAt, email_error: emailError })
       .eq('id', inserted.id)
   }
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'message.send',
+    targetType: 'talent_inquiry',
+    targetId: rootInquiryId,
+    detail: { kind: 'reply', body: message.trim().slice(0, 200) },
+  })
 
   revalidatePath('/me/inbox')
   return {
