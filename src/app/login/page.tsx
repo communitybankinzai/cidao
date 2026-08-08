@@ -124,7 +124,7 @@ export default function LoginPage() {
             ログイン
           </h1>
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-            CiDAO（シダオ）は、地域で「やってみたい」「手伝いたい」人と、協力を求める団体をつなぐ、印西市の無料の市民参加サービスです。
+            CiDAO（シダオ）は、地域で「やってみたい」「手伝いたい」人と、協力を求める団体をつなぐ、印西市の<strong className="text-[#059c43] dark:text-[#06C755] font-bold">無料</strong>の市民参加サービスです。
           </p>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             LINEアカウントでログイン・新規登録ができます
@@ -209,7 +209,7 @@ export default function LoginPage() {
             </p>
           )}
           <p className="text-[11px] text-slate-500 text-center">
-            無料・パスワード不要。初めての方は自動でアカウントが作られます
+            パスワード不要。初めての方は自動でアカウントが作られます
           </p>
 
           <details className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
