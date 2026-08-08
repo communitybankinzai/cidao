@@ -29,13 +29,17 @@ function formatOcc(s: string): string {
 // notice: AI 抽出が使えなかった等のお知らせ（エラー色ではなくグレー地で表示）
 type Status = 'idle' | 'loading' | 'done' | 'notice'
 
-// サーバー（/api/events/scan）が返す reason ごとの市民向けメッセージ。
+// サーバー（/api/events/scan, /api/events/scan-url）が返す reason ごとの市民向けメッセージ。
 // HTTP ステータス番号は表示しない
 const REASON_MESSAGES: Record<string, string> = {
   quota: 'AI抽出が一時的に利用できません。お手数ですが下の項目を手入力でご登録ください。',
   busy: 'AIが混み合っています。数分後に再度お試しいただくか、手入力でご登録ください。',
   too_large: '画像サイズが大きすぎます。5MB以下に縮小してからお試しください。',
   parse: 'チラシの読み取りに失敗しました。お手数ですが手入力でご登録ください。',
+  fetch: 'ページを取得できませんでした。URLをご確認いただくか、手入力でご登録ください。',
+  blocked_url: 'このURLは読み取れません。公開Webページ（http/https）のURLを指定してください。',
+  no_events:
+    'このページからイベント情報を見つけられませんでした。JavaScriptで表示されるページは読み取れないことがあります。お手数ですが手入力でご登録ください。',
   unknown: 'チラシの読み取りに失敗しました。お手数ですが手入力でご登録ください。',
 }
 
@@ -51,6 +55,63 @@ export function ImageScanField({
   const [dragOver, setDragOver] = useState(false)
   const [occurrences, setOccurrences] = useState<Occurrence[]>([])
   const [checkedOcc, setCheckedOcc] = useState<boolean[]>([])
+  const [urlValue, setUrlValue] = useState('')
+  const [candidates, setCandidates] = useState<Extracted[]>([])
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+
+  // 抽出結果1件をフォームへ反映する（画像スキャン・URL スキャン共通）。
+  // 複数日程（occurrences）があれば既存の日程チェック UI に流す
+  function applyCandidate(d: Extracted, prefix: string, suffix: string) {
+    const occ = Array.isArray(d.occurrences) ? d.occurrences : []
+    if (occ.length > 1) {
+      setOccurrences(occ)
+      setCheckedOcc(occ.map(() => true))
+    } else {
+      setOccurrences([])
+      setCheckedOcc([])
+    }
+    const filled = fillForm(d)
+    setStatus('done')
+    const pct = Math.round((d.confidence ?? 0) * 100)
+    setMessage(`${prefix}（自信度 ${pct}%、${filled}項目に反映）。${suffix}内容を確認してから登録してください。`)
+  }
+
+  async function handleUrl() {
+    const u = urlValue.trim()
+    if (!u) return
+    setStatus('loading')
+    setMessage('ページを取得 + AI 読み取り中…')
+    setCandidates([])
+    setSelectedIdx(null)
+    try {
+      const res = await fetch('/api/events/scan-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: u }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        reason?: string
+        events?: Extracted[]
+      }
+      const events = Array.isArray(data.events) ? data.events : []
+      if (!res.ok || data.ok === false || events.length === 0) {
+        setStatus('notice')
+        setMessage(REASON_MESSAGES[data.reason ?? 'unknown'] ?? REASON_MESSAGES.unknown)
+        return
+      }
+      if (events.length === 1) {
+        applyCandidate(events[0], '読み取り完了', '')
+      } else {
+        setCandidates(events)
+        setStatus('done')
+        setMessage(`${events.length}件のイベントを検出しました。下の一覧から反映するイベントを選んでください。`)
+      }
+    } catch {
+      setStatus('notice')
+      setMessage(REASON_MESSAGES.unknown)
+    }
+  }
 
   async function handleFile(file: File) {
     setStatus('loading')
@@ -76,20 +137,7 @@ export function ImageScanField({
         setMessage((REASON_MESSAGES[reason] ?? REASON_MESSAGES.unknown) + attached)
         return
       }
-      const occ = Array.isArray(data.occurrences) ? data.occurrences : []
-      if (occ.length > 1) {
-        setOccurrences(occ)
-        setCheckedOcc(occ.map(() => true))
-      } else {
-        setOccurrences([])
-        setCheckedOcc([])
-      }
-      const filled = fillForm(data)
-      setStatus('done')
-      const pct = Math.round((data.confidence ?? 0) * 100)
-      setMessage(
-        `保存完了（自信度 ${pct}%、${filled}項目に反映）。チラシ画像はイベントに添付されました。内容を確認してから登録してください。`,
-      )
+      applyCandidate(data, '保存完了', 'チラシ画像はイベントに添付されました。')
     } catch {
       // 通信断など。エラー表示ではなくお知らせとして手入力を促す
       setStatus('notice')
@@ -226,6 +274,65 @@ export function ImageScanField({
           </button>
         )}
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="scan-url-input" className="text-sm font-medium flex items-center gap-1">
+          <span aria-hidden>🔗</span>
+          サイトURLから読み取り
+        </label>
+        <input
+          id="scan-url-input"
+          type="url"
+          value={urlValue}
+          onChange={(e) => setUrlValue(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter でイベント登録フォーム自体が送信されるのを防ぎ、読み取りを実行する
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void handleUrl()
+            }
+          }}
+          placeholder="https://…（イベント案内・一覧ページのURL）"
+          className="flex-1 min-w-[220px] rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
+          disabled={status === 'loading'}
+        />
+        <button
+          type="button"
+          onClick={() => void handleUrl()}
+          disabled={status === 'loading' || !urlValue.trim()}
+          className="text-xs py-1 px-2 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 disabled:opacity-50"
+        >
+          読み取る
+        </button>
+      </div>
+      {candidates.length > 1 && (
+        <div className="rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-2 space-y-1">
+          <p className="text-xs font-medium">
+            {candidates.length}件のイベントを検出しました。フォームに反映するイベントを選んでください
+          </p>
+          {candidates.map((c, i) => (
+            <label key={i} className="flex items-start gap-2 text-xs">
+              <input
+                type="radio"
+                checked={selectedIdx === i}
+                onChange={() => {
+                  setSelectedIdx(i)
+                  applyCandidate(c, `「${c.title ?? ''}」を反映しました`, '')
+                }}
+              />
+              <span>
+                <span className="font-medium">{c.title}</span>
+                <span className="text-slate-500">
+                  {c.start_at ? ` ${formatOcc(c.start_at)}` : ''}
+                  {(c.occurrences?.length ?? 0) > 1 ? ` ほか全${c.occurrences?.length}回` : ''}
+                </span>
+              </span>
+            </label>
+          ))}
+          <p className="text-[10px] text-slate-500">
+            1件ずつ反映→内容確認→登録してください。登録するとこの一覧は消えるため、続けて別のイベントを登録する場合はもう一度URLを読み取ってください。
+          </p>
+        </div>
+      )}
       {flyerUrl && (
         <div className="flex items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -277,7 +384,7 @@ export function ImageScanField({
         message && <p className={`text-xs ${statusColor}`}>{message}</p>
       )}
       <p className="text-[10px] text-slate-500">
-        画像から タイトル / 日時 / 場所 / 主催団体名 などを抽出してフォームに反映します。AI
+        チラシ画像またはサイトURLから タイトル / 日時 / 場所 / 主催団体名 などを抽出してフォームに反映します。AI
         の抽出結果には誤りが含まれることがあります。必ず確認・修正してください。
         画像本体は Supabase Storage に保存され、来訪した市民が詳細ページで閲覧できます。
       </p>

@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
+import { classifyScanError, type ScanFailReason } from '@/lib/event-scan'
 
 const MAX_BYTES = 5 * 1024 * 1024
 // Anthropic の画像上限は 5MB。base64 は約1.33倍に膨らむため文字数でも判定する
@@ -18,28 +19,12 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/we
 
 type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
-// quota: クレジット不足・レート制限 / config: キー不正 / busy: 過負荷・タイムアウト
-// too_large: 画像が Anthropic 上限超え / parse: 応答が解釈できない / unknown: その他
-type ScanFailReason = 'quota' | 'config' | 'busy' | 'too_large' | 'parse' | 'unknown'
-
 type ScanResult =
   | { ok: true; data: Record<string, unknown>; usage: unknown }
   | { ok: false; reason: ScanFailReason }
 
 const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] } as const
 const nullableInteger = { anyOf: [{ type: 'integer' }, { type: 'null' }] } as const
-
-function classifyScanError(err: unknown): ScanFailReason {
-  const status = err instanceof Anthropic.APIError ? err.status : undefined
-  const message = err instanceof Error ? err.message : String(err)
-  console.error('[events/scan] AI extraction failed:', status ?? '(no status)', message)
-  if (/credit balance/i.test(message)) return 'quota'
-  if (status === 429) return 'quota'
-  if (status === 401 || status === 403) return 'config'
-  if (status === 529 || status === 503) return 'busy'
-  if (/timeout|timed out|aborted/i.test(message)) return 'busy'
-  return 'unknown'
-}
 
 // 画像を event-flyers バケットに保存（ベストエフォート。失敗しても null を返すだけ）
 async function uploadFlyer(
@@ -167,7 +152,7 @@ async function extractFromFlyer(
       ],
     })
   } catch (err) {
-    return { ok: false, reason: classifyScanError(err) }
+    return { ok: false, reason: classifyScanError(err, 'events/scan') }
   }
 
   if (response.stop_reason === 'refusal') {
