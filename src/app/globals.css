@@ -195,4 +195,24 @@
       animation: none;
     }
   }
+
+  /* ---------- イベントカレンダー：日付タップで出るパネルの出現強調 ----------
+     カレンダーが縦に大きくパネルが画面外になりがちなので、
+     スクロールイン（EventsBrowser.tsx が制御）と合わせて枠を1回フラッシュさせる */
+  .cidao-panel-flash {
+    animation: cidaoPanelFlash 0.9s ease-out;
+  }
+  @keyframes cidaoPanelFlash {
+    0% {
+      box-shadow: 0 0 0 3px oklch(0.83 0.16 80 / 0.9);
+    }
+    100% {
+      box-shadow: 0 0 0 3px oklch(0.83 0.16 80 / 0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cidao-panel-flash {
+      animation: none;
+    }
+  }
 }

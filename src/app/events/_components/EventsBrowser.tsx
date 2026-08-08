@@ -294,6 +294,19 @@ function CalendarView({
   // 日付タップで、その日のイベント一覧をカレンダー直下に表示する。
   // 初期表示は「今日」（イベントがある場合のみパネルが出る）
   const [selected, setSelected] = useState<string>(today)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // カレンダーが縦に大きくパネルが画面外に出るため、タップ結果に気づけるよう
+  // 再レンダー後（rAF = paint 前）にパネルを視界内へスクロールさせる
+  function selectDate(ymd: string) {
+    setSelected(ymd)
+    requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'nearest',
+      })
+    })
+  }
   const selectedItems = byDate.get(selected) ?? []
   const selectedLabel = (() => {
     const [sy, sm, sd] = selected.split('-').map(Number)
@@ -322,7 +335,7 @@ function CalendarView({
           return (
             <div
               key={ymd}
-              onClick={() => setSelected(ymd)}
+              onClick={() => selectDate(ymd)}
               className={`min-h-[92px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${items.length > 0 ? 'cursor-pointer' : ''} ${isSelected ? 'bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-inset ring-amber-300 dark:ring-amber-800' : inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}
             >
               <div className="flex items-center justify-between">
@@ -351,7 +364,7 @@ function CalendarView({
     </div>
 
     {selectedItems.length > 0 && (
-      <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
+      <div key={selected} ref={panelRef} className="cidao-panel-flash scroll-my-4 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
         <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{selectedItems.length}件）</p>
         <ul className="space-y-1.5">
           {selectedItems.map((e) => (
