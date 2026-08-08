@@ -23,7 +23,7 @@ export default async function AdminFreefreePage() {
   // 運営は freefree_select_admin で全ステータスを見られる
   const { data: posts, error: postsError } = await supabase
     .from('freefree_posts')
-    .select('id, title, body, status, category, location, created_at, expires_at, poster_type, poster_id, moderation_note')
+    .select('id, title, body, status, category, location, created_at, expires_at, poster_type, poster_id, moderation_note, images')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -56,6 +56,7 @@ export default async function AdminFreefreePage() {
         : (POSTER_LABEL[p.poster_type] ?? p.poster_type),
     moderationNote: (p.moderation_note as string | null) ?? null,
     looksLikeSample: SAMPLE_MARK.test(p.title),
+    imageCount: ((p.images as string[] | null) ?? []).length,
   }))
 
   const visible = rows.filter((r) => r.status !== 'removed')

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { hideFreefreePost, restoreFreefreePost, deleteFreefreePost } from '../actions'
+import { hideFreefreePost, restoreFreefreePost, deleteFreefreePost, deleteFreefreeImages } from '../actions'
 
 export type ModerationPost = {
   id: string
@@ -17,6 +17,7 @@ export type ModerationPost = {
   posterLabel: string
   moderationNote: string | null
   looksLikeSample: boolean
+  imageCount: number
 }
 
 export default function FreefreeModerationRow({ post }: { post: ModerationPost }) {
@@ -24,10 +25,13 @@ export default function FreefreeModerationRow({ post }: { post: ModerationPost }
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingImages, setConfirmingImages] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const removed = post.status === 'removed'
 
   function run(fn: () => Promise<void>) {
     setError(null)
+    setNotice(null)
     startTransition(async () => {
       try {
         await fn()
@@ -94,6 +98,36 @@ export default function FreefreeModerationRow({ post }: { post: ModerationPost }
             非公開にする
           </Button>
         )}
+        {post.imageCount > 0 && (
+          confirmingImages ? (
+            <>
+              <span className="text-[11px] text-red-600">画像{post.imageCount}枚を消します。元に戻せません。</span>
+              <Button
+                type="button"
+                disabled={pending}
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => run(async () => {
+                  const r = await deleteFreefreeImages(post.id)
+                  setConfirmingImages(false)
+                  setNotice(
+                    r.remaining > 0
+                      ? `${r.deleted}枚を削除しました。${r.remaining}枚はURLの形が想定外で消せていません。Supabaseの管理画面から直接ご確認ください。`
+                      : `${r.deleted}枚を削除しました（CDNのキャッシュにより数分間は表示されることがあります）。`,
+                  )
+                })}
+              >
+                画像を削除する
+              </Button>
+              <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmingImages(false)}>
+                やめる
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmingImages(true)}>
+              画像だけ削除…（{post.imageCount}枚）
+            </Button>
+          )
+        )}
         {confirmingDelete ? (
           <>
             <span className="text-[11px] text-red-600">元に戻せません。よろしいですか？</span>
@@ -116,6 +150,7 @@ export default function FreefreeModerationRow({ post }: { post: ModerationPost }
         )}
       </div>
 
+      {notice && <p className="text-xs text-emerald-700 dark:text-emerald-400">{notice}</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
       {pending && <p className="text-xs text-slate-500">処理中…</p>}
     </li>
