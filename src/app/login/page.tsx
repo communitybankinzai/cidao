@@ -199,7 +199,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleLineLogin}
             disabled={status === 'redirecting' || !agreedToTerms}
-            className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white"
+            className="w-full h-12 text-base font-bold bg-[#06C755] hover:bg-[#05b34c] text-white shadow-md"
           >
             {status === 'redirecting' ? 'LINEへ移動中…' : 'LINEでログイン'}
           </Button>
