@@ -11,7 +11,9 @@ const LINE_PROVIDER = 'custom:line'
 
 // 利用規約（参加のお約束）のバージョン。規約を改定したらこの日付を上げると、
 // 全員に再同意（チェック）を求める。同意済みかは localStorage に端末ごとに記憶する。
-const TERMS_VERSION = '2026-08-04'
+// 2026-08-08 改定：第6条に書き込み時のIPアドレス・端末情報の記録（保存期間90日）と
+//                  違反投稿の保全を追加したため、全員に再同意を求める
+const TERMS_VERSION = '2026-08-08'
 const TERMS_AGREED_KEY = 'cidao_terms_agreed'
 
 export default function LoginPage() {
