@@ -49,6 +49,15 @@ export default async function AdminHomePage() {
           </li>
           <li>
             <Link
+              href="/admin/freefree"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">FreeFree掲示板の管理</h2>
+              <p className="text-sm text-slate-500">サンプル投稿の片付け、迷惑投稿の非公開化・削除</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/claims"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
