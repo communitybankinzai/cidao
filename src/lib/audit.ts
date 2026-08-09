@@ -24,6 +24,7 @@ export type AuditAction =
   | 'proposal.create'
   | 'message.send'
   | 'org.create'
+  | 'org.delete'
 
 function adminClient() {
   const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''

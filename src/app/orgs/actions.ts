@@ -558,6 +558,65 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   revalidatePath('/orgs')
 }
 
+/**
+ * 団体の削除（CiDAO 管理者のみ）。
+ *
+ * ・organizations の DELETE は RLS の orgs_delete_admin で管理者だけに許可されている
+ * ・organization_categories / memberships / org_interests / checkins は FK が
+ *   on delete cascade なので自動的に消える
+ * ・events.organizer_id は FK ではない（organizer_type と組で参照する）ため、
+ *   主催イベントが残っている団体は主催者不明のイベントを生む。削除させずに差し戻す
+ * ・誤操作防止として、呼び出し側で団体名を打ち直させ confirmName で突き合わせる
+ */
+export async function deleteOrganization(orgId: string, confirmName: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (!isAdmin) throw new Error('管理者権限が必要です')
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, name, type')
+    .eq('id', orgId)
+    .single()
+  if (!org) throw new Error('団体が見つかりません')
+
+  if (confirmName.trim() !== org.name.trim()) {
+    throw new Error('入力された団体名が一致しません')
+  }
+
+  // 主催イベントが残っていないか（孤児イベントを作らないためのガード）
+  const { count: eventCount } = await supabase
+    .from('events')
+    .select('id', { count: 'exact', head: true })
+    .eq('organizer_type', 'org')
+    .eq('organizer_id', orgId)
+  if (eventCount && eventCount > 0) {
+    throw new Error(
+      `この団体は主催イベントを ${eventCount} 件持っています。先にイベントを削除するか主催者を変更してください`,
+    )
+  }
+
+  const { error } = await supabase.from('organizations').delete().eq('id', orgId)
+  if (error) throw new Error(`削除失敗: ${error.message}`)
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'org.delete',
+    targetType: 'org',
+    targetId: orgId,
+    detail: { name: org.name, type: org.type },
+    isAdmin: true,
+  })
+
+  revalidatePath('/orgs')
+  revalidatePath('/admin/claims')
+  revalidatePath('/admin/org-candidates')
+  redirect('/orgs?deleted=1')
+}
+
 export async function approveMembership(orgId: string, memberId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

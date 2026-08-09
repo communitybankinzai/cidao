@@ -7,6 +7,7 @@ import { OrgLogo } from '@/components/ui/org-logo'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER } from '@/lib/org-labels'
 import { updateOrgInfo } from '../../actions'
+import { DeleteOrgSection } from '../_components/DeleteOrgSection'
 
 // 団体情報の編集ページ。
 // 編集権者：(a) representative_id 本人 / (b) memberships rep|officer + confirmed / (c) contact_email == JWT email
@@ -33,6 +34,18 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
 
   const canEdit = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
   if (!canEdit) redirect(`/orgs/${id}?error=forbidden`)
+
+  // 団体の削除は CiDAO 管理者だけ。主催イベントが残っていると削除できないので件数も渡す
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  let orgEventCount = 0
+  if (isAdmin) {
+    const { count } = await supabase
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('organizer_type', 'org')
+      .eq('organizer_id', id)
+    orgEventCount = count ?? 0
+  }
 
   const snsLinks: Record<string, string> = (org.sns_links && typeof org.sns_links === 'object')
     ? (org.sns_links as Record<string, string>)
@@ -250,6 +263,10 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
             </Link>
           </div>
         </form>
+
+        {isAdmin && (
+          <DeleteOrgSection orgId={id} orgName={org.name} eventCount={orgEventCount} />
+        )}
       </article>
     </div>
   )
