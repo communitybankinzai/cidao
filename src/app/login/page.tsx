@@ -160,7 +160,7 @@ export default function LoginPage() {
           )}
           <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-2">
             <p className="text-sm font-bold text-slate-900 dark:text-slate-100 text-center">
-              参加のお約束（基本はこの3つ）
+              <span className="whitespace-nowrap">参加のお約束（基本はこの3つ）</span>
             </p>
             <ol className="list-decimal pl-5 space-y-1.5 text-[13px] leading-relaxed text-slate-800 dark:text-slate-200">
               <li>
