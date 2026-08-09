@@ -23,7 +23,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // 流入元（utm_source）として保存を許可する値。SNS告知リンクで使う既知の媒体名のみ。
 // クエリの生値をそのまま保存しない（任意文字列の混入・個人情報の紛れ込みを防ぐ）
-const ALLOWED_SOURCES = new Set(['threads', 'instagram', 'facebook', 'line', 'x', 'sns'])
+// threads は「投稿内リンク経由」、threads-profile は「プロフィールのリンク経由」を区別する
+const ALLOWED_SOURCES = new Set(['threads', 'threads-profile', 'instagram', 'facebook', 'line', 'x', 'sns'])
 
 function normalizePath(raw: string): string | null {
   if (!raw.startsWith('/')) return null

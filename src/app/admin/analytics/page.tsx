@@ -18,7 +18,8 @@ type PathRow = { path: string; pv: number; vv: number; prev_pv: number; prev_vv:
 type SourceRow = { source: string; path: string; pv: number; vv: number }
 
 const SOURCE_LABELS: Record<string, string> = {
-  threads: '🧵 Threads',
+  threads: '🧵 Threads（投稿）',
+  'threads-profile': '🧵 Threads（プロフィール）',
   instagram: '📷 Instagram',
   facebook: '📘 Facebook',
   line: '💬 LINE',
