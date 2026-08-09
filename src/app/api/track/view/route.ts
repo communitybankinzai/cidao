@@ -21,6 +21,10 @@ import { createClient } from '@/lib/supabase/server'
 const EXCLUDED_PREFIXES = ['/admin', '/me', '/notifications', '/api', '/auth']
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// 流入元（utm_source）として保存を許可する値。SNS告知リンクで使う既知の媒体名のみ。
+// クエリの生値をそのまま保存しない（任意文字列の混入・個人情報の紛れ込みを防ぐ）
+const ALLOWED_SOURCES = new Set(['threads', 'instagram', 'facebook', 'line', 'x', 'sns'])
+
 function normalizePath(raw: string): string | null {
   if (!raw.startsWith('/')) return null
   // クエリ・フラグメントは捨てる（個人情報がURLに乗るのを防ぐ）
@@ -44,7 +48,7 @@ function jstToday(): string {
 }
 
 export async function POST(request: Request) {
-  let body: { path?: unknown; visitorId?: unknown }
+  let body: { path?: unknown; visitorId?: unknown; source?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -57,6 +61,10 @@ export async function POST(request: Request) {
 
   const path = normalizePath(rawPath)
   if (!path) return NextResponse.json({ ok: false, skipped: 'excluded' })
+
+  // 流入元はホワイトリストに一致した場合のみ保存（それ以外は null = 直接訪問扱い）
+  const rawSource = typeof body.source === 'string' ? body.source.trim().toLowerCase() : ''
+  const source = ALLOWED_SOURCES.has(rawSource) ? rawSource : null
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -87,6 +95,7 @@ export async function POST(request: Request) {
     visitor_key: visitorKey,
     member_id: memberId,
     viewed_on: jstToday(),
+    source,
   })
 
   if (error) {

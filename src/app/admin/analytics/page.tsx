@@ -15,6 +15,16 @@ import { AnalyzeButton } from './_components/AnalyzeButton'
 
 type DailyRow = { day: string; pv: number; vv: number }
 type PathRow = { path: string; pv: number; vv: number; prev_pv: number; prev_vv: number }
+type SourceRow = { source: string; path: string; pv: number; vv: number }
+
+const SOURCE_LABELS: Record<string, string> = {
+  threads: '🧵 Threads',
+  instagram: '📷 Instagram',
+  facebook: '📘 Facebook',
+  line: '💬 LINE',
+  x: '𝕏 X',
+  sns: 'SNS（その他）',
+}
 
 // ルートパターン → 画面名（未登録のパスはそのまま表示）
 const PAGE_LABELS: Record<string, string> = {
@@ -104,12 +114,14 @@ export default async function AdminAnalyticsPage() {
   const { data: isAdmin, error } = await supabase.rpc('is_admin')
   if (error || !isAdmin) redirect('/')
 
-  const [dailyRes, byPathRes] = await Promise.all([
+  const [dailyRes, byPathRes, sourcesRes] = await Promise.all([
     supabase.rpc('page_view_daily', { p_days: 30 }),
     supabase.rpc('page_view_by_path', { p_days: 7 }),
+    supabase.rpc('page_view_sources', { p_days: 30 }),
   ])
   const daily: DailyRow[] = dailyRes.data ?? []
   const byPath: PathRow[] = byPathRes.data ?? []
+  const sources: SourceRow[] = sourcesRes.data ?? []
   const loadError = dailyRes.error?.message ?? byPathRes.error?.message ?? null
 
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date())
@@ -194,6 +206,41 @@ export default async function AdminAnalyticsPage() {
                       <td className="py-2 px-3 text-right tabular-nums">{r.pv.toLocaleString()}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{r.vv.toLocaleString()}</td>
                       <td className="py-2 pl-3 text-right tabular-nums">{pct(r.pv, r.prev_pv)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-3">
+          <h2 className="text-lg font-semibold">SNS流入元別（直近30日）</h2>
+          <p className="text-sm text-slate-500">
+            SNS告知リンク（utm_source付き）経由の閲覧。どの媒体からどのページに人が来たかが分かります。
+          </p>
+          {sources.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">
+              SNS経由の閲覧はまだ記録されていません（告知リンクがクリックされると表示されます）
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                    <th className="py-2 pr-3 text-left">流入元</th>
+                    <th className="py-2 px-3 text-left">ページ</th>
+                    <th className="py-2 px-3 text-right">PV</th>
+                    <th className="py-2 pl-3 text-right">訪問者</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((r) => (
+                    <tr key={`${r.source}-${r.path}`} className="border-b border-slate-100 dark:border-slate-800/60">
+                      <td className="py-2 pr-3">{SOURCE_LABELS[r.source] ?? r.source}</td>
+                      <td className="py-2 px-3">{PAGE_LABELS[r.path] ?? r.path}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{r.pv.toLocaleString()}</td>
+                      <td className="py-2 pl-3 text-right tabular-nums">{r.vv.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

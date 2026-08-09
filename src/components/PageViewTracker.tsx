@@ -66,10 +66,17 @@ export function PageViewTracker() {
       // sessionStorage が使えなくても記録自体は進める
     }
 
+    // SNS告知リンクの utm_source だけを拾って送る（値の検証はサーバ側で行う）。
+    // usePathname にはクエリが含まれないため location.search から読む
+    let source: string | null = null
+    try {
+      source = new URLSearchParams(window.location.search).get('utm_source')
+    } catch { /* 読めなければ流入元なし扱い */ }
+
     void fetch('/api/track/view', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, visitorId }),
+      body: JSON.stringify({ path, visitorId, source }),
       keepalive: true,
     }).catch(() => {})
   }, [pathname])
