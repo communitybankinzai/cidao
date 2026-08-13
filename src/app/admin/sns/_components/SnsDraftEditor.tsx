@@ -17,15 +17,17 @@ export type DraftLog = {
   targetLabel: string
 }
 
-// 自動配信は毎日 JST 18:00（Vercel Cron: 09:00 UTC）。vercel.json と揃えること
+// 自動配信は毎日 JST 18時台（Vercel Cron: 09:00 UTC）。vercel.json と揃えること。
+// Vercel の Hobby プランは実行に最大1時間の猶予があるため、
+// 「18:00ちょうど」ではなく「18時台」と案内する
 const DISPATCH_HOUR_JST = 18
 
-// 次に自動配信が走る日時を「本日18:00」「明日18:00」の形で返す。
+// 次に自動配信が走るタイミングを「本日18時台」「明日18時台」の形で返す。
 // 端末のタイムゾーンに影響されないよう JST(+9) で計算する
 function nextDispatchLabel(): string {
   const nowJst = new Date(Date.now() + 9 * 3600_000) // UTC基準の値をJSTの壁時計として読む
   const isToday = nowJst.getUTCHours() < DISPATCH_HOUR_JST
-  return `${isToday ? '本日' : '明日'} ${DISPATCH_HOUR_JST}:00`
+  return `${isToday ? '本日' : '明日'}${DISPATCH_HOUR_JST}時台`
 }
 
 // X は 280 weighted（日本語などは1字2カウント、URL は長さに関わらず23）
@@ -66,7 +68,7 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
         <span className="flex-1 truncate font-medium text-slate-700 dark:text-slate-300">{log.title}</span>
         {approved ? (
           <span className="shrink-0 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-            ✓ 承認済み — {nextDispatchLabel()} に自動配信
+            ✓ 承認済み — {nextDispatchLabel()}に自動配信
           </span>
         ) : (
           <span className="shrink-0 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -118,7 +120,7 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
             disabled={pending || !text.trim() || overLimit}
             onClick={() => run(() => approveDraft(log.id, text))}
           >
-            承認する（{nextDispatchLabel()} に配信）
+            承認する（{nextDispatchLabel()}に配信）
           </Button>
         )}
       </div>

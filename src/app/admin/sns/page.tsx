@@ -130,7 +130,8 @@ export default async function AdminSnsPage() {
           <p className="text-xs text-slate-500 mb-3">
             立ち上げ期は運営が事前に本文を確認する運用です（開発仕様書 v2.1 §3.11.4）。
             <strong className="font-medium">承認したものだけが配信されます。</strong>
-            承認済みのものは<strong className="font-medium">毎日 18:00（JST）に自動配信</strong>されます。
+            承認済みのものは<strong className="font-medium">毎日18時台（日本時間）に自動配信</strong>されます
+            （実行タイミングに最大1時間の幅があるため18:00ちょうどではありません）。
             すぐ流したいときは上の「pending を実投稿」を押してください。
           </p>
           {awaiting.length > 0 ? (
