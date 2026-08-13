@@ -82,8 +82,9 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
           variant="outline"
           disabled={pending}
           onClick={() => run(async () => {
-            await regenerateDraft(log.id)
-            setText('')
+            // 生成結果をそのまま画面へ入れる。
+            // 再描画では useState の初期値が読み直されないため、戻り値で反映する
+            setText(await regenerateDraft(log.id))
           })}
         >
           {log.content ? '下書きを作り直す' : '下書きを作る'}

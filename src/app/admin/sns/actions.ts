@@ -24,8 +24,11 @@ async function requireAdmin() {
   return { supabase, user }
 }
 
-// テンプレートから下書きを作り直す（掲載内容を直したあとの作り直しにも使う）
-export async function regenerateDraft(logId: string) {
+// テンプレートから下書きを作り直す（掲載内容を直したあとの作り直しにも使う）。
+// 生成した本文を返す。呼び出し側の textarea は制御コンポーネントで、
+// revalidatePath による再描画では state が初期化されないため、
+// 戻り値を使って画面へ反映させる必要がある。
+export async function regenerateDraft(logId: string): Promise<string> {
   const { supabase } = await requireAdmin()
 
   const { data: log } = await supabase
@@ -48,6 +51,7 @@ export async function regenerateDraft(logId: string) {
   if (error) throw new Error(`下書きの保存に失敗しました: ${error.message}`)
 
   revalidatePath('/admin/sns')
+  return content
 }
 
 // 運営が手で直した本文を保存する（承認はしない）

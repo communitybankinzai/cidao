@@ -161,6 +161,7 @@ export async function postToMedium(
 
 type MinimalSupabase = {
   from: (table: string) => any // eslint-disable-line @typescript-eslint/no-explicit-any
+  rpc: (fn: string, args?: Record<string, unknown>) => any // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export async function markLog(
@@ -216,6 +217,16 @@ export async function dispatchLogs(
           : undefined
       const out = await postToMedium(log.medium, content, creds, { imageUrl })
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
+      // 「紹介済み」は実際に配信できたときだけ刻む。下書きを作った時点では刻まない
+      // （未配信のまま順番が後ろへ回ってしまうため）。sns_rotation は
+      // アプリのセッションから直接 UPDATE できないので security definer 関数を使う
+      if (out.status === 'success' && log.target_type && log.target_id) {
+        const { error: spotErr } = await supabase.rpc('mark_sns_spotlighted', {
+          p_target_type: log.target_type,
+          p_target_id: log.target_id,
+        })
+        if (spotErr) console.warn('[sns-dispatch] mark_sns_spotlighted failed:', spotErr.message)
+      }
       results.push({ id: log.id, medium: log.medium, outcome: out.status, message: out.message })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
