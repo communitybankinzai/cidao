@@ -129,7 +129,9 @@ export default async function AdminSnsPage() {
           <h2 className="text-lg font-semibold mb-1">✍️ 投稿文の確認・承認（{awaiting.length} 件）</h2>
           <p className="text-xs text-slate-500 mb-3">
             立ち上げ期は運営が事前に本文を確認する運用です（開発仕様書 v2.1 §3.11.4）。
-            <strong className="font-medium">承認したものだけが実際に配信されます。</strong>
+            <strong className="font-medium">承認したものだけが配信されます。</strong>
+            承認済みのものは<strong className="font-medium">毎日 18:00（JST）に自動配信</strong>されます。
+            すぐ流したいときは上の「pending を実投稿」を押してください。
           </p>
           {awaiting.length > 0 ? (
             <AwaitingList

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/sns-token-refresh",
       "schedule": "30 22 * * 1"
+    },
+    {
+      "path": "/api/cron/sns-dispatch",
+      "schedule": "0 9 * * *"
     }
   ]
 }
