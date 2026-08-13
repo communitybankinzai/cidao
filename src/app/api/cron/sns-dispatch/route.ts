@@ -23,8 +23,9 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import type { SnsMedium } from '@/lib/sns-template'
 
-// 1回の実行で送る上限。詰まっていても一度に大量投稿してスパム判定されないようにする
-const MAX_PER_RUN = 20
+// 1回の実行で送る上限。詰まっていても一度に大量投稿してスパム判定されないようにする。
+// 承認済みが溜まっている場合は古いもの（approved_at 昇順）から順に、翌日以降へ持ち越す
+const MAX_PER_RUN = 5
 
 export async function GET(request: Request) {
   return handle(request)
