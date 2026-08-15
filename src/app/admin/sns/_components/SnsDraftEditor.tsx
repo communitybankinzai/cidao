@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { regenerateDraft, saveDraft, approveDraft, unapproveDraft } from '../actions'
+import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft } from '../actions'
 
 export type DraftLog = {
   id: string
@@ -46,11 +46,12 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
   const [error, setError] = useState<string | null>(null)
   const approved = !!log.approved_at
 
-  function run(fn: () => Promise<void>) {
+  function run(fn: () => Promise<{ ok: boolean; content?: string; error?: string } | void>) {
     setError(null)
     startTransition(async () => {
       try {
-        await fn()
+        const r = await fn()
+        if (r && !r.ok) setError(r.error ?? '失敗しました')
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       }
@@ -97,7 +98,9 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
           onClick={() => run(async () => {
             // 生成結果をそのまま画面へ入れる。
             // 再描画では useState の初期値が読み直されないため、戻り値で反映する
-            setText(await regenerateDraft(log.id))
+            const r = await regenerateDraft(log.id)
+            if (r.ok && r.content) setText(r.content)
+            return r
           })}
         >
           {log.content ? '下書きを作り直す' : '下書きを作る'}
@@ -115,13 +118,27 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
             承認を取り消す
           </Button>
         ) : (
-          <Button
-            type="button"
-            disabled={pending || !text.trim() || overLimit}
-            onClick={() => run(() => approveDraft(log.id, text))}
-          >
-            承認する（{nextDispatchLabel()}に配信）
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              className="text-red-600 hover:text-red-700"
+              onClick={() => {
+                if (!window.confirm(`「${log.title}」（${log.mediumLabel}）の下書きを却下してリストから消します。よろしいですか？`)) return
+                run(() => dismissDraft(log.id))
+              }}
+            >
+              却下
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !text.trim() || overLimit}
+              onClick={() => run(() => approveDraft(log.id, text))}
+            >
+              承認する（{nextDispatchLabel()}に配信）
+            </Button>
+          </>
         )}
       </div>
 

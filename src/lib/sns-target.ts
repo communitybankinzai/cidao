@@ -66,9 +66,12 @@ export async function fetchSnsTarget(
   }
 
   if (target_type === 'event') {
+    // 主催者名のカラムは organizer_name_text（organizer_name は存在しない。
+    // 誤記のまま select すると PostgREST がクエリごと失敗させ、下書き生成が
+    // 常に「対象が見つからない」扱いになっていた：2026-08-15 修正）
     const { data } = await supabase
       .from('events')
-      .select('id, title, description, location, start_at, organizer_name, status')
+      .select('id, title, description, location, start_at, organizer_name_text, status')
       .eq('id', target_id)
       .maybeSingle()
     if (!data || data.status !== 'open') return null
@@ -78,7 +81,7 @@ export async function fetchSnsTarget(
       body: data.description as string | null,
       location: data.location as string | null,
       start_at: data.start_at as string | null,
-      organizer_name: data.organizer_name as string | null,
+      organizer_name: data.organizer_name_text as string | null,
     }
   }
 

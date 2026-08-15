@@ -24,75 +24,119 @@ async function requireAdmin() {
   return { supabase, user }
 }
 
+// Server Action の throw は本番ビルドでメッセージがマスクされ
+// 「An error occurred in the Server Components render」としか表示されない。
+// 運営が原因を読めるよう、下書き系のエラーはすべて戻り値で返す。
+export type DraftResult = { ok: true; content?: string } | { ok: false; error: string }
+
 // テンプレートから下書きを作り直す（掲載内容を直したあとの作り直しにも使う）。
-// 生成した本文を返す。呼び出し側の textarea は制御コンポーネントで、
+// 生成した本文を content で返す。呼び出し側の textarea は制御コンポーネントで、
 // revalidatePath による再描画では state が初期化されないため、
 // 戻り値を使って画面へ反映させる必要がある。
-export async function regenerateDraft(logId: string): Promise<string> {
-  const { supabase } = await requireAdmin()
+export async function regenerateDraft(logId: string): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
 
-  const { data: log } = await supabase
-    .from('sns_post_logs')
-    .select('id, target_type, target_id, medium')
-    .eq('id', logId)
-    .maybeSingle()
-  if (!log) throw new Error('投稿ログが見つかりません')
+    const { data: log } = await supabase
+      .from('sns_post_logs')
+      .select('id, target_type, target_id, medium')
+      .eq('id', logId)
+      .maybeSingle()
+    if (!log) return { ok: false, error: '投稿ログが見つかりません' }
 
-  const row = log as LogRow
-  const target = await fetchSnsTarget(supabase, row.target_type, row.target_id)
-  if (!target) throw new Error('紹介対象が削除されたか、公開が終了しています')
+    const row = log as LogRow
+    const target = await fetchSnsTarget(supabase, row.target_type, row.target_id)
+    if (!target) return { ok: false, error: '紹介対象が見つかりません（削除・公開終了、または取得エラー）' }
 
-  const content = generateSnsContent(target, row.medium)
-  const { error } = await supabase
-    .from('sns_post_logs')
-    // 本文が変わったので承認は取り消す（承認した文面と違うものが飛ばないように）
-    .update({ content, approved_at: null, approved_by: null })
-    .eq('id', logId)
-  if (error) throw new Error(`下書きの保存に失敗しました: ${error.message}`)
+    const content = generateSnsContent(target, row.medium)
+    const { error } = await supabase
+      .from('sns_post_logs')
+      // 本文が変わったので承認は取り消す（承認した文面と違うものが飛ばないように）
+      .update({ content, approved_at: null, approved_by: null })
+      .eq('id', logId)
+    if (error) return { ok: false, error: `下書きの保存に失敗しました: ${error.message}` }
 
-  revalidatePath('/admin/sns')
-  return content
+    revalidatePath('/admin/sns')
+    return { ok: true, content }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 // 運営が手で直した本文を保存する（承認はしない）
-export async function saveDraft(logId: string, content: string) {
-  const { supabase } = await requireAdmin()
-  const text = content.trim()
-  if (!text) throw new Error('本文が空です')
+export async function saveDraft(logId: string, content: string): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
+    const text = content.trim()
+    if (!text) return { ok: false, error: '本文が空です' }
 
-  const { error } = await supabase
-    .from('sns_post_logs')
-    .update({ content: text, approved_at: null, approved_by: null })
-    .eq('id', logId)
-  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+    const { error } = await supabase
+      .from('sns_post_logs')
+      .update({ content: text, approved_at: null, approved_by: null })
+      .eq('id', logId)
+    if (error) return { ok: false, error: `保存に失敗しました: ${error.message}` }
 
-  revalidatePath('/admin/sns')
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 // 承認する。承認された行だけが /api/sns/dispatch の配信対象になる
-export async function approveDraft(logId: string, content: string) {
-  const { supabase, user } = await requireAdmin()
-  const text = content.trim()
-  if (!text) throw new Error('本文が空のままでは承認できません')
+export async function approveDraft(logId: string, content: string): Promise<DraftResult> {
+  try {
+    const { supabase, user } = await requireAdmin()
+    const text = content.trim()
+    if (!text) return { ok: false, error: '本文が空のままでは承認できません' }
 
-  const { error } = await supabase
-    .from('sns_post_logs')
-    .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
-    .eq('id', logId)
-  if (error) throw new Error(`承認に失敗しました: ${error.message}`)
+    const { error } = await supabase
+      .from('sns_post_logs')
+      .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
+      .eq('id', logId)
+    if (error) return { ok: false, error: `承認に失敗しました: ${error.message}` }
 
-  revalidatePath('/admin/sns')
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
-export async function unapproveDraft(logId: string) {
-  const { supabase } = await requireAdmin()
-  const { error } = await supabase
-    .from('sns_post_logs')
-    .update({ approved_at: null, approved_by: null })
-    .eq('id', logId)
-  if (error) throw new Error(`承認の取り消しに失敗しました: ${error.message}`)
+export async function unapproveDraft(logId: string): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
+    const { error } = await supabase
+      .from('sns_post_logs')
+      .update({ approved_at: null, approved_by: null })
+      .eq('id', logId)
+    if (error) return { ok: false, error: `承認の取り消しに失敗しました: ${error.message}` }
 
-  revalidatePath('/admin/sns')
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// 却下：配信しないと決めた下書きをリストから消す（行ごと削除）。
+// 未配信（pending）の行だけが対象。配信済み・失敗のログは監査のため消せない。
+// 却下してもローテーション対象からは外れないので、いずれ順番が回ってくれば再度候補になる
+export async function dismissDraft(logId: string): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
+    const { error } = await supabase
+      .from('sns_post_logs')
+      .delete()
+      .eq('id', logId)
+      .eq('status', 'pending')
+    if (error) return { ok: false, error: `却下に失敗しました: ${error.message}` }
+
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 // Threads の接続情報を検証して保存する。
