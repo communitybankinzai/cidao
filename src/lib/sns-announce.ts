@@ -17,9 +17,10 @@ import { normalizeMailFrom } from '@/lib/mail'
 
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 
-// 提案告知に使う媒体。LINE broadcast はローテーション紹介で使用中のため、
-// 提案告知では運営の指定どおり Threads / Facebook / Instagram に限定する。
-const PROPOSAL_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
+// 提案告知に使う媒体。接続済みの媒体だけ下書きを作る
+// （未接続媒体の下書きは配信できず「待機」のまま残り続けるため作らない）。
+// Facebook はページ未開設で見送り中（2026-08-15）。接続したらここに追加する
+const PROPOSAL_MEDIA: SnsMedium[] = ['threads', 'instagram']
 
 function adminClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
