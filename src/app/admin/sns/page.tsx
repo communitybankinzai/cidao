@@ -127,8 +127,9 @@ export default async function AdminSnsPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin / SNS</p>
           <h1 className="text-3xl font-serif font-bold">SNS 定期紹介・提案告知</h1>
           <p className="text-sm text-slate-500 mt-1">
-            FreeFree・イベントは毎朝9時のローテーションで、提案は作成時に、団体は新規登録・紹介内容の更新時に、
-            それぞれ告知の下書きが自動生成されます（配信先：Threads、提案のみ Instagram も）。
+            FreeFree・団体は毎朝9時のローテーションで、提案は作成時に、それぞれ告知の下書きが自動生成されます
+            （団体は新規登録・紹介内容の更新時にも生成。配信先：Threads、提案のみ Instagram も）。
+            イベントは毎朝のまとめ配信で告知するため、ローテーション単独紹介の対象外です。
           </p>
         </header>
 
@@ -141,8 +142,9 @@ export default async function AdminSnsPage() {
               <h3 className="font-medium mb-1">下書きはどこから来るのか</h3>
               <ul className="list-disc pl-5 space-y-0.5 text-xs">
                 <li><strong>提案</strong>：CiDAOに提案が作成されると自動生成（Threads / Instagram / Facebook）</li>
-                <li><strong>団体</strong>：新規登録・紹介内容の更新のタイミングで自動生成（Threads）</li>
-                <li><strong>FreeFree・イベント</strong>：毎朝9時のローテーションが「最近紹介していないもの」から1件ずつ生成（Threads）</li>
+                <li><strong>団体</strong>：新規登録・紹介内容の更新のタイミングで自動生成＋毎朝9時のローテーションでも定期紹介（Threads）</li>
+                <li><strong>FreeFree</strong>：毎朝9時のローテーションが「最近紹介していないもの」から1件ずつ生成（Threads。🌟 イベントカテゴリの掲載分も対象）</li>
+                <li><strong>イベント</strong>：毎朝のまとめ配信で告知するため、ローテーションによる単独紹介は行いません</li>
               </ul>
               <p className="text-xs mt-1">下書きができると管理者へベル・プッシュ・メールで通知が届きます。</p>
             </div>
@@ -323,7 +325,7 @@ export default async function AdminSnsPage() {
               </tbody>
             </table>
           </div>
-          <div>👥 団体のローテーション候補は「代表者による登録が完了した団体」または「更新済みの団体」のみ（一括取り込みの仮登録団体は紹介しない）。仮登録団体も claim（代表者確認）や編集で「更新済み」になれば自動で候補入りします（追加作業は不要）。</div>
+          <div>👥 団体のローテーション候補は「代表者の関与が確認できた団体」のみ：代表者が内容を確認・編集した「更新済み」団体、または代表者としての参加が承認済みの団体。管理者が代理登録しただけの団体や一括取り込みの仮登録団体は紹介しません。claim（代表者確認）や編集で条件を満たせば自動で候補入りします（追加作業は不要）。</div>
         </section>
       </div>
     </div>

@@ -42,7 +42,7 @@ export default function RotationScheduleCard({ current }: { current: RotationPre
     <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
       <h2 className="text-lg font-semibold mb-1">⏱ 定期紹介の実行間隔</h2>
       <p className="text-xs text-slate-500 mb-3">
-        FreeFree・イベント・団体の紹介下書きを自動生成する間隔です（実行時刻は日本時間 朝9時）。
+        FreeFree・団体の紹介下書きを自動生成する間隔です（実行時刻は日本時間 朝9時。イベントはまとめ配信のため対象外）。
         「停止」中も「今すぐ1件ピックアップ」による手動実行は使えます。
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
