@@ -27,8 +27,53 @@ type Org = {
   description: string | null
   public_flag: boolean
   inzai_registration_number?: string | null
+  enriched_at?: string | null
+  info_verified?: boolean
+  created_at?: string
+  updated_at?: string
   organization_categories: OrgCategory[] | null
   memberships?: Membership[] | null
+}
+
+// 登録状態の3区分。
+//   仮登録   … AI が Web から自動収集し、代表者が未確認（enriched_at あり・info_verified false）
+//   新規登録 … ユーザー自身が団体登録フォームから登録（enriched_at なし）
+//   更新済み … 仮登録だったが代表者が確認・編集済み（info_verified true）
+type OrgStatus = 'provisional' | 'self_registered' | 'verified'
+
+function orgStatus(o: Org): OrgStatus {
+  if (!o.enriched_at) return 'self_registered'
+  return o.info_verified ? 'verified' : 'provisional'
+}
+
+const STATUS_LABEL: Record<OrgStatus, string> = {
+  provisional: '仮登録',
+  self_registered: '新規登録',
+  verified: '更新済み',
+}
+
+const STATUS_ORDER: OrgStatus[] = ['provisional', 'self_registered', 'verified']
+
+const STATUS_BADGE_CLASS: Record<OrgStatus, string> = {
+  provisional: 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200',
+  self_registered: 'bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-200',
+  verified: 'bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-200',
+}
+
+type SortKey = 'name' | 'updated' | 'created'
+
+const SORT_LABEL: Record<SortKey, string> = {
+  name: '名前順',
+  updated: '情報更新順',
+  created: '登録順',
+}
+
+// 情報更新日の表示用（例: 2026/8/9）。
+// サーバー（UTC）とブラウザ（JST）で日付がずれて hydration 不一致にならないよう Asia/Tokyo 固定
+function formatDate(s: string): string {
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
 }
 
 function pickMember(m: Membership): MemberView | null {
@@ -50,6 +95,8 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
   const [legalFormFilter, setLegalFormFilter] = useState<string | null>(null)
   const [regFilter, setRegFilter] = useState<RegFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<OrgStatus | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
   const [openOrg, setOpenOrg] = useState<Org | null>(null)
 
   const typeCounts = useMemo(() => {
@@ -86,23 +133,40 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
     return c
   }, [orgs])
 
+  const statusCounts = useMemo(() => {
+    const c: Record<OrgStatus, number> = { provisional: 0, self_registered: 0, verified: 0 }
+    for (const o of orgs) c[orgStatus(o)]++
+    return c
+  }, [orgs])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return orgs.filter((o) => {
+    const list = orgs.filter((o) => {
       if (typeFilter && o.type !== typeFilter) return false
       if (legalFormFilter && o.legal_form !== legalFormFilter) return false
       if (regFilter === 'registered' && !o.inzai_registration_number) return false
       if (regFilter === 'unregistered' && o.inzai_registration_number) return false
       if (categoryFilter && !(o.organization_categories ?? []).some((c) => c.category === categoryFilter)) return false
+      if (statusFilter && orgStatus(o) !== statusFilter) return false
       if (q) {
         const hay = `${o.name} ${o.description ?? ''} ${o.inzai_registration_number ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [orgs, query, typeFilter, legalFormFilter, regFilter, categoryFilter])
+    // 名前順は五十音昇順、情報更新順・登録順は新しい順
+    const time = (s?: string | null) => (s ? Date.parse(s) : 0)
+    if (sortKey === 'updated') {
+      list.sort((a, b) => time(b.updated_at) - time(a.updated_at) || a.name.localeCompare(b.name, 'ja'))
+    } else if (sortKey === 'created') {
+      list.sort((a, b) => time(b.created_at) - time(a.created_at) || a.name.localeCompare(b.name, 'ja'))
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+    }
+    return list
+  }, [orgs, query, typeFilter, legalFormFilter, regFilter, categoryFilter, statusFilter, sortKey])
 
-  const hasActiveFilter = !!query || !!typeFilter || !!legalFormFilter || regFilter !== 'all' || !!categoryFilter
+  const hasActiveFilter = !!query || !!typeFilter || !!legalFormFilter || regFilter !== 'all' || !!categoryFilter || !!statusFilter
 
   return (
     <div className="space-y-5">
@@ -159,6 +223,21 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
           </div>
 
           <div className="flex flex-wrap gap-1.5">
+            <FilterChip active={statusFilter === null} onClick={() => setStatusFilter(null)}>
+              登録状態 不問
+            </FilterChip>
+            {STATUS_ORDER.map((s) => {
+              const count = statusCounts[s]
+              if (!count) return null
+              return (
+                <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? null : s)}>
+                  {STATUS_LABEL[s]} <span className="text-slate-400">{count}</span>
+                </FilterChip>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
             <FilterChip active={categoryFilter === null} onClick={() => setCategoryFilter(null)}>
               すべての分野
             </FilterChip>
@@ -179,17 +258,27 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
         </div>
       </div>
 
-      <div className="text-xs text-slate-500 flex items-center justify-between">
+      <div className="text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap">
         <span>{filtered.length} / {orgs.length} 団体</span>
-        {hasActiveFilter && (
-          <button
-            type="button"
-            onClick={() => { setQuery(''); setTypeFilter(null); setLegalFormFilter(null); setRegFilter('all'); setCategoryFilter(null) }}
-            className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
-          >
-            フィルタを解除
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">並び替え:</span>
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <FilterChip key={k} active={sortKey === k} onClick={() => setSortKey(k)}>
+                {SORT_LABEL[k]}
+              </FilterChip>
+            ))}
+          </div>
+          {hasActiveFilter && (
+            <button
+              type="button"
+              onClick={() => { setQuery(''); setTypeFilter(null); setLegalFormFilter(null); setRegFilter('all'); setCategoryFilter(null); setStatusFilter(null) }}
+              className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+            >
+              フィルタを解除
+            </button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -218,20 +307,26 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                         </span>
                       </div>
                     </div>
-                    {(o.inzai_registration_number || o.legal_form) && (
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        {o.inzai_registration_number && (
-                          <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-mono">
-                            印西市登録 {o.inzai_registration_number}
-                          </span>
-                        )}
-                        {o.legal_form && (
-                          <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            {LEGAL_FORM_LABEL[o.legal_form] ?? o.legal_form}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <div className="mb-2 flex flex-wrap items-center gap-1">
+                      <span className={`inline-block text-[10px] px-2 py-0.5 rounded ${STATUS_BADGE_CLASS[orgStatus(o)]}`}>
+                        {STATUS_LABEL[orgStatus(o)]}
+                      </span>
+                      {o.inzai_registration_number && (
+                        <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-mono">
+                          印西市登録 {o.inzai_registration_number}
+                        </span>
+                      )}
+                      {o.legal_form && (
+                        <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {LEGAL_FORM_LABEL[o.legal_form] ?? o.legal_form}
+                        </span>
+                      )}
+                      {o.updated_at && (
+                        <span className="inline-block text-[10px] text-slate-400" title="情報更新日">
+                          更新 {formatDate(o.updated_at)}
+                        </span>
+                      )}
+                    </div>
                     {o.description && (
                       <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-3">{o.description}</p>
                     )}
