@@ -119,6 +119,73 @@ export default async function AdminSnsPage() {
           </p>
         </header>
 
+        <details className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 rounded-lg p-5">
+          <summary className="cursor-pointer font-semibold text-sky-900 dark:text-sky-200">
+            ❓ このページの使い方（承認と配信の仕組み）
+          </summary>
+          <div className="mt-4 space-y-4 text-sm text-slate-700 dark:text-slate-300">
+            <div>
+              <h3 className="font-medium mb-1">下書きはどこから来るのか</h3>
+              <ul className="list-disc pl-5 space-y-0.5 text-xs">
+                <li><strong>提案</strong>：CiDAOに提案が作成されると自動生成（Threads / Instagram / Facebook）</li>
+                <li><strong>団体</strong>：新規登録・紹介内容の更新のタイミングで自動生成（Threads）</li>
+                <li><strong>FreeFree・イベント</strong>：毎朝9時のローテーションが「最近紹介していないもの」から1件ずつ生成（Threads）</li>
+              </ul>
+              <p className="text-xs mt-1">下書きができると管理者へベル・プッシュ・メールで通知が届きます。</p>
+            </div>
+            <div>
+              <h3 className="font-medium mb-1">「承認」と「配信」は別の操作</h3>
+              <p className="text-xs mb-2">承認＝「この文面で配信してよい」という意思表示。配信＝実際にSNSへ投稿する行為。</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-sky-200 dark:border-sky-900 text-left">
+                      <th className="py-1.5 pr-3">ボタン</th>
+                      <th className="py-1.5 pr-3">対象</th>
+                      <th className="py-1.5 pr-3">承認操作</th>
+                      <th className="py-1.5">配信タイミング</th>
+                    </tr>
+                  </thead>
+                  <tbody className="align-top">
+                    <tr className="border-b border-sky-100 dark:border-sky-900/50">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">承認する（18時台に配信）</td>
+                      <td className="py-1.5 pr-3">その1件</td>
+                      <td className="py-1.5 pr-3">する</td>
+                      <td className="py-1.5">毎日18時台の自動配信を待つ（急がない告知向け）</td>
+                    </tr>
+                    <tr className="border-b border-sky-100 dark:border-sky-900/50">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">⚡ 今すぐ投稿</td>
+                      <td className="py-1.5 pr-3">その1件</td>
+                      <td className="py-1.5 pr-3">する</td>
+                      <td className="py-1.5">押した瞬間に配信（イベント当日など急ぎ向け）</td>
+                    </tr>
+                    <tr className="border-b border-sky-100 dark:border-sky-900/50">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">📤 pending を実投稿</td>
+                      <td className="py-1.5 pr-3"><strong>承認済み</strong>の全件</td>
+                      <td className="py-1.5 pr-3"><strong>しない</strong></td>
+                      <td className="py-1.5">押した瞬間にまとめて配信。未承認のものは流れない</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1.5 pr-3 whitespace-nowrap">却下</td>
+                      <td className="py-1.5 pr-3">その1件</td>
+                      <td className="py-1.5 pr-3">—</td>
+                      <td className="py-1.5">配信せずリストから削除（ローテ対象にはいずれ再登場）</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-medium mb-1">放置した下書きはどうなるか</h3>
+              <p className="text-xs">承認しないまま30日経つと自動削除されます。急いで捌く必要はありません。</p>
+            </div>
+            <div>
+              <h3 className="font-medium mb-1">トークン（SNS接続）の維持</h3>
+              <p className="text-xs">Threads / Instagram のトークンは毎週月曜朝に自動延長されるため、手動更新は不要です。「失効予定」の日付が近づいたまま更新されない場合のみ、SNS接続設定から再発行・再保存してください。</p>
+            </div>
+          </div>
+        </details>
+
         <AutoPostToggle initialEnabled={autoPostEnabled} />
 
         <SnsAuthSettings status={authStatus} />
