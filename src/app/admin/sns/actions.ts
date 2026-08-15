@@ -290,3 +290,25 @@ export async function setSnsAutoPost(enabled: boolean) {
 
   revalidatePath('/admin/sns')
 }
+
+// 定期紹介ローテーションの実行間隔を変更する。
+// 自由な cron 式は受け付けず、プリセットだけを DB 関数
+// set_sns_rotation_schedule（security definer・管理者チェック内蔵）に渡す。
+export type RotationPreset = 'daily' | 'every2days' | 'weekly' | 'monthly' | 'off'
+
+const ROTATION_PRESETS: RotationPreset[] = ['daily', 'every2days', 'weekly', 'monthly', 'off']
+
+export async function setRotationSchedule(preset: RotationPreset): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
+    if (!ROTATION_PRESETS.includes(preset)) {
+      return { ok: false, error: `不正なプリセットです: ${preset}` }
+    }
+    const { error } = await supabase.rpc('set_sns_rotation_schedule', { p_preset: preset })
+    if (error) return { ok: false, error: `間隔の変更に失敗しました: ${error.message}` }
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}

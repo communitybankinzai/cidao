@@ -5,6 +5,8 @@ import SnsActions from './_components/SnsActions'
 import AwaitingList from './_components/AwaitingList'
 import AutoPostToggle from './_components/AutoPostToggle'
 import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
+import RotationScheduleCard from './_components/RotationScheduleCard'
+import type { RotationPreset } from './actions'
 
 type NextTarget = {
   target_type: 'freefree' | 'event' | 'org'
@@ -38,6 +40,17 @@ export default async function AdminSnsPage() {
 
   // 次に紹介される 7 件
   const { data: nextTargets } = await supabase.rpc('pick_next_sns_targets', { per_kind: 7 })
+
+  // ローテーションの現在の実行間隔（pg_cron ジョブから取得。行なし＝停止）
+  const { data: scheduleRows } = await supabase.rpc('get_sns_rotation_schedule')
+  const scheduleExpr: string | null = scheduleRows?.[0]?.schedule ?? null
+  const PRESET_BY_EXPR: Record<string, RotationPreset> = {
+    '0 0 * * *': 'daily',
+    '0 0 */2 * *': 'every2days',
+    '0 0 * * 1': 'weekly',
+    '0 0 1 * *': 'monthly',
+  }
+  const currentPreset: RotationPreset | null = scheduleExpr ? (PRESET_BY_EXPR[scheduleExpr] ?? null) : null
 
   // 提案告知の全自動フラグ＋SNS接続状態
   const { data: settingsRows } = await supabase
@@ -188,6 +201,8 @@ export default async function AdminSnsPage() {
 
         <AutoPostToggle initialEnabled={autoPostEnabled} />
 
+        <RotationScheduleCard current={currentPreset} />
+
         <SnsAuthSettings status={authStatus} />
 
         <SnsActions />
@@ -268,12 +283,47 @@ export default async function AdminSnsPage() {
           )}
         </section>
 
-        <section className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-          <div className="font-medium text-slate-700 dark:text-slate-300">💡 認証情報の状態</div>
-          <div>🧵 Threads / 📷 Instagram / 📘 Facebook: 上の「SNS接続設定」から保存（環境変数 <code>THREADS_*</code> / <code>FACEBOOK_*</code> はフォールバック）。未設定なら pending のまま。</div>
-          <div>💬 LINE: <code>LINE_CHANNEL_ACCESS_TOKEN</code> 環境変数で接続（Messaging API broadcast）。未設定なら pending のまま。</div>
-          <div>📷 Instagram の投稿は提案告知のみ対応（告知カード画像を自動生成して添付。定期紹介は対象外）。</div>
-          <div>𝕏 X: API 有料化のため Phase 2 で接続予定。現状は常に pending 扱い。</div>
+        <section className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs text-slate-600 dark:text-slate-400 space-y-3">
+          <div className="font-medium text-slate-700 dark:text-slate-300">💡 媒体別の状況（配信されない媒体とその理由）</div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="text-left border-b border-slate-300 dark:border-slate-700">
+                  <th className="py-1.5 pr-3 whitespace-nowrap">媒体</th>
+                  <th className="py-1.5 pr-3 whitespace-nowrap">状況</th>
+                  <th className="py-1.5">理由・備考</th>
+                </tr>
+              </thead>
+              <tbody className="align-top">
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">🧵 Threads</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-emerald-600 dark:text-emerald-400">✅ 稼働中</td>
+                  <td className="py-1.5">すべての対象を配信。トークンは毎週月曜朝に自動更新（2026-08-06 接続）</td>
+                </tr>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">📷 Instagram</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-emerald-600 dark:text-emerald-400">✅ 稼働中</td>
+                  <td className="py-1.5">提案告知のみ。Instagram APIは画像必須のため、提案タイトル入りの告知カード画像を自動生成して添付する（定期紹介は画像を用意できないため対象外）</td>
+                </tr>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">📘 Facebook</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-amber-600 dark:text-amber-400">⏸ 見送り中</td>
+                  <td className="py-1.5">CBI名義のFacebookページが未開設のため（2026-08-15 決定）。配信コードは実装済みなので、ページを開設して「SNS接続設定」にトークンを保存すれば有効化できる</td>
+                </tr>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">💬 LINE</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-amber-600 dark:text-amber-400">⏸ 見送り中</td>
+                  <td className="py-1.5">配信コードは実装済みだがトークン未設定。LINEの配信は「公式アカウントの友だち全員へのプッシュ通知」でSNSのタイムライン投稿とは性格が異なるため、何をどの頻度で流すかの運用方針を決めてから接続する</td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">𝕏 X</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">⏸ 未実装</td>
+                  <td className="py-1.5">X APIの有料化により見送り（無料枠は投稿数制限が厳しく、実用には月額課金が必要）。需要とコストが見合う判断になった時点で実装する</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div>👥 団体のローテーション候補は「代表者による登録が完了した団体」または「更新済みの団体」のみ（一括取り込みの仮登録団体は紹介しない）。仮登録団体も claim（代表者確認）や編集で「更新済み」になれば自動で候補入りします（追加作業は不要）。</div>
         </section>
       </div>
     </div>
