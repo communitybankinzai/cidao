@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { generateSnsContent } from '@/lib/sns-template'
 import { fetchSnsTarget } from '@/lib/sns-target'
+import { dispatchLogs } from '@/lib/sns-dispatch'
 
 type LogRow = {
   id: string
@@ -114,6 +115,40 @@ export async function unapproveDraft(logId: string): Promise<DraftResult> {
 
     revalidatePath('/admin/sns')
     return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// 承認して今すぐ投稿する（18時台の自動配信を待たない）。
+// イベント当日など急ぎの告知用。承認セット→この1件だけを即時配信する
+export async function approveAndDispatchDraft(logId: string, content: string): Promise<DraftResult> {
+  try {
+    const { supabase, user } = await requireAdmin()
+    const text = content.trim()
+    if (!text) return { ok: false, error: '本文が空のままでは投稿できません' }
+
+    const { data: log, error: upErr } = await supabase
+      .from('sns_post_logs')
+      .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
+      .eq('id', logId)
+      .eq('status', 'pending')
+      .select('id, medium, content, target_type, target_id')
+      .maybeSingle()
+    if (upErr) return { ok: false, error: `承認に失敗しました: ${upErr.message}` }
+    if (!log) return { ok: false, error: '対象が見つかりません（配信済みの可能性）' }
+
+    const results = await dispatchLogs(supabase, [{
+      id: log.id,
+      medium: log.medium,
+      content: log.content as string | null,
+      target_type: log.target_type,
+      target_id: log.target_id,
+    }])
+    const r = results[0]
+    revalidatePath('/admin/sns')
+    if (r?.outcome === 'success') return { ok: true }
+    return { ok: false, error: `配信できませんでした（${r?.outcome ?? '不明'}）: ${r?.message ?? ''}` }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }

@@ -87,7 +87,8 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string
     }
     case 'event': {
       prefix = '【印西イベント📅】'
-      const when = target.start_at ? new Date(target.start_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+      // サーバーはUTCで動くため timeZone 指定必須（指定なしだと「8/15 01:00」のようにUTC時刻が出る）
+      const when = target.start_at ? new Date(target.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
       const loc = target.location ? ` @ ${target.location}` : ''
       body = `${target.title}${loc}\n${when}${target.organizer_name ? ` / ${target.organizer_name}` : ''}\n${truncate(target.body ?? '', 80)}`
       hashtags = EVENT_HASHTAGS

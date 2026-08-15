@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft } from '../actions'
+import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft, approveAndDispatchDraft } from '../actions'
 
 export type DraftLog = {
   id: string
@@ -133,10 +133,21 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
             </Button>
             <Button
               type="button"
+              variant="outline"
               disabled={pending || !text.trim() || overLimit}
               onClick={() => run(() => approveDraft(log.id, text))}
             >
               承認する（{nextDispatchLabel()}に配信）
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !text.trim() || overLimit}
+              onClick={() => {
+                if (!window.confirm(`「${log.title}」（${log.mediumLabel}）をこの内容でただちに投稿します。よろしいですか？`)) return
+                run(() => approveAndDispatchDraft(log.id, text))
+              }}
+            >
+              ⚡ 今すぐ投稿
             </Button>
           </>
         )}
