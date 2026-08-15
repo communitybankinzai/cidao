@@ -15,19 +15,30 @@ export type SnsAuthStatus = {
 }
 
 export default function SnsAuthSettings({ status }: { status: SnsAuthStatus }) {
+  // 接続状態のサマリー（折りたたんだままでも状態が分かるように見出し横へ出す）
+  const summary = [
+    status.threads ? '🧵✓' : '🧵—',
+    status.instagram ? '📷✓' : '📷—',
+    status.facebook ? '📘✓' : '📘—',
+  ].join(' ')
+
   return (
-    <section className="bg-white dark:bg-slate-900 border rounded-lg p-5 space-y-5">
-      <div>
+    <details className="bg-white dark:bg-slate-900 border rounded-lg p-5 group">
+      <summary className="cursor-pointer flex items-center gap-3 list-none">
         <h2 className="text-lg font-semibold">🔑 SNS接続設定</h2>
-        <p className="text-xs text-slate-500 mt-1">
+        <span className="text-xs text-slate-500">{summary}</span>
+        <span className="ml-auto text-xs text-slate-400 group-open:hidden">クリックで開く（トークンの登録・更新時のみ）</span>
+      </summary>
+      <div className="mt-4 space-y-5">
+        <p className="text-xs text-slate-500">
           Meta for Developers で取得したトークンをここに貼り付けて保存します。保存時に実際にAPIへ接続して検証します。
-          Threads のトークンは60日で失効しますが、保存後は毎週自動で更新（リフレッシュ）されます。
+          Threads / Instagram のトークンは60日で失効しますが、保存後は毎週自動で更新（リフレッシュ）されるため、日常の操作は不要です。
         </p>
+        <ThreadsForm current={status.threads} />
+        <InstagramForm current={status.instagram} />
+        <FacebookForm current={status.facebook} />
       </div>
-      <ThreadsForm current={status.threads} />
-      <InstagramForm current={status.instagram} />
-      <FacebookForm current={status.facebook} />
-    </section>
+    </details>
   )
 }
 
