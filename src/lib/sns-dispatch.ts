@@ -112,14 +112,36 @@ export async function postToMedium(
     })
     const cj = await create.json().catch(() => ({}))
     if (!create.ok || !cj.id) return { status: 'failed', message: `Threads create ${create.status}: ${JSON.stringify(cj).slice(0, 200)}` }
-    const publish = await fetch(`https://graph.threads.net/v1.0/${userId}/threads_publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ creation_id: String(cj.id), access_token: token }),
-    })
-    const pj = await publish.json().catch(() => ({}))
-    if (!publish.ok) return { status: 'failed', message: `Threads publish ${publish.status}: ${JSON.stringify(pj).slice(0, 200)}` }
-    return { status: 'success', posted_id: String(pj.id ?? cj.id) }
+    // container の処理完了を待ってから publish する。テキスト投稿でも作成直後は
+    // 稀に処理中のことがあり、即 publish すると「Media Not Found (subcode 4279009)」
+    // で失敗する（2026-08-14 の提案告知で実際に発生）
+    for (let i = 0; i < 5; i++) {
+      const st = await fetch(`https://graph.threads.net/v1.0/${cj.id}?fields=status&access_token=${encodeURIComponent(token)}`)
+      const sj = await st.json().catch(() => ({}))
+      if (sj.status === 'FINISHED') break
+      if (sj.status === 'ERROR' || sj.status === 'EXPIRED') {
+        return { status: 'failed', message: `Threads container ${sj.status}: ${JSON.stringify(sj).slice(0, 200)}` }
+      }
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    // publish が Media Not Found で落ちた場合は処理遅延の可能性が高いので1回だけ待って再試行
+    let pj: Record<string, unknown> = {}
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const publish = await fetch(`https://graph.threads.net/v1.0/${userId}/threads_publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ creation_id: String(cj.id), access_token: token }),
+      })
+      pj = await publish.json().catch(() => ({}))
+      if (publish.ok) return { status: 'success', posted_id: String(pj.id ?? cj.id) }
+      const subcode = (pj as { error?: { error_subcode?: number } }).error?.error_subcode
+      if (attempt === 0 && subcode === 4279009) {
+        await new Promise((r) => setTimeout(r, 3000))
+        continue
+      }
+      return { status: 'failed', message: `Threads publish: ${JSON.stringify(pj).slice(0, 200)}` }
+    }
+    return { status: 'failed', message: `Threads publish: ${JSON.stringify(pj).slice(0, 200)}` }
   }
 
   if (medium === 'instagram') {
