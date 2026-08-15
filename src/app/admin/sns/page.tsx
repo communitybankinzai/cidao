@@ -114,8 +114,8 @@ export default async function AdminSnsPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin / SNS</p>
           <h1 className="text-3xl font-serif font-bold">SNS 定期紹介・提案告知</h1>
           <p className="text-sm text-slate-500 mt-1">
-            FreeFree・イベント・団体を X / Facebook / LINE にローテーション投稿（毎日 JST 9時）。
-            CiDAO の新しい提案は Threads / Facebook / Instagram へ告知（作成時に下書き自動生成）。
+            FreeFree・イベントは毎朝9時のローテーションで、提案は作成時に、団体は新規登録・紹介内容の更新時に、
+            それぞれ告知の下書きが自動生成されます（配信先：Threads、提案のみ Instagram も）。
           </p>
         </header>
 

@@ -31,13 +31,20 @@ export default function AutoPostToggle({ initialEnabled }: { initialEnabled: boo
   return (
     <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
       <div className="flex items-center justify-between gap-4">
-        <div>
+        <div className="space-y-1.5">
           <h2 className="text-lg font-semibold">📮 提案告知の配信モード</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            {enabled
-              ? '全自動：提案が作成されると、承認なしで各SNSへ即配信されます'
-              : '半自動：提案が作成されると告知文が「承認待ち」になり、管理者へ通知が届きます。承認したものだけが配信されます'}
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            提案が作成されると、どちらのモードでも告知文の下書きまでは自動で作られます。
+            違いは<strong className="font-medium">「配信前に人が確認するかどうか」</strong>です。
           </p>
+          <ul className="text-xs text-slate-500 space-y-0.5">
+            <li className={!enabled ? 'font-medium text-slate-700 dark:text-slate-200' : ''}>
+              ✋ <strong>OFF＝半自動（承認制）</strong>：下書きが「承認待ち」になり管理者へ通知。承認したものだけ配信
+            </li>
+            <li className={enabled ? 'font-medium text-slate-700 dark:text-slate-200' : ''}>
+              ⚡ <strong>ON＝全自動</strong>：下書きの生成から配信まですべて自動。<span className="text-red-600 dark:text-red-400">誰の確認もなく即SNSへ投稿されます</span>
+            </li>
+          </ul>
         </div>
         <button
           type="button"
