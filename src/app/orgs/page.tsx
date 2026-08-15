@@ -9,10 +9,19 @@ export default async function OrgsPage() {
 
   const { data: orgs } = await supabase
     .from('organizations')
-    .select('id, name, type, legal_form, logo_url, description, public_flag, inzai_registration_number, enriched_at, info_verified, created_at, updated_at, organization_categories(category, is_primary)')
+    .select('id, name, type, legal_form, logo_url, description, public_flag, inzai_registration_number, representative_id, enriched_at, info_verified, created_at, updated_at, organization_categories(category, is_primary)')
     .eq('public_flag', true)
     .order('name')
     .limit(500)
+
+  // 一括取り込み団体（seed-orgs.mjs）は代表者がシステムプレースホルダー会員になっている。
+  // これを「仮登録」判定に使う（enriched_at は一括取り込みでは入らないため単独では判定不能）
+  const { data: placeholderMember } = await supabase
+    .from('members')
+    .select('id')
+    .eq('display_name', '印西市公式登録（未認証プレースホルダー）')
+    .maybeSingle()
+  const placeholderId = placeholderMember?.id ?? null
 
   // 公開メンバーシップ（display_in_org=true の confirmed）をまとめて取得して org_id でマップ
   type MembershipRow = {
@@ -36,10 +45,22 @@ export default async function OrgsPage() {
     list.push(m)
     membersByOrgId.set(m.org_id, list)
   }
-  const merged = (orgs ?? []).map((o) => ({
-    ...o,
-    memberships: membersByOrgId.get(o.id) ?? [],
-  }))
+  // 登録状態の3区分（判定はサーバー側で確定させ、クライアントには結果だけ渡す）
+  //   更新済み … 代表者が確認・編集済み（info_verified true）
+  //   仮登録   … 未確認で、一括取り込み（代表者がプレースホルダー）or AI自動収集（enriched_at あり）
+  //   新規登録 … それ以外＝ユーザー自身が団体登録フォームから登録
+  const merged = (orgs ?? []).map((o) => {
+    const status = o.info_verified
+      ? 'verified' as const
+      : ((placeholderId && o.representative_id === placeholderId) || o.enriched_at)
+        ? 'provisional' as const
+        : 'self_registered' as const
+    return {
+      ...o,
+      status,
+      memberships: membersByOrgId.get(o.id) ?? [],
+    }
+  })
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">

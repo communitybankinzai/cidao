@@ -27,24 +27,18 @@ type Org = {
   description: string | null
   public_flag: boolean
   inzai_registration_number?: string | null
-  enriched_at?: string | null
-  info_verified?: boolean
   created_at?: string
   updated_at?: string
+  status: OrgStatus
   organization_categories: OrgCategory[] | null
   memberships?: Membership[] | null
 }
 
-// 登録状態の3区分。
-//   仮登録   … AI が Web から自動収集し、代表者が未確認（enriched_at あり・info_verified false）
-//   新規登録 … ユーザー自身が団体登録フォームから登録（enriched_at なし）
-//   更新済み … 仮登録だったが代表者が確認・編集済み（info_verified true）
+// 登録状態の3区分（判定はサーバー側 page.tsx で確定済み）。
+//   仮登録   … 一括取り込み or AI自動収集で、代表者が未確認
+//   新規登録 … ユーザー自身が団体登録フォームから登録
+//   更新済み … 代表者が確認・編集済み（info_verified true）
 type OrgStatus = 'provisional' | 'self_registered' | 'verified'
-
-function orgStatus(o: Org): OrgStatus {
-  if (!o.enriched_at) return 'self_registered'
-  return o.info_verified ? 'verified' : 'provisional'
-}
 
 const STATUS_LABEL: Record<OrgStatus, string> = {
   provisional: '仮登録',
@@ -135,7 +129,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
 
   const statusCounts = useMemo(() => {
     const c: Record<OrgStatus, number> = { provisional: 0, self_registered: 0, verified: 0 }
-    for (const o of orgs) c[orgStatus(o)]++
+    for (const o of orgs) c[o.status]++
     return c
   }, [orgs])
 
@@ -147,7 +141,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
       if (regFilter === 'registered' && !o.inzai_registration_number) return false
       if (regFilter === 'unregistered' && o.inzai_registration_number) return false
       if (categoryFilter && !(o.organization_categories ?? []).some((c) => c.category === categoryFilter)) return false
-      if (statusFilter && orgStatus(o) !== statusFilter) return false
+      if (statusFilter && o.status !== statusFilter) return false
       if (q) {
         const hay = `${o.name} ${o.description ?? ''} ${o.inzai_registration_number ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
@@ -308,8 +302,8 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                       </div>
                     </div>
                     <div className="mb-2 flex flex-wrap items-center gap-1">
-                      <span className={`inline-block text-[10px] px-2 py-0.5 rounded ${STATUS_BADGE_CLASS[orgStatus(o)]}`}>
-                        {STATUS_LABEL[orgStatus(o)]}
+                      <span className={`inline-block text-[10px] px-2 py-0.5 rounded ${STATUS_BADGE_CLASS[o.status]}`}>
+                        {STATUS_LABEL[o.status]}
                       </span>
                       {o.inzai_registration_number && (
                         <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-mono">
