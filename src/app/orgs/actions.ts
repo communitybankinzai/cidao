@@ -8,6 +8,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { nameWithSan } from '@/lib/honorific'
 import { notifyAllMembers } from '@/lib/notify'
+import { announceOrgToSns } from '@/lib/sns-announce'
 import { TYPE_LABEL } from '@/lib/org-labels'
 import { recordWrite } from '@/lib/audit'
 
@@ -93,6 +94,8 @@ export async function createOrganization(input: OrgInput) {
         body: TYPE_LABEL[input.type] ?? undefined,
         linkUrl: `/orgs/${org.id}`,
       })
+      // SNS紹介の下書きも作る（承認制・管理者へ通知。best-effort）
+      await announceOrgToSns({ id: org.id, name: input.name })
     })
   }
 
@@ -399,6 +402,8 @@ export async function approveClaim(orgId: string, memberId: string) {
             body: TYPE_LABEL[org.type] ?? undefined,
             linkUrl: `/orgs/${orgId}`,
           })
+          // SNS紹介の下書きも作る（承認制・管理者へ通知。best-effort）
+          await announceOrgToSns({ id: orgId, name: String(org.name) })
         })
       }
     }
@@ -551,6 +556,10 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
         push: false,
         dedupeMinutes: 360,
       })
+      // 紹介内容が更新されたのでSNS紹介の下書きも作る
+      // （承認制・管理者へ通知。同団体の未配信下書きや直近30日の配信があれば
+      //   announceOrgToSns 側でスキップされる。best-effort）
+      await announceOrgToSns({ id: orgId, name: String(org.name) })
     })
   }
 

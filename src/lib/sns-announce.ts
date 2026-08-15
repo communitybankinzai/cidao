@@ -84,7 +84,7 @@ export async function announceProposalToSns(
     if (!auto) {
       // 管理画面は毎日開かれるとは限らないため、承認待ちができたことを
       // 管理者へ積極的に知らせる（ベル＋Webプッシュ＋メール、いずれも best-effort）
-      await notifyAdminsOfPendingDrafts(supabase, proposal.title, inserted.length)
+      await notifyAdminsOfPendingDrafts(supabase, `提案「${proposal.title}」`, inserted.length)
       return { created: inserted.length, dispatched: 0, auto }
     }
 
@@ -107,11 +107,72 @@ export async function announceProposalToSns(
   }
 }
 
+// 団体の新規登録・紹介内容更新時のSNS告知下書きを作成する（Threads のみ・常に承認制）。
+// ローテーション廃止（2026-08-15）に伴い、団体はイベントドリブンで告知する。
+// orgs/actions.ts の after() から呼ばれる best-effort。
+export async function announceOrgToSns(org: {
+  id: string
+  name: string
+}): Promise<{ created: number }> {
+  const supabase = adminClient()
+  if (!supabase) return { created: 0 }
+
+  try {
+    // 重複抑制：同団体の未配信下書きが残っている、または直近30日に配信済みなら作らない
+    // （連続編集や登録→即編集で下書きが積み上がるのを防ぐ）
+    const since = new Date(Date.now() - 30 * 86400_000).toISOString()
+    const { data: existing } = await supabase
+      .from('sns_post_logs')
+      .select('id, status, created_at')
+      .eq('target_type', 'org')
+      .eq('target_id', org.id)
+      .or(`status.eq.pending,and(status.eq.success,created_at.gte.${since})`)
+      .limit(1)
+    if (existing && existing.length > 0) return { created: 0 }
+
+    // 本文は最新のDB内容から生成（更新時は更新後の紹介文で告知するため）
+    const { data: row } = await supabase
+      .from('organizations')
+      .select('name, description')
+      .eq('id', org.id)
+      .maybeSingle()
+    const content = generateSnsContent(
+      {
+        target_type: 'org',
+        target_id: org.id,
+        title: String(row?.name ?? org.name),
+        body: (row?.description as string | null) ?? null,
+      },
+      'threads',
+    )
+    const { error } = await supabase.from('sns_post_logs').insert({
+      target_type: 'org',
+      target_id: org.id,
+      medium: 'threads',
+      status: 'pending',
+      content,
+      approved_at: null,
+      error_message: 'org announce: awaiting approval',
+    })
+    if (error) {
+      console.error('[sns-announce] org insert failed:', error.message)
+      return { created: 0 }
+    }
+
+    await notifyAdminsOfPendingDrafts(supabase, `団体「${org.name}」`, 1)
+    return { created: 1 }
+  } catch (e) {
+    console.error('[sns-announce] org failed:', e instanceof Error ? e.message : e)
+    return { created: 0 }
+  }
+}
+
 // 承認待ちの下書きができたことを管理者全員に知らせる。
 // アプリ内通知（ベル＋Webプッシュ）と ADMIN_NOTIFY_EMAIL へのメールの2経路。
+// subjectLabel は「提案「◯◯」」「団体「◯◯」」のような対象の呼び名。
 async function notifyAdminsOfPendingDrafts(
   supabase: SupabaseClient,
-  proposalTitle: string,
+  subjectLabel: string,
   draftCount: number,
 ) {
   // 1. アプリ内通知：admin_role を持つメンバー全員へ
@@ -126,7 +187,7 @@ async function notifyAdminsOfPendingDrafts(
         recipientId: a.id as string,
         kind: 'system',
         title: `SNS投稿の承認待ちが ${draftCount} 件あります`,
-        body: `提案「${proposalTitle}」の告知文が作成されました。管理画面で確認・承認すると配信されます`,
+        body: `${subjectLabel}の告知文が作成されました。管理画面で確認・承認すると配信されます`,
         linkUrl: '/admin/sns',
       })
     }
@@ -145,13 +206,11 @@ async function notifyAdminsOfPendingDrafts(
     await resend.emails.send({
       from: normalizeMailFrom(from),
       to,
-      subject: `【CiDAO】SNS告知の承認待ち：提案「${proposalTitle}」`,
+      subject: `【CiDAO】SNS告知の承認待ち：${subjectLabel}`,
       text: [
-        `新しい提案の SNS 告知文（${draftCount} 件）が承認待ちになりました。`,
+        `${subjectLabel}の SNS 告知文（${draftCount} 件）が承認待ちになりました。`,
         ``,
-        `提案: ${proposalTitle}`,
-        ``,
-        `管理画面で本文を確認・修正のうえ承認すると、各SNSに配信されます。`,
+        `管理画面で本文を確認・修正のうえ承認すると、配信されます。`,
         `${SITE_BASE}/admin/sns`,
       ].join('\n'),
     })
