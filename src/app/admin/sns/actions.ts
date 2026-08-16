@@ -231,6 +231,33 @@ export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
   return { username: String(j.username ?? ''), userId: resolvedId, keywordSearchReady }
 }
 
+// Threads アプリの認証情報（ThreadsアプリID・app secret）を保存する。
+// OAuth 再認証（/api/admin/sns/threads-oauth/start）でのみ使用し、画面には返さない。
+// トークン生成ツールでは threads_keyword_search 付きトークンを発行できないため、
+// 自前の認可URLを組み立てるのに必要になる。
+export async function saveThreadsAppCredentials(appIdInput: string, appSecretInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const appId = appIdInput.trim()
+  const appSecret = appSecretInput.trim()
+  if (!appId || !appSecret) throw new Error('ThreadsアプリIDとapp secretを入力してください')
+  if (!/^\d{5,}$/.test(appId)) throw new Error('ThreadsアプリIDは数字です（Meta開発者コンソールの「ThreadsアプリID」欄の値）')
+
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_threads_app',
+    value: {
+      app_id: appId,
+      app_secret: appSecret,
+      saved_at: new Date().toISOString(),
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+  return { ok: true }
+}
+
 // Instagram の接続情報を検証して保存する（Instagram Login 方式・graph.instagram.com）
 export async function saveInstagramAuth(tokenInput: string) {
   const { supabase, user } = await requireAdmin()

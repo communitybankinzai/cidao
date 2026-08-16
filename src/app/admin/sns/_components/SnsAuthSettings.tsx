@@ -2,14 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
-import { saveThreadsAuth, saveFacebookAuth, saveInstagramAuth, saveInstagramDiscoveryAuth } from '../actions'
+import { saveThreadsAuth, saveThreadsAppCredentials, saveFacebookAuth, saveInstagramAuth, saveInstagramDiscoveryAuth } from '../actions'
 
 // SNS接続設定：運営が取得したトークンを貼り付けて保存する。
 // 保存時にサーバー側で実際に API を叩いて検証するため、貼り間違いはここで弾かれる。
 // トークンの現在値は画面に表示しない（設定済みかどうかと接続先の名前だけ見せる）。
 
 export type SnsAuthStatus = {
-  threads: { username: string; savedAt: string; expiresAt: string | null } | null
+  threads: { username: string; savedAt: string; expiresAt: string | null; keywordSearchReady?: boolean } | null
+  threadsApp: { savedAt: string } | null
   facebook: { pageName: string; savedAt: string } | null
   instagram: { username: string; savedAt: string; expiresAt: string | null } | null
   instagramDiscovery: { username: string; savedAt: string } | null
@@ -36,7 +37,7 @@ export default function SnsAuthSettings({ status }: { status: SnsAuthStatus }) {
           Meta for Developers で取得したトークンをここに貼り付けて保存します。保存時に実際にAPIへ接続して検証します。
           Threads / Instagram のトークンは60日で失効しますが、保存後は毎週自動で更新（リフレッシュ）されるため、日常の操作は不要です。
         </p>
-        <ThreadsForm current={status.threads} />
+        <ThreadsForm current={status.threads} app={status.threadsApp} />
         <InstagramForm current={status.instagram} />
         <InstagramDiscoveryForm current={status.instagramDiscovery} />
         <FacebookForm current={status.facebook} />
@@ -160,7 +161,94 @@ function InstagramForm({ current }: { current: SnsAuthStatus['instagram'] }) {
   )
 }
 
-function ThreadsForm({ current }: { current: SnsAuthStatus['threads'] }) {
+// 検索権限つき再認証の案内ブロック。
+// トークン生成ツールは threads_keyword_search を要求できないため、
+// アプリID・app secret を登録したうえで自前のOAuth認可URLへ誘導する。
+function ThreadsSearchReauth({ current, app }: { current: SnsAuthStatus['threads']; app: SnsAuthStatus['threadsApp'] }) {
+  const [appId, setAppId] = useState('')
+  const [appSecret, setAppSecret] = useState('')
+  const [pending, startTransition] = useTransition()
+  const [message, setMessage] = useState<string | null>(null)
+
+  function submitCredentials() {
+    setMessage(null)
+    startTransition(async () => {
+      try {
+        await saveThreadsAppCredentials(appId, appSecret)
+        setMessage('✓ 保存しました。下の「検索権限つきで再認証」へ進んでください')
+        setAppId('')
+        setAppSecret('')
+      } catch (e) {
+        setMessage(`❌ ${e instanceof Error ? e.message : String(e)}`)
+      }
+    })
+  }
+
+  if (current?.keywordSearchReady) {
+    return <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ 公開投稿検索（keyword_search）利用可</p>
+  }
+  return (
+    <div className="rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+      <p className="text-xs text-amber-800 dark:text-amber-300">
+        公開投稿検索（災害SNS巡回のThreads枠）には <code>threads_keyword_search</code> 権限つきの再認証が必要です。
+        Meta開発者コンソールのトークン生成ツールではこの権限を付けられないため、ここから再認証します。
+      </p>
+      {!app && (
+        <>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            ① Meta開発者コンソール「Threads APIにアクセス」→「設定」の <b>ThreadsアプリID</b> と <b>Threadsのapp secret</b>（表示ボタンで確認）を登録:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              placeholder="ThreadsアプリID（数字）"
+              className="flex-1 min-w-40 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              value={appSecret}
+              onChange={(e) => setAppSecret(e.target.value)}
+              placeholder="Threadsのapp secret"
+              className="flex-1 min-w-40 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"
+              autoComplete="off"
+            />
+            <Button onClick={submitCredentials} size="sm" disabled={pending || !appId.trim() || !appSecret.trim()}>
+              {pending ? '保存中…' : '保存'}
+            </Button>
+          </div>
+        </>
+      )}
+      {app && (
+        <p className="text-xs text-slate-600 dark:text-slate-400">
+          ② 事前にMeta開発者コンソールの「コールバックURLをリダイレクト」へ
+          <code className="mx-1 break-all">https://cidao.vercel.app/api/admin/sns/threads-oauth/callback</code>
+          を登録・保存してから:
+        </p>
+      )}
+      <div className="flex items-center gap-3">
+        {app ? (
+          <a
+            href="/api/admin/sns/threads-oauth/start"
+            className="inline-flex items-center rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-3 py-1.5 text-xs font-medium hover:opacity-85"
+          >
+            🔁 検索権限つきで再認証
+          </a>
+        ) : (
+          <span className="inline-flex items-center rounded bg-slate-200 dark:bg-slate-800 text-slate-400 px-3 py-1.5 text-xs font-medium cursor-not-allowed">
+            🔁 検索権限つきで再認証（先に①を保存）
+          </span>
+        )}
+        {app && <span className="text-xs text-slate-500">アプリ認証情報 設定済み（{app.savedAt ? new Date(app.savedAt).toLocaleDateString('ja-JP') : ''}）</span>}
+      </div>
+      {message && <p className="text-xs">{message}</p>}
+    </div>
+  )
+}
+
+function ThreadsForm({ current, app }: { current: SnsAuthStatus['threads']; app: SnsAuthStatus['threadsApp'] }) {
   const [token, setToken] = useState('')
   const [userId, setUserId] = useState('')
   const [pending, startTransition] = useTransition()
@@ -217,6 +305,7 @@ function ThreadsForm({ current }: { current: SnsAuthStatus['threads'] }) {
         </Button>
         {message && <span className="text-xs">{message}</span>}
       </div>
+      <ThreadsSearchReauth current={current} app={app} />
     </div>
   )
 }
