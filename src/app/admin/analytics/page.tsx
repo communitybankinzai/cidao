@@ -12,6 +12,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { AnalyzeButton } from './_components/AnalyzeButton'
+import { MapTilesUsageSection } from './_components/MapTilesUsageSection'
 
 type DailyRow = { day: string; pv: number; vv: number }
 type PathRow = { path: string; pv: number; vv: number; prev_pv: number; prev_vv: number }
@@ -249,6 +250,8 @@ export default async function AdminAnalyticsPage() {
             </div>
           )}
         </section>
+
+        <MapTilesUsageSection />
 
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-3">
           <h2 className="text-lg font-semibold">AI 分析（増減要因の仮説）</h2>
