@@ -1,14 +1,15 @@
 # 災害MAP向けSNS巡回 引継ぎ
 
-最終更新: 2026-08-16
+最終更新: 2026-08-17
 
 このリポジトリは、印西市災害状況整合MAPのSNS自動巡回バックエンドも提供する。MAP側の詳細な引継ぎは `C:\Users\nsfactory\OneDrive\CBI\site\inzai-disaster-map\CLAUDE_HANDOFF.md` を参照。
 
 ## 公開・実装状態
 
 - 本番: https://cidao.vercel.app
-- API: `GET/POST /api/disaster/sns-monitor`
-- 実装コミット: `da6c46d`
+- API: `GET/POST /api/disaster/sns-monitor`（GETは検索ルール一覧も返す）／`GET /api/disaster/inzai-shelters`（印西市公式避難所55施設・防災速報照合つき）
+- 実装コミット: `da6c46d` → `429e717`（避難所API＋検索ルール管理UI）
+- 検索ルールの編集は `/admin/sns` の「災害SNS巡回の検索語」（媒体ごと1行1語・各12件・2〜50文字）。Facebookは公開投稿検索APIがないため自動巡回対象外（MAP側の手動検索＋URL登録で補完する仕様）。
 - `npm run build`成功、本番GET `200`、GitHub Pages OriginのCORS `204`を確認済み。
 - Supabase migration `20260816100000_disaster_sns_monitor.sql` は本番適用済み。
 - `pg_cron`から5分ごとに固定検索語を巡回し、候補は自動公開せずレビュー待ちで保存する。
