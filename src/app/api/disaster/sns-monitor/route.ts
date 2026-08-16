@@ -69,7 +69,7 @@ async function readMonitorState(request: Request) {
       .limit(100),
     supabase
       .from('disaster_sns_monitor_rules')
-      .select('platform, enabled, last_scanned_at, last_status, last_error')
+      .select('platform, query, enabled, last_scanned_at, last_status, last_error')
       .order('platform'),
     supabase
       .from('disaster_sns_scan_runs')
@@ -120,6 +120,11 @@ async function readMonitorState(request: Request) {
   return json(request, {
     date: range.date,
     items,
+    rules: (rules ?? []).map((rule) => ({
+      platform: rule.platform,
+      query: rule.query,
+      enabled: Boolean(rule.enabled),
+    })),
     platforms: Array.from(platformSummary.values()),
     lastRun: latestRun ?? null,
   })

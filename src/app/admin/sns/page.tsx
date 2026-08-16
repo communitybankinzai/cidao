@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
 import AwaitingList from './_components/AwaitingList'
 import AutoPostToggle from './_components/AutoPostToggle'
 import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
 import RotationScheduleCard from './_components/RotationScheduleCard'
+import DisasterSnsMonitorRules, { type DisasterMonitorRule } from './_components/DisasterSnsMonitorRules'
 import type { RotationPreset } from './actions'
 
 type NextTarget = {
@@ -37,6 +39,24 @@ export default async function AdminSnsPage() {
 
   const { data: isAdmin } = await supabase.rpc('is_admin')
   if (!isAdmin) redirect('/')
+
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const monitorAdmin = serviceUrl && serviceKey
+    ? createSupabaseAdmin(serviceUrl, serviceKey, { auth: { persistSession: false } })
+    : null
+  const { data: monitorRuleRows } = monitorAdmin
+    ? await monitorAdmin
+        .from('disaster_sns_monitor_rules')
+        .select('platform, query, enabled')
+        .order('platform')
+        .order('query')
+    : { data: null }
+  const disasterMonitorRules = (monitorRuleRows ?? []).filter((rule): rule is DisasterMonitorRule => (
+    ['threads', 'instagram', 'bluesky'].includes(rule.platform)
+      && typeof rule.query === 'string'
+      && typeof rule.enabled === 'boolean'
+  ))
 
   // 次に紹介される 7 件
   const { data: nextTargets } = await supabase.rpc('pick_next_sns_targets', { per_kind: 7 })
@@ -210,6 +230,8 @@ export default async function AdminSnsPage() {
         <RotationScheduleCard current={currentPreset} />
 
         <SnsAuthSettings status={authStatus} />
+
+        <DisasterSnsMonitorRules initialRules={disasterMonitorRules} />
 
         <SnsActions />
 

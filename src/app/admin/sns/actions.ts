@@ -4,6 +4,7 @@
 // 開発仕様書 v2.1 §3.11.4「立ち上げ期：運営事前承認」に対応する。
 
 import { revalidatePath } from 'next/cache'
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { generateSnsContent } from '@/lib/sns-template'
 import { fetchSnsTarget } from '@/lib/sns-target'
@@ -23,6 +24,13 @@ async function requireAdmin() {
   const { data: isAdmin } = await supabase.rpc('is_admin')
   if (!isAdmin) throw new Error('権限がありません')
   return { supabase, user }
+}
+
+function disasterMonitorAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) throw new Error('SNS巡回設定のサーバー接続が未設定です')
+  return createSupabaseAdmin(url, key, { auth: { persistSession: false } })
 }
 
 // Server Action の throw は本番ビルドでメッセージがマスクされ
@@ -368,5 +376,55 @@ export async function setRotationSchedule(preset: RotationPreset): Promise<Draft
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+export type DisasterMonitorPlatform = 'threads' | 'instagram' | 'bluesky'
+export type DisasterMonitorRuleInput = {
+  platform: DisasterMonitorPlatform
+  queries: string[]
+}
+
+const DISASTER_MONITOR_PLATFORMS: DisasterMonitorPlatform[] = ['threads', 'instagram', 'bluesky']
+
+export async function saveDisasterSnsMonitorRules(
+  input: DisasterMonitorRuleInput[],
+): Promise<DraftResult> {
+  try {
+    await requireAdmin()
+    const admin = disasterMonitorAdminClient()
+    const normalized = input.flatMap((group) => {
+      if (!DISASTER_MONITOR_PLATFORMS.includes(group.platform)) return []
+      const unique = Array.from(new Set(group.queries.map((query) => query.trim()).filter(Boolean)))
+      if (unique.length > 12) throw new Error(`${group.platform}の検索語は12件以内にしてください`)
+      return unique.map((query) => {
+        if (query.length < 2 || query.length > 50 || /[\u0000-\u001f\u007f]/.test(query)) {
+          throw new Error('検索語は制御文字を含まない2〜50文字で入力してください')
+        }
+        return { platform: group.platform, query }
+      })
+    })
+
+    const { error: disableError } = await admin
+      .from('disaster_sns_monitor_rules')
+      .update({ enabled: false, updated_at: new Date().toISOString() })
+      .in('platform', DISASTER_MONITOR_PLATFORMS)
+    if (disableError) return { ok: false, error: `既存ルールの更新に失敗しました: ${disableError.message}` }
+
+    if (normalized.length > 0) {
+      const now = new Date().toISOString()
+      const { error: upsertError } = await admin
+        .from('disaster_sns_monitor_rules')
+        .upsert(
+          normalized.map((rule) => ({ ...rule, enabled: true, updated_at: now })),
+          { onConflict: 'platform,query' },
+        )
+      if (upsertError) return { ok: false, error: `検索語の保存に失敗しました: ${upsertError.message}` }
+    }
+
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
