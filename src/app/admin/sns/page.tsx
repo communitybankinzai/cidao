@@ -56,13 +56,14 @@ export default async function AdminSnsPage() {
   const { data: settingsRows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_facebook_auth', 'sns_instagram_auth'])
+    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_facebook_auth', 'sns_instagram_auth', 'sns_instagram_discovery_auth'])
   const settingOf = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, unknown> | null]))
   const autoPostEnabled = (settingOf.get('sns_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
 
   const thAuth = settingOf.get('sns_threads_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
   const fbAuth = settingOf.get('sns_facebook_auth') as { page_name?: string; saved_at?: string } | undefined
   const igAuth = settingOf.get('sns_instagram_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
+  const igDiscoveryAuth = settingOf.get('sns_instagram_discovery_auth') as { username?: string; saved_at?: string } | undefined
   const authStatus: SnsAuthStatus = {
     threads: thAuth?.saved_at
       ? { username: String(thAuth.username ?? ''), savedAt: String(thAuth.saved_at), expiresAt: thAuth.expires_at ? String(thAuth.expires_at) : null }
@@ -72,6 +73,9 @@ export default async function AdminSnsPage() {
       : null,
     instagram: igAuth?.saved_at
       ? { username: String(igAuth.username ?? ''), savedAt: String(igAuth.saved_at), expiresAt: igAuth.expires_at ? String(igAuth.expires_at) : null }
+      : null,
+    instagramDiscovery: igDiscoveryAuth?.saved_at
+      ? { username: String(igDiscoveryAuth.username ?? ''), savedAt: String(igDiscoveryAuth.saved_at) }
       : null,
   }
 

@@ -192,6 +192,16 @@ export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
   }
   const resolvedId = userId || String(j.id)
 
+  const keywordParams = new URLSearchParams({
+    q: '印西市',
+    search_type: 'RECENT',
+    fields: 'id',
+    limit: '1',
+    access_token: token,
+  })
+  const keywordResponse = await fetch(`https://graph.threads.net/keyword_search?${keywordParams}`)
+  const keywordSearchReady = keywordResponse.ok
+
   const { error } = await supabase.from('app_settings').upsert({
     key: 'sns_threads_auth',
     value: {
@@ -201,6 +211,8 @@ export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
       saved_at: new Date().toISOString(),
       // 長期トークンは60日有効。自動リフレッシュ cron が更新のたびに延長する
       expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
+      keyword_search_ready: keywordSearchReady,
+      keyword_search_checked_at: new Date().toISOString(),
     },
     updated_at: new Date().toISOString(),
     updated_by: user.id,
@@ -208,7 +220,7 @@ export async function saveThreadsAuth(userIdInput: string, tokenInput: string) {
   if (error) throw new Error(`保存に失敗しました: ${error.message}`)
 
   revalidatePath('/admin/sns')
-  return { username: String(j.username ?? ''), userId: resolvedId }
+  return { username: String(j.username ?? ''), userId: resolvedId, keywordSearchReady }
 }
 
 // Instagram の接続情報を検証して保存する（Instagram Login 方式・graph.instagram.com）
@@ -240,6 +252,52 @@ export async function saveInstagramAuth(tokenInput: string) {
 
   revalidatePath('/admin/sns')
   return { username: String(j.username ?? ''), userId: String(j.user_id ?? j.id) }
+}
+
+// Instagramの公開ハッシュタグ検索は、投稿用のInstagram Loginトークンとは
+// 認証方式が異なる。Facebook Loginで取得したIGプロアカウントIDとトークンを
+// 専用設定として分離し、誤って投稿処理へ流用しない。
+export async function saveInstagramDiscoveryAuth(userIdInput: string, tokenInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const userId = userIdInput.trim()
+  const token = tokenInput.trim()
+  if (!userId || !token) throw new Error('InstagramプロアカウントIDとアクセストークンを入力してください')
+
+  const profileResponse = await fetch(
+    `https://graph.facebook.com/v22.0/${encodeURIComponent(userId)}?fields=id,username&access_token=${encodeURIComponent(token)}`,
+  )
+  const profile = await profileResponse.json().catch(() => ({}))
+  if (!profileResponse.ok || !profile.id) {
+    throw new Error(`Instagram検索用認証の検証に失敗しました: ${JSON.stringify(profile?.error?.message ?? profile).slice(0, 200)}`)
+  }
+
+  const searchParams = new URLSearchParams({
+    user_id: userId,
+    q: '印西市',
+    access_token: token,
+  })
+  const searchResponse = await fetch(`https://graph.facebook.com/v22.0/ig_hashtag_search?${searchParams}`)
+  const searchResult = await searchResponse.json().catch(() => ({}))
+  if (!searchResponse.ok) {
+    throw new Error(`ハッシュタグ検索権限の確認に失敗しました: ${JSON.stringify(searchResult?.error?.message ?? searchResult).slice(0, 200)}`)
+  }
+
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_instagram_discovery_auth',
+    value: {
+      user_id: String(profile.id),
+      access_token: token,
+      username: String(profile.username ?? ''),
+      saved_at: new Date().toISOString(),
+      auth_mode: 'facebook_login',
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  revalidatePath('/admin/sns')
+  return { username: String(profile.username ?? ''), userId: String(profile.id) }
 }
 
 // Facebook ページの接続情報を検証して保存する
