@@ -18,6 +18,8 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 
 const TARGETS = [
   { key: 'sns_threads_auth', endpoint: 'https://graph.threads.net/refresh_access_token', grant: 'th_refresh_token' },
+  // 検索専用アプリのトークン（災害SNS巡回のThreads枠）。投稿用とは別アプリ・別トークン
+  { key: 'sns_threads_discovery_auth', endpoint: 'https://graph.threads.net/refresh_access_token', grant: 'th_refresh_token' },
   { key: 'sns_instagram_auth', endpoint: 'https://graph.instagram.com/refresh_access_token', grant: 'ig_refresh_token' },
 ] as const
 

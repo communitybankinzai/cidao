@@ -11,6 +11,7 @@ import { saveThreadsAuth, saveThreadsAppCredentials, saveFacebookAuth, saveInsta
 export type SnsAuthStatus = {
   threads: { username: string; savedAt: string; expiresAt: string | null; keywordSearchReady?: boolean } | null
   threadsApp: { savedAt: string } | null
+  threadsSearch: { username: string; savedAt: string; keywordSearchReady: boolean } | null
   facebook: { pageName: string; savedAt: string } | null
   instagram: { username: string; savedAt: string; expiresAt: string | null } | null
   instagramDiscovery: { username: string; savedAt: string } | null
@@ -37,7 +38,7 @@ export default function SnsAuthSettings({ status }: { status: SnsAuthStatus }) {
           Meta for Developers で取得したトークンをここに貼り付けて保存します。保存時に実際にAPIへ接続して検証します。
           Threads / Instagram のトークンは60日で失効しますが、保存後は毎週自動で更新（リフレッシュ）されるため、日常の操作は不要です。
         </p>
-        <ThreadsForm current={status.threads} app={status.threadsApp} />
+        <ThreadsForm current={status.threads} app={status.threadsApp} search={status.threadsSearch} />
         <InstagramForm current={status.instagram} />
         <InstagramDiscoveryForm current={status.instagramDiscovery} />
         <FacebookForm current={status.facebook} />
@@ -161,10 +162,11 @@ function InstagramForm({ current }: { current: SnsAuthStatus['instagram'] }) {
   )
 }
 
-// 検索権限つき再認証の案内ブロック。
-// トークン生成ツールは threads_keyword_search を要求できないため、
-// アプリID・app secret を登録したうえで自前のOAuth認可URLへ誘導する。
-function ThreadsSearchReauth({ current, app }: { current: SnsAuthStatus['threads']; app: SnsAuthStatus['threadsApp'] }) {
+// 公開投稿検索（災害SNS巡回のThreads枠）の認証ブロック。
+// 投稿用アプリはダッシュボードのフォーム破損でコールバックURLを登録できないため、
+// 検索専用に新規作成したThreadsアプリのID・secretを登録し、自前のOAuth認可URLで認証する。
+// 投稿用トークンとは完全分離（2026-08-17）。
+function ThreadsSearchReauth({ search, app }: { search: SnsAuthStatus['threadsSearch']; app: SnsAuthStatus['threadsApp'] }) {
   const [appId, setAppId] = useState('')
   const [appSecret, setAppSecret] = useState('')
   const [pending, startTransition] = useTransition()
@@ -184,19 +186,23 @@ function ThreadsSearchReauth({ current, app }: { current: SnsAuthStatus['threads
     })
   }
 
-  if (current?.keywordSearchReady) {
-    return <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ 公開投稿検索（keyword_search）利用可</p>
+  if (search?.keywordSearchReady) {
+    return (
+      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+        ✓ 公開投稿検索 設定済み（@{search.username} / {new Date(search.savedAt).toLocaleDateString('ja-JP')} 保存・検索専用アプリ）
+      </p>
+    )
   }
   return (
     <div className="rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
       <p className="text-xs text-amber-800 dark:text-amber-300">
-        公開投稿検索（災害SNS巡回のThreads枠）には <code>threads_keyword_search</code> 権限つきの再認証が必要です。
-        Meta開発者コンソールのトークン生成ツールではこの権限を付けられないため、ここから再認証します。
+        公開投稿検索（災害SNS巡回のThreads枠）は<b>検索専用のThreadsアプリ</b>で認証します（投稿用アプリとは別。
+        投稿用アプリの設定フォームは <code>threads_keyword_search</code> を登録できないため）。投稿用のトークンには影響しません。
       </p>
       {!app && (
         <>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            ① Meta開発者コンソール「Threads APIにアクセス」→「設定」の <b>ThreadsアプリID</b> と <b>Threadsのapp secret</b>（表示ボタンで確認）を登録:
+            ① <b>検索専用に新規作成したThreadsアプリ</b>の「Threads APIにアクセス」→「設定」にある <b>ThreadsアプリID</b> と <b>Threadsのapp secret</b>（表示ボタンで確認）を登録:
           </p>
           <div className="flex flex-wrap gap-2">
             <input
@@ -223,9 +229,9 @@ function ThreadsSearchReauth({ current, app }: { current: SnsAuthStatus['threads
       )}
       {app && (
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          ② 事前にMeta開発者コンソールの「コールバックURLをリダイレクト」へ
+          ② 検索専用アプリの「コールバックURLをリダイレクト」へ
           <code className="mx-1 break-all">https://cidao.vercel.app/api/admin/sns/threads-oauth/callback</code>
-          を登録・保存してから:
+          が登録済みであることを確認してから:
         </p>
       )}
       <div className="flex items-center gap-3">
@@ -248,7 +254,7 @@ function ThreadsSearchReauth({ current, app }: { current: SnsAuthStatus['threads
   )
 }
 
-function ThreadsForm({ current, app }: { current: SnsAuthStatus['threads']; app: SnsAuthStatus['threadsApp'] }) {
+function ThreadsForm({ current, app, search }: { current: SnsAuthStatus['threads']; app: SnsAuthStatus['threadsApp']; search: SnsAuthStatus['threadsSearch'] }) {
   const [token, setToken] = useState('')
   const [userId, setUserId] = useState('')
   const [pending, startTransition] = useTransition()
@@ -305,7 +311,7 @@ function ThreadsForm({ current, app }: { current: SnsAuthStatus['threads']; app:
         </Button>
         {message && <span className="text-xs">{message}</span>}
       </div>
-      <ThreadsSearchReauth current={current} app={app} />
+      <ThreadsSearchReauth search={search} app={app} />
     </div>
   )
 }

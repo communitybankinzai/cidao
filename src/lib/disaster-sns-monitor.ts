@@ -304,13 +304,21 @@ export async function runDisasterSnsMonitor(supabase: SupabaseClient) {
     .order('query')
   if (rulesError) throw rulesError
 
-  const [baseCredentials, { data: instagramDiscoveryRow }] = await Promise.all([
+  const [baseCredentials, { data: instagramDiscoveryRow }, { data: threadsDiscoveryRow }] = await Promise.all([
     loadSnsCredentials(supabase),
     supabase.from('app_settings').select('value').eq('key', 'sns_instagram_discovery_auth').maybeSingle(),
+    supabase.from('app_settings').select('value').eq('key', 'sns_threads_discovery_auth').maybeSingle(),
   ])
   const discoveryValue = instagramDiscoveryRow?.value as { user_id?: string; access_token?: string } | null
+  // Threads の公開投稿検索は検索専用アプリのトークンを優先する。
+  // 投稿用アプリはダッシュボードのフォーム破損で threads_keyword_search を付与できないため、
+  // 検索は別アプリで認証する構成（2026-08-17）。未設定時は従来どおり投稿用トークンで試す。
+  const threadsDiscoveryValue = threadsDiscoveryRow?.value as { access_token?: string } | null
   const credentials: MonitorCredentials = {
     ...baseCredentials,
+    ...(threadsDiscoveryValue?.access_token
+      ? { threads: { ...(baseCredentials.threads ?? {}), access_token: String(threadsDiscoveryValue.access_token) } as MonitorCredentials['threads'] }
+      : {}),
     instagramDiscovery: discoveryValue?.user_id && discoveryValue?.access_token
       ? { user_id: String(discoveryValue.user_id), access_token: String(discoveryValue.access_token) }
       : null,

@@ -1,7 +1,8 @@
-// Threads の OAuth 再認証を開始する（管理者専用）。
-// トークン生成ツール（Meta開発者コンソール）は要求スコープが5項目に固定されており
-// threads_keyword_search を含むトークンを発行できないため、
-// 認可URLを自前で組み立ててスコープを明示指定する。
+// Threads の検索専用 OAuth 認可を開始する（管理者専用）。
+// 投稿用アプリはダッシュボードのフォーム破損でコールバックURLを登録できず、
+// トークン生成ツールも threads_keyword_search を要求できない（2026-08-17実証）。
+// このため公開投稿検索は「検索専用に新規作成したThreadsアプリ」で認可する。
+// 投稿用トークン（sns_threads_auth）には一切触らない。
 // 参照: https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions
 
 import { NextResponse, type NextRequest } from 'next/server'
@@ -9,13 +10,9 @@ import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-// 現行の投稿・返信・インサイト権限（トークン生成ツールと同等）＋公開投稿検索
+// 検索専用アプリに必要な最小スコープ
 const THREADS_OAUTH_SCOPES = [
   'threads_basic',
-  'threads_content_publish',
-  'threads_read_replies',
-  'threads_manage_replies',
-  'threads_manage_insights',
   'threads_keyword_search',
 ].join(',')
 

@@ -1,7 +1,9 @@
-// Threads OAuth のコールバック（管理者専用）。
+// Threads 検索専用 OAuth のコールバック（管理者専用）。
 // 認可コード → 短期トークン → 長期トークン（60日）と交換し、
-// keyword_search の可否を検証したうえで sns_threads_auth を上書き保存する。
-// 保存形式は actions.ts の saveThreadsAuth と同一（週次リフレッシュcronの対象になる）。
+// keyword_search の可否を検証したうえで sns_threads_discovery_auth へ保存する。
+// 投稿用の sns_threads_auth とは完全に分離する（検索専用アプリのトークンには
+// threads_content_publish が無いため、混ぜると投稿が壊れる）。
+// 週次リフレッシュcron（sns-token-refresh）の対象。
 
 import { revalidatePath } from 'next/cache'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -97,9 +99,9 @@ export async function GET(request: NextRequest) {
     const keywordResponse = await fetch(`https://graph.threads.net/keyword_search?${keywordParams}`)
     const keywordSearchReady = keywordResponse.ok
 
-    // ④ 保存（形式は saveThreadsAuth と同一）
+    // ④ 検索専用キーへ保存（投稿用 sns_threads_auth には触らない）
     const { error } = await supabase.from('app_settings').upsert({
-      key: 'sns_threads_auth',
+      key: 'sns_threads_discovery_auth',
       value: {
         user_id: String(me.id),
         access_token: longToken,
@@ -108,6 +110,7 @@ export async function GET(request: NextRequest) {
         expires_at: new Date(Date.now() + expiresInSec * 1000).toISOString(),
         keyword_search_ready: keywordSearchReady,
         keyword_search_checked_at: new Date().toISOString(),
+        auth_mode: 'threads_search_app',
       },
       updated_at: new Date().toISOString(),
       updated_by: user.id,
