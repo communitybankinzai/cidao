@@ -207,7 +207,8 @@ async function searchInstagram(
   const fetchMedia = async (limit: number) => {
     const mediaParams = new URLSearchParams({
       user_id: userId,
-      fields: 'id,caption,media_type,media_url,permalink,timestamp,username',
+      // ハッシュタグ経由の media では username は取得不可（#100 unsupported fields になる）
+      fields: 'id,caption,media_type,media_url,permalink,timestamp',
       limit: String(limit),
       access_token: token,
     })
