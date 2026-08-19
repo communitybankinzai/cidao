@@ -27,6 +27,7 @@ type CreateInput = {
   coupon?: CouponInput              // 任意のクーポン同時作成
   sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
   sns_display_name?: string         // SNSで名指しに使う表示名（本人が出すと決めたときだけ）
+  links?: { label: string; url: string }[]  // 参考リンク最大5件（元の告知ページ・申込フォーム等）
 }
 
 export async function createFreefreePost(input: CreateInput) {
@@ -88,6 +89,10 @@ export async function createFreefreePost(input: CreateInput) {
       // 団体掲載では organizations.name を使うため保存しない
       sns_display_name:
         dbPosterType === 'org' ? null : (input.sns_display_name?.trim().slice(0, 40) || null),
+      links: (input.links ?? [])
+        .filter((l) => l && l.label && /^https?:\/\//i.test(l.url))
+        .slice(0, 5)
+        .map((l) => ({ label: l.label.slice(0, 30), url: l.url })),
     })
     .select('id')
     .single()

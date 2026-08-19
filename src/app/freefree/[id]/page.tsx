@@ -100,6 +100,27 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
           <p className="whitespace-pre-wrap">{post.body}</p>
         </div>
 
+        {Array.isArray(post.links) && post.links.length > 0 && (
+          <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-2">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">🔗 関連リンク</h2>
+            <ul className="space-y-1.5">
+              {(post.links as { label: string; url: string }[]).map((l) => (
+                <li key={l.url}>
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    className="text-sm text-sky-700 dark:text-sky-400 hover:underline break-all"
+                  >
+                    {l.label} ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-slate-400">リンク先は外部サイトです。内容についてCBIは責任を負いません。</p>
+          </section>
+        )}
+
         {coupons && coupons.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">🎟 利用できるクーポン</h2>

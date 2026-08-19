@@ -5,6 +5,9 @@ import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from './FreefreeImagesUpload'
 import FreefreeFlyerScan from './FreefreeFlyerScan'
+import FreefreeUrlScan, { type ScannedLink } from './FreefreeUrlScan'
+
+const MAX_IMAGES = 3
 
 type PosterKindOpt = { key: string; label: string; needsOrg: boolean }
 type EditableOrg = { id: string; name: string; type: 'civic_group' | 'business' | 'government' }
@@ -36,6 +39,9 @@ export default function NewFreefreeForm({
   const [location, setLocation] = useState('')
   const [snsDisplayName, setSnsDisplayName] = useState('')
   const [couponContent, setCouponContent] = useState('')
+  // URL読み取りで得た参考リンクと、権利を確認して取り込んだ画像
+  const [links, setLinks] = useState<ScannedLink[]>([])
+  const [importedImages, setImportedImages] = useState<string[]>([])
   const currentKindMeta = posterKinds.find((k) => k.key === posterKind)
   const needsOrg = !!currentKindMeta?.needsOrg
 
@@ -47,6 +53,36 @@ export default function NewFreefreeForm({
 
   return (
     <form action={action} className="space-y-4">
+      <FreefreeUrlScan
+        // 手動アップロード分は子側で持っているためここでは数えない。
+        // 最終的な3枚制限はサーバー側（createFreefreePost の slice）で担保する
+        imageSlotsLeft={MAX_IMAGES - importedImages.length}
+        onImageImported={(u) => setImportedImages((prev) => [...prev, u])}
+        onScanned={(d) => {
+          if (d.title) setTitle(d.title.slice(0, 40))
+          if (d.body) setBody(d.body.slice(0, 1000))
+          if (d.category && categories.some((c) => c.key === d.category)) setCategory(d.category)
+          if (d.location) setLocation(d.location)
+          if (d.sns_display_name) setSnsDisplayName(d.sns_display_name.slice(0, 40))
+          if (d.coupon_content) {
+            setCouponContent(d.coupon_content.slice(0, 80))
+            setCouponEnabled(true)
+          }
+          // 出典として元ページも必ず残す（重複は除く）
+          const found = [
+            ...(d.links ?? []),
+            ...(d.sourceUrl ? [{ label: '元の告知ページ', url: d.sourceUrl }] : []),
+          ]
+          setLinks((prev) => {
+            const merged = [...prev]
+            for (const l of found) {
+              if (merged.length >= 5) break
+              if (!merged.some((m) => m.url === l.url)) merged.push(l)
+            }
+            return merged
+          })
+        }}
+      />
       <FreefreeFlyerScan
         onScanned={(d) => {
           if (d.title) setTitle(d.title.slice(0, 40))
@@ -136,7 +172,59 @@ export default function NewFreefreeForm({
             className={inp}
           />
         </L>
+        {importedImages.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">URLから取り込んだ画像（{importedImages.length}枚）</label>
+            <ul className="grid grid-cols-3 gap-2">
+              {importedImages.map((u, i) => (
+                <li key={u} className="relative group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={u} alt={`取り込んだ画像 ${i + 1}`} className="w-full aspect-square object-cover rounded border border-slate-200 dark:border-slate-700" />
+                  <button
+                    type="button"
+                    onClick={() => setImportedImages((prev) => prev.filter((x) => x !== u))}
+                    className="absolute top-1 right-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                  >
+                    外す
+                  </button>
+                  <input type="hidden" name="images" value={u} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <FreefreeImagesUpload userId={userId} />
+
+        {links.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">参考リンク（最大5件）</label>
+            <ul className="space-y-1.5">
+              {links.map((l, i) => (
+                <li key={l.url} className="flex items-center gap-2">
+                  <input
+                    value={l.label}
+                    maxLength={30}
+                    onChange={(e) =>
+                      setLinks((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                    }
+                    className="w-32 shrink-0 text-xs rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1"
+                  />
+                  <span className="flex-1 min-w-0 truncate text-xs text-slate-500">{l.url}</span>
+                  <button
+                    type="button"
+                    onClick={() => setLinks((prev) => prev.filter((_, j) => j !== i))}
+                    className="shrink-0 text-xs text-red-600 hover:underline"
+                  >
+                    外す
+                  </button>
+                  <input type="hidden" name="links" value={JSON.stringify(l)} />
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-slate-500">表示名は自由に直せます。不要なものは「外す」で消してください。</p>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">

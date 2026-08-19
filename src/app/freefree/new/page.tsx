@@ -54,6 +54,19 @@ export default async function NewFreefreePage() {
       org_id,
       sns_share: formData.get('sns_share') === 'on',
       sns_display_name: String(formData.get('sns_display_name') ?? '').trim() || undefined,
+      links: (formData.getAll('links') as string[])
+        .map((s) => {
+          try {
+            const o = JSON.parse(s) as { label?: unknown; url?: unknown }
+            const label = String(o.label ?? '').trim().slice(0, 30)
+            const url = String(o.url ?? '').trim()
+            return label && /^https?:\/\//i.test(url) ? { label, url } : null
+          } catch {
+            return null
+          }
+        })
+        .filter((l): l is { label: string; url: string } => l !== null)
+        .slice(0, 5),
       title: String(formData.get('title') ?? ''),
       body: String(formData.get('body') ?? ''),
       category: String(formData.get('category') ?? 'event'),
