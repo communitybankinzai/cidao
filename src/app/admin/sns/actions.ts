@@ -335,6 +335,75 @@ export async function saveInstagramDiscoveryAuth(userIdInput: string, tokenInput
   return { username: String(profile.username ?? ''), userId: String(profile.id) }
 }
 
+// Bluesky の検索用認証（ハンドル＋App Password）を検証して保存する。
+// api.bsky.app の未認証 searchPosts が403（HTML応答）で拒否されるようになったため、
+// 災害SNS巡回のBluesky枠はPDS（bsky.social）経由の認証付き検索に切り替えた（2026-08-18）。
+// メインパスワードの貼り付け事故を防ぐため、App Password形式（xxxx-xxxx-xxxx-xxxx）だけ受け付ける。
+export async function saveBlueskySearchAuth(identifierInput: string, appPasswordInput: string) {
+  const { supabase, user } = await requireAdmin()
+  const identifier = identifierInput.trim().replace(/^@/, '')
+  const appPassword = appPasswordInput.trim()
+  if (!identifier || !appPassword) throw new Error('Blueskyハンドルと App Password を入力してください')
+  if (!/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/i.test(appPassword)) {
+    throw new Error('App Password の形式ではありません（bsky.app の設定 → App Passwords で発行した xxxx-xxxx-xxxx-xxxx 形式のみ登録できます。アカウントのパスワードは登録しないでください）')
+  }
+
+  const sessionResponse = await fetch('https://bsky.social/xrpc/com.atproto.server.createSession', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ identifier, password: appPassword }),
+    cache: 'no-store',
+  })
+  const sessionText = await sessionResponse.text()
+  let session: { accessJwt?: string; refreshJwt?: string; handle?: string; message?: string } = {}
+  try { session = sessionText ? JSON.parse(sessionText) : {} } catch { /* 非JSONは下のチェックで弾く */ }
+  if (!sessionResponse.ok || !session.accessJwt) {
+    throw new Error(`Bluesky認証に失敗しました: ${String(session.message ?? sessionText.slice(0, 200) ?? '')}`)
+  }
+
+  // 検索が実際に通るかまで確認する（認証はできても検索が拒否される場合の事故防止）
+  const searchParams = new URLSearchParams({ q: '印西市', limit: '1' })
+  const searchResponse = await fetch(`https://bsky.social/xrpc/app.bsky.feed.searchPosts?${searchParams}`, {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${session.accessJwt}` },
+    cache: 'no-store',
+  })
+  if (!searchResponse.ok) {
+    const searchText = await searchResponse.text()
+    throw new Error(`Bluesky検索の確認に失敗しました（${searchResponse.status}）: ${searchText.slice(0, 200)}`)
+  }
+
+  const now = new Date().toISOString()
+  const { error } = await supabase.from('app_settings').upsert({
+    key: 'sns_bluesky_search_auth',
+    value: {
+      identifier,
+      app_password: appPassword,
+      handle: String(session.handle ?? identifier),
+      saved_at: now,
+    },
+    updated_at: now,
+    updated_by: user.id,
+  })
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+
+  // 巡回がすぐ使えるよう、検証で作ったセッションもキャッシュしておく
+  const { error: sessionError } = await supabase.from('app_settings').upsert({
+    key: 'sns_bluesky_search_session',
+    value: {
+      access_jwt: String(session.accessJwt),
+      refresh_jwt: String(session.refreshJwt ?? ''),
+      handle: String(session.handle ?? identifier),
+      saved_at: now,
+    },
+    updated_at: now,
+    updated_by: user.id,
+  })
+  if (sessionError) throw new Error(`セッションの保存に失敗しました: ${sessionError.message}`)
+
+  revalidatePath('/admin/sns')
+  return { handle: String(session.handle ?? identifier) }
+}
+
 // Facebook ページの接続情報を検証して保存する
 export async function saveFacebookAuth(pageIdInput: string, tokenInput: string) {
   const { supabase, user } = await requireAdmin()

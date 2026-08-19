@@ -76,7 +76,7 @@ export default async function AdminSnsPage() {
   const { data: settingsRows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_threads_app', 'sns_threads_discovery_auth', 'sns_facebook_auth', 'sns_instagram_auth', 'sns_instagram_discovery_auth'])
+    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_threads_app', 'sns_threads_discovery_auth', 'sns_facebook_auth', 'sns_instagram_auth', 'sns_instagram_discovery_auth', 'sns_bluesky_search_auth'])
   const settingOf = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, unknown> | null]))
   const autoPostEnabled = (settingOf.get('sns_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
 
@@ -86,6 +86,7 @@ export default async function AdminSnsPage() {
   const fbAuth = settingOf.get('sns_facebook_auth') as { page_name?: string; saved_at?: string } | undefined
   const igAuth = settingOf.get('sns_instagram_auth') as { username?: string; saved_at?: string; expires_at?: string } | undefined
   const igDiscoveryAuth = settingOf.get('sns_instagram_discovery_auth') as { username?: string; saved_at?: string } | undefined
+  const bskySearchAuth = settingOf.get('sns_bluesky_search_auth') as { handle?: string; saved_at?: string } | undefined
   const authStatus: SnsAuthStatus = {
     threads: thAuth?.saved_at
       ? { username: String(thAuth.username ?? ''), savedAt: String(thAuth.saved_at), expiresAt: thAuth.expires_at ? String(thAuth.expires_at) : null, keywordSearchReady: thAuth.keyword_search_ready === true }
@@ -102,6 +103,9 @@ export default async function AdminSnsPage() {
       : null,
     instagramDiscovery: igDiscoveryAuth?.saved_at
       ? { username: String(igDiscoveryAuth.username ?? ''), savedAt: String(igDiscoveryAuth.saved_at) }
+      : null,
+    blueskySearch: bskySearchAuth?.saved_at
+      ? { handle: String(bskySearchAuth.handle ?? ''), savedAt: String(bskySearchAuth.saved_at) }
       : null,
   }
 

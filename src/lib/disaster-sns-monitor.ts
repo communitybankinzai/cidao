@@ -39,6 +39,8 @@ type RuleResult = {
 
 type MonitorCredentials = Awaited<ReturnType<typeof loadSnsCredentials>> & {
   instagramDiscovery: { user_id: string; access_token: string } | null
+  blueskyAccessToken: string | null
+  blueskyAuthError: string | null
 }
 
 const LOCATION_SIGNAL = /印西|千葉ニュータウン|木下|大森|六軒|小林|牧の原|印旛|本埜|中央北|中央南|草深|高花|平賀|瀬戸|宗甫|船尾|鎌苅|師戸|岩戸|吉高|萩原/
@@ -87,7 +89,103 @@ function blueskyPermalink(uri: string, handle: string): string {
   return handle && rkey ? `https://bsky.app/profile/${encodeURIComponent(handle)}/post/${encodeURIComponent(rkey)}` : ''
 }
 
-async function searchBluesky(rule: MonitorRule, since: Date, until: Date): Promise<MonitorItem[]> {
+// SNS側の障害・ブロック時はJSONでなくHTMLエラーページが返ることがある。
+// パース前にHTTPステータスを確認しないと「Unexpected token '<'」しか記録されず
+// 原因調査ができないため、応答は必ずこの関数を通す。
+function parseJsonText(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = text ? JSON.parse(text) : {}
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+const BLUESKY_PDS = 'https://bsky.social'
+const BLUESKY_AUTH_KEY = 'sns_bluesky_search_auth'
+const BLUESKY_SESSION_KEY = 'sns_bluesky_search_session'
+// accessJwtは約2時間で失効する。余裕をみて60分でrefreshする
+const BLUESKY_SESSION_TTL_MS = 60 * 60 * 1000
+
+type BlueskySessionValue = {
+  access_jwt?: string
+  refresh_jwt?: string
+  handle?: string
+  saved_at?: string
+}
+
+async function fetchBlueskyJson(
+  url: string,
+  init: RequestInit,
+  label: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(url, { ...init, cache: 'no-store' })
+  const text = await response.text()
+  const payload = parseJsonText(text)
+  if (!response.ok || !payload) {
+    const detail = payload
+      ? JSON.stringify((payload as { error?: unknown; message?: unknown }).message ?? payload).slice(0, 240)
+      : `非JSON応答: ${text.slice(0, 240) || '本文なし'}`
+    throw new Error(`${label} ${response.status}: ${detail}`)
+  }
+  return payload
+}
+
+// Bluesky検索用のaccessJwtを用意する。認証未設定ならnull。
+// createSessionはアカウントあたり約300回/日の制限があるため、
+// セッションをapp_settingsへキャッシュし、期限が近づいたらrefreshSessionで延命する。
+async function ensureBlueskyAccessToken(supabase: SupabaseClient): Promise<string | null> {
+  const [{ data: authRow }, { data: sessionRow }] = await Promise.all([
+    supabase.from('app_settings').select('value').eq('key', BLUESKY_AUTH_KEY).maybeSingle(),
+    supabase.from('app_settings').select('value').eq('key', BLUESKY_SESSION_KEY).maybeSingle(),
+  ])
+  const auth = authRow?.value as { identifier?: string; app_password?: string } | null
+  if (!auth?.identifier || !auth?.app_password) return null
+
+  const session = sessionRow?.value as BlueskySessionValue | null
+  const savedAt = session?.saved_at ? new Date(session.saved_at).getTime() : Number.NaN
+  if (session?.access_jwt && Number.isFinite(savedAt) && Date.now() - savedAt < BLUESKY_SESSION_TTL_MS) {
+    return session.access_jwt
+  }
+
+  let payload: Record<string, unknown> | null = null
+  if (session?.refresh_jwt) {
+    payload = await fetchBlueskyJson(`${BLUESKY_PDS}/xrpc/com.atproto.server.refreshSession`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${session.refresh_jwt}` },
+    }, 'Bluesky refreshSession').catch(() => null)
+  }
+  if (!payload) {
+    payload = await fetchBlueskyJson(`${BLUESKY_PDS}/xrpc/com.atproto.server.createSession`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: auth.identifier, password: auth.app_password }),
+    }, 'Bluesky createSession').catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Bluesky認証に失敗しました（App Passwordを確認してください）: ${message}`)
+    })
+  }
+  const accessJwt = stringValue(payload.accessJwt)
+  if (!accessJwt) throw new Error('Blueskyセッションの取得に失敗しました（App Passwordを確認してください）')
+  await supabase.from('app_settings').upsert({
+    key: BLUESKY_SESSION_KEY,
+    value: {
+      access_jwt: accessJwt,
+      refresh_jwt: stringValue(payload.refreshJwt),
+      handle: stringValue(payload.handle),
+      saved_at: new Date().toISOString(),
+    } satisfies BlueskySessionValue,
+    updated_at: new Date().toISOString(),
+  })
+  return accessJwt
+}
+
+async function searchBluesky(
+  rule: MonitorRule,
+  accessToken: string | null,
+  since: Date,
+  until: Date,
+): Promise<MonitorItem[]> {
   const params = new URLSearchParams({
     q: rule.query,
     sort: 'latest',
@@ -95,13 +193,26 @@ async function searchBluesky(rule: MonitorRule, since: Date, until: Date): Promi
     since: since.toISOString(),
     until: until.toISOString(),
   })
-  const response = await fetch(`https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?${params}`, {
-    headers: { Accept: 'application/json' },
-    cache: 'no-store',
-  })
-  const responseText = await response.text()
-  const payload = responseText ? JSON.parse(responseText) : {}
-  if (!response.ok) throw new Error(`Bluesky ${response.status}: ${responseText.slice(0, 240) || '応答本文なし'}`)
+  // 2026-08からapi.bsky.appの未認証searchPostsは403（HTML応答）で拒否される。
+  // 認証設定時はPDS（bsky.social）経由でAppViewへプロキシ検索する。
+  const endpoint = accessToken
+    ? `${BLUESKY_PDS}/xrpc/app.bsky.feed.searchPosts?${params}`
+    : `https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?${params}`
+  let payload: Record<string, unknown>
+  try {
+    payload = await fetchBlueskyJson(endpoint, {
+      headers: {
+        Accept: 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    }, 'Bluesky')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!accessToken) {
+      throw new Error(`${message}（未認証のBluesky検索は拒否されるようになりました。/admin/sns のSNS接続設定でBluesky検索用認証を登録してください）`)
+    }
+    throw error
+  }
   const posts = Array.isArray(payload.posts) ? payload.posts : []
   return posts.map((raw: unknown) => {
     const post = asObject(raw)
@@ -151,10 +262,13 @@ async function searchThreads(
     cache: 'no-store',
   })
   const responseText = await response.text()
-  const payload = responseText ? JSON.parse(responseText) : {}
+  const parsed = parseJsonText(responseText)
+  const payload = parsed ?? {}
   if (!response.ok) {
     const detail = responseText
-      ? JSON.stringify(payload?.error ?? payload).slice(0, 240)
+      ? parsed
+        ? JSON.stringify((parsed as { error?: unknown }).error ?? parsed).slice(0, 240)
+        : `非JSON応答: ${responseText.slice(0, 240)}`
       : '応答本文なし。threads_keyword_search権限を含むトークンで再認証してください'
     throw new Error(`Threads ${response.status}: ${detail}`)
   }
@@ -240,7 +354,10 @@ async function searchRule(
   since: Date,
   until: Date,
 ): Promise<MonitorItem[]> {
-  if (rule.platform === 'bluesky') return searchBluesky(rule, since, until)
+  if (rule.platform === 'bluesky') {
+    if (credentials.blueskyAuthError) throw new Error(credentials.blueskyAuthError)
+    return searchBluesky(rule, credentials.blueskyAccessToken, since, until)
+  }
   if (rule.platform === 'threads') {
     if (!credentials.threads?.access_token) throw new Error('Threadsアクセストークン未設定')
     return searchThreads(rule, credentials.threads.access_token, since, until)
@@ -314,6 +431,19 @@ export async function runDisasterSnsMonitor(supabase: SupabaseClient) {
   // 投稿用アプリはダッシュボードのフォーム破損で threads_keyword_search を付与できないため、
   // 検索は別アプリで認証する構成（2026-08-17）。未設定時は従来どおり投稿用トークンで試す。
   const threadsDiscoveryValue = threadsDiscoveryRow?.value as { access_token?: string } | null
+
+  // Blueskyの検索は認証必須になったため、ルールがあるときだけセッションを用意する。
+  // 認証エラーはここでは投げず、各ルールの結果（last_error）として記録する。
+  let blueskyAccessToken: string | null = null
+  let blueskyAuthError: string | null = null
+  if ((rules ?? []).some((rule) => (rule as MonitorRule).platform === 'bluesky')) {
+    try {
+      blueskyAccessToken = await ensureBlueskyAccessToken(supabase)
+    } catch (error) {
+      blueskyAuthError = error instanceof Error ? error.message : String(error)
+    }
+  }
+
   const credentials: MonitorCredentials = {
     ...baseCredentials,
     ...(threadsDiscoveryValue?.access_token
@@ -322,6 +452,8 @@ export async function runDisasterSnsMonitor(supabase: SupabaseClient) {
     instagramDiscovery: discoveryValue?.user_id && discoveryValue?.access_token
       ? { user_id: String(discoveryValue.user_id), access_token: String(discoveryValue.access_token) }
       : null,
+    blueskyAccessToken,
+    blueskyAuthError,
   }
   const until = new Date()
   const results: RuleResult[] = []
@@ -352,6 +484,10 @@ export async function runDisasterSnsMonitor(supabase: SupabaseClient) {
       }).eq('id', rule.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      // キャッシュ済みaccessJwtが失効・無効化されていた場合は破棄し、次回巡回で再ログインさせる
+      if (rule.platform === 'bluesky' && /^Bluesky 401/.test(message)) {
+        await supabase.from('app_settings').delete().eq('key', BLUESKY_SESSION_KEY)
+      }
       results.push({
         ruleId: rule.id,
         platform: rule.platform,
