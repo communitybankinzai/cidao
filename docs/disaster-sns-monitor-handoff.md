@@ -1,6 +1,6 @@
 # 災害MAP向けSNS巡回 引継ぎ
 
-最終更新: 2026-08-17
+最終更新: 2026-08-19
 
 このリポジトリは、印西市災害状況整合MAPのSNS自動巡回バックエンドも提供する。MAP側の詳細な引継ぎは `C:\Users\nsfactory\OneDrive\CBI\site\inzai-disaster-map\CLAUDE_HANDOFF.md` を参照。
 
@@ -18,7 +18,7 @@
 
 - `src/lib/disaster-sns-monitor.ts`: Threads、Instagram、Blueskyの検索・絞込・保存。
 - `src/app/api/disaster/sns-monitor/route.ts`: 日付別公開読取、巡回起動、CORS。
-- `src/app/admin/sns/actions.ts`: Threads検索権限の確認、Instagram検索専用認証の検証・保存。
+- `src/app/admin/sns/actions.ts`: Threads検索権限の確認、Instagram検索専用認証・Bluesky検索用認証（App Password）の検証・保存。
 - `src/app/admin/sns/_components/SnsAuthSettings.tsx`: `/admin/sns`の検索用認証UI。
 - `supabase/migrations/20260816100000_disaster_sns_monitor.sql`: テーブル、RLS、scan claim、cron、cleanup。
 
@@ -30,19 +30,20 @@
 - GETは`?date=YYYY-MM-DD`の日本時間1日分だけを返し、dismissedは除外する。
 - POSTは任意検索語を受け付けず、DBの固定ルールだけを実行する。4分のatomic claimで過剰起動を防ぐ。
 
-## 現在のSNS状態
+## 現在のSNS状態（2026-08-19時点：3媒体すべて稼働中）
 
-- Bluesky: `https://api.bsky.app/xrpc/app.bsky.feed.searchPosts`で巡回成功。
-- Threads: 既存トークンでは`keyword_search`が500。`threads_keyword_search`権限を含む再認証が必要。
-- Instagram: 投稿用Instagram Loginトークンを検索へ流用しない。Facebook Login方式のプロアカウントIDとハッシュタグ検索権限付きユーザートークンを`/admin/sns`で別登録する。現在未設定。
+- Bluesky: 稼働中（認証付き検索）。`api.bsky.app`の未認証`searchPosts`は2026-08から403（HTML応答）で拒否されるため、`/admin/sns`で登録したApp Password（`sns_bluesky_search_auth`）でPDS（`bsky.social`）経由の認証付き検索に切替済み（コミット`f38a0ae`）。セッションは`sns_bluesky_search_session`に60分キャッシュし、`refreshSession`で延命・失敗時は`createSession`で再ログイン・401時はキャッシュ破棄して次回巡回で自己回復する。App Passwordをbsky.app側で削除すると巡回が失敗するので、その場合は`/admin/sns`で再登録する。
+- Threads: 稼働中。検索専用Threadsアプリのトークン（`sns_threads_discovery_auth`）で`keyword_search`成功。投稿用トークンとは分離。
+- Instagram: 稼働中。Facebook Login方式のプロアカウントID＋ハッシュタグ検索権限付きユーザートークン（`sns_instagram_discovery_auth`）を設定済み。投稿用Instagram Loginトークンとは分離。
+- 各SNSのHTMLエラー応答（非JSON）はHTTPステータス付きで`last_error`に記録される（「Unexpected token '<'」問題は解消済み）。
+- Bluesky上の印西関連アカウントはごく少数（市公式なし。市公式SNSはX・LINE・Instagram・YouTube）。巡回は低コストで維持するが、拾える投稿は少ない想定。
 - コメント本文の自動取得は未実装。現状の巡回候補は投稿本文中心で、コメントはMAP側の手動登録・場所確認フローで補う。
 
 ## 次に行う場合の優先順
 
-1. ThreadsとInstagramの検索権限を管理画面で設定し、実投稿を使って検索結果を検証する。
-2. 管理者向け候補レビュー画面とaccepted/dismissed更新APIを作る。
-3. MAP記録の共有保存、利用登録者認証、組織別権限、監査ログをSupabaseで実装する。
-4. rate limit、失敗通知、トークン失効通知、検索ルール管理UIを追加する。
+1. 管理者向け候補レビュー画面とaccepted/dismissed更新APIを作る。
+2. MAP記録の共有保存、利用登録者認証、組織別権限、監査ログをSupabaseで実装する。
+3. rate limit、失敗通知、トークン失効通知を追加する。
 
 ## 安全上の要件
 
