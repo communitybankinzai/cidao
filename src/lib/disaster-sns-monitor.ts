@@ -312,20 +312,33 @@ async function searchInstagram(
   const tagPayload = await tagResponse.json().catch(() => ({}))
   const hashtagId = Array.isArray(tagPayload.data) ? stringValue(asObject(tagPayload.data[0]).id) : ''
   if (!tagResponse.ok || !hashtagId) {
-    throw new Error(`Instagram hashtag ${tagResponse.status}: ${JSON.stringify(tagPayload?.error ?? tagPayload).slice(0, 240)}`)
+    const detail = JSON.stringify(tagPayload?.error ?? tagPayload).slice(0, 240)
+    // IGのハッシュタグ検索は完全一致のみ。投稿が1件もないタグは「存在しない」エラーで返るため候補0件として扱う
+    if (/does not exist/i.test(detail)) return []
+    throw new Error(`Instagram hashtag ${tagResponse.status}: ${detail}`)
   }
 
-  const mediaParams = new URLSearchParams({
-    user_id: userId,
-    fields: 'id,caption,media_type,media_url,permalink,timestamp,username',
-    limit: '50',
-    access_token: token,
-  })
-  const response = await fetch(`https://graph.facebook.com/v22.0/${encodeURIComponent(hashtagId)}/recent_media?${mediaParams}`, {
-    headers: { Accept: 'application/json' },
-    cache: 'no-store',
-  })
-  const payload = await response.json().catch(() => ({}))
+  const fetchMedia = async (limit: number) => {
+    const mediaParams = new URLSearchParams({
+      user_id: userId,
+      // ハッシュタグ経由の media では username は取得不可（#100 unsupported fields になる）
+      fields: 'id,caption,media_type,media_url,permalink,timestamp',
+      limit: String(limit),
+      access_token: token,
+    })
+    const response = await fetch(`https://graph.facebook.com/v22.0/${encodeURIComponent(hashtagId)}/recent_media?${mediaParams}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    })
+    const payload = await response.json().catch(() => ({}))
+    return { response, payload }
+  }
+
+  // 人気タグはlimitが大きいと code:1「Please reduce the amount of data」で500になるため、控えめに取得し、それでも出たらさらに絞って1回だけ再試行
+  let { response, payload } = await fetchMedia(25)
+  if (!response.ok && /reduce the amount of data/i.test(stringValue(asObject(payload?.error).message))) {
+    ;({ response, payload } = await fetchMedia(10))
+  }
   if (!response.ok) throw new Error(`Instagram media ${response.status}: ${JSON.stringify(payload?.error ?? payload).slice(0, 240)}`)
   const data = Array.isArray(payload.data) ? payload.data : []
   return data.map((raw: unknown) => {
