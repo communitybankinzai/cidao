@@ -31,7 +31,7 @@ const REQUIREMENTS_KEY = 'metaverse_tt_requirements'
 
 type Requirements = { minRatePct: number; minAnswers: number }
 
-async function loadRequirements(supabase: ReturnType<typeof createSupabaseClient>): Promise<Requirements> {
+async function loadRequirements(supabase: NonNullable<ReturnType<typeof adminClient>>): Promise<Requirements> {
   try {
     const { data } = await supabase
       .from('app_settings')
