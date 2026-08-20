@@ -84,6 +84,10 @@ export function MapTilesUsageSection() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4">
+              <p className="text-xs text-slate-500">本日（クォータ目安）</p>
+              <TodayQuota daily={data.daily} />
+            </div>
+            <div>
               <p className="text-xs text-slate-500">直近7日</p>
               <p className="text-2xl font-bold text-right tabular-nums">{formatCount(data.last7Total)}</p>
             </div>
@@ -192,3 +196,29 @@ function formatDateTime(value: string): string {
     timeStyle: 'short',
   }).format(new Date(value))
 }
+
+// 本日の消費を1日クォータ（既定30,000・自動調整で変動あり）と対比して表示する。
+// 2026-08-21に30,000/日へ到達し3D表示が止まった実績があるため、80%で警告色にする
+const DAILY_QUOTA_BASELINE = 30000
+
+function TodayQuota({ daily }: { daily: DailyRequestCount[] }) {
+  const today = daily.length ? daily[daily.length - 1] : null
+  if (!today) return <p className="text-lg font-semibold">—</p>
+  const pct = Math.round((today.requestCount / DAILY_QUOTA_BASELINE) * 100)
+  const tone = pct >= 100 ? 'text-red-600' : pct >= 80 ? 'text-amber-600' : 'text-slate-900 dark:text-slate-100'
+  return (
+    <div>
+      <p className={`text-lg font-semibold tabular-nums ${tone}`}>
+        {today.requestCount.toLocaleString()} <span className="text-xs font-normal">/ {DAILY_QUOTA_BASELINE.toLocaleString()}（{pct}%）</span>
+      </p>
+      {pct >= 100 ? (
+        <p className="text-xs text-red-600">上限到達：3D表示が粗くなります（夕方リセット）</p>
+      ) : pct >= 80 ? (
+        <p className="text-xs text-amber-600">上限が近づいています</p>
+      ) : (
+        <p className="text-xs text-slate-500">既定30,000/日・自動調整で変動あり</p>
+      )}
+    </div>
+  )
+}
+
