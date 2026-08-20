@@ -22,9 +22,33 @@ const COURSES: Record<string, { checkpoints: number; minSecondsPerLeg: number }>
   advanced: { checkpoints: 7, minSecondsPerLeg: 4 },
   full: { checkpoints: 50, minSecondsPerLeg: 3 },
 }
-const MIN_QUIZ_RATE_PCT = 80
-const MIN_QUIZ_ANSWERS = 10
+// 参加要件の既定値。app_settings（key: metaverse_tt_requirements）で
+// イベントごとに上書きできる（管理画面 /admin/timetrial から変更）
+const DEFAULT_MIN_QUIZ_RATE_PCT = 80
+const DEFAULT_MIN_QUIZ_ANSWERS = 10
 const RANKING_LIMIT = 10
+const REQUIREMENTS_KEY = 'metaverse_tt_requirements'
+
+type Requirements = { minRatePct: number; minAnswers: number }
+
+async function loadRequirements(supabase: ReturnType<typeof createSupabaseClient>): Promise<Requirements> {
+  try {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', REQUIREMENTS_KEY)
+      .maybeSingle()
+    const v = (data?.value ?? {}) as Partial<Requirements>
+    const minRatePct = Number(v.minRatePct)
+    const minAnswers = Number(v.minAnswers)
+    return {
+      minRatePct: Number.isFinite(minRatePct) && minRatePct >= 0 && minRatePct <= 100 ? minRatePct : DEFAULT_MIN_QUIZ_RATE_PCT,
+      minAnswers: Number.isFinite(minAnswers) && minAnswers >= 0 && minAnswers <= 500 ? minAnswers : DEFAULT_MIN_QUIZ_ANSWERS,
+    }
+  } catch {
+    return { minRatePct: DEFAULT_MIN_QUIZ_RATE_PCT, minAnswers: DEFAULT_MIN_QUIZ_ANSWERS }
+  }
+}
 
 function adminClient() {
   const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -73,6 +97,7 @@ export async function GET(request: Request) {
   const supabase = adminClient()
   if (!supabase) return json(request, { error: 'server not configured' }, 503)
   try {
+    const requirements = await loadRequirements(supabase)
     const ranking: Record<string, Array<{ name: string; elapsedMs: number; date: string }>> = {}
     for (const key of Object.keys(COURSES)) {
       const { data, error } = await supabase
@@ -89,7 +114,7 @@ export async function GET(request: Request) {
         date: String(r.finished_at ?? '').slice(0, 10),
       }))
     }
-    return json(request, { ranking })
+    return json(request, { ranking, requirements })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[metaverse-tt GET]', message)
@@ -116,8 +141,9 @@ export async function POST(request: Request) {
       const quizAnswers = Number(body.quizAnswers)
       const course = COURSES[courseKey]
       if (!name || !course) return json(request, { error: 'invalid entry' }, 400)
-      // 参加要件はサーバー側でも下限を確認する（クライアント申告値ベース）
-      if (!(quizRatePct >= MIN_QUIZ_RATE_PCT) || !(quizAnswers >= MIN_QUIZ_ANSWERS)) {
+      // 参加要件はサーバー側でも下限を確認する（クライアント申告値ベース・要件は設定から読む）
+      const req = await loadRequirements(supabase)
+      if (!(quizRatePct >= req.minRatePct) || !(quizAnswers >= req.minAnswers)) {
         return json(request, { error: 'quiz requirement not met' }, 403)
       }
       const { data, error } = await supabase

@@ -28,6 +28,45 @@ export function DeleteTrialButton({ id, name }: { id: string; name: string }) {
   )
 }
 
+export function RequirementsForm({ initialRatePct, initialAnswers }: { initialRatePct: number; initialAnswers: number }) {
+  const [pending, startTransition] = useTransition()
+  const [rate, setRate] = useState(String(initialRatePct))
+  const [answers, setAnswers] = useState(String(initialAnswers))
+  const [saved, setSaved] = useState(false)
+  const router = useRouter()
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">クイズ正答率（%以上）</span>
+        <input type="number" min={0} max={100} value={rate} onChange={(e) => { setRate(e.target.value); setSaved(false) }}
+          className="w-24 px-2 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">最低解答数（問以上）</span>
+        <input type="number" min={0} max={500} value={answers} onChange={(e) => { setAnswers(e.target.value); setSaved(false) }}
+          className="w-24 px-2 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+      </label>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          startTransition(async () => {
+            const { saveTtRequirements } = await import('../actions')
+            const res = await saveTtRequirements(Number(rate), Number(answers))
+            if (!res.ok) { alert(`保存に失敗しました: ${res.error}`); return }
+            setSaved(true)
+            router.refresh()
+          })
+        }}
+        className="text-sm px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {pending ? '保存中…' : '保存'}
+      </button>
+      {saved && <span className="text-sm text-green-600">✅ 保存しました（サイトに即時反映）</span>}
+    </div>
+  )
+}
+
 export function ResetAllButton({ total }: { total: number }) {
   const [pending, startTransition] = useTransition()
   const [text, setText] = useState('')

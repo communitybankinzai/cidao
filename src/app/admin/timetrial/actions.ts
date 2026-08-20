@@ -26,6 +26,26 @@ function serviceClient() {
 
 export type TtActionResult = { ok: true } | { ok: false; error: string }
 
+// 参加要件（クイズ正答率・最低解答数）を保存する。イベントごとに変更できる。
+// サイト側とAPIの両方がこの値を参照する（app_settings key: metaverse_tt_requirements）
+export async function saveTtRequirements(minRatePct: number, minAnswers: number): Promise<TtActionResult> {
+  try {
+    await requireAdmin()
+    const rate = Math.round(Number(minRatePct))
+    const answers = Math.round(Number(minAnswers))
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) return { ok: false, error: '正答率は0〜100で指定してください' }
+    if (!Number.isFinite(answers) || answers < 0 || answers > 500) return { ok: false, error: '最低解答数は0〜500で指定してください' }
+    const { error } = await serviceClient()
+      .from('app_settings')
+      .upsert({ key: 'metaverse_tt_requirements', value: { minRatePct: rate, minAnswers: answers } })
+    if (error) throw new Error(error.message)
+    revalidatePath('/admin/timetrial')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // 記録を1件削除する
 export async function deleteTrial(id: string): Promise<TtActionResult> {
   try {

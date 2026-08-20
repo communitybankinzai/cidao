@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { DeleteTrialButton, ResetAllButton } from './_components/TrialControls'
+import { DeleteTrialButton, ResetAllButton, RequirementsForm } from './_components/TrialControls'
 
 // メタバース印西「文化財タイムトライアル」の記録管理。
 // ランキング（公式記録）・フラグ付き記録（要確認）・全記録の一覧と、
@@ -70,6 +70,16 @@ export default async function AdminTimetrialPage() {
     .limit(500)
   const trials = (data ?? []) as TrialRow[]
 
+  // 参加要件（イベントごとに変更可。未設定なら既定 80%・10問）
+  const { data: reqRow } = await service
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'metaverse_tt_requirements')
+    .maybeSingle()
+  const reqValue = (reqRow?.value ?? {}) as { minRatePct?: number; minAnswers?: number }
+  const minRatePct = Number.isFinite(Number(reqValue.minRatePct)) ? Number(reqValue.minRatePct) : 80
+  const minAnswers = Number.isFinite(Number(reqValue.minAnswers)) ? Number(reqValue.minAnswers) : 10
+
   const finished = trials.filter((t) => t.status === 'finished')
   const flagged = trials.filter((t) => t.status === 'flagged')
   const running = trials.filter((t) => t.status === 'running')
@@ -98,6 +108,15 @@ export default async function AdminTimetrialPage() {
             {error ? <span className="text-red-600">（読み込みエラー: {error.message}）</span> : null}
           </p>
         </header>
+
+        <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg p-5 space-y-2">
+          <h2 className="text-lg font-semibold">⚙ 参加要件（イベントごとに変更できます）</h2>
+          <p className="text-xs text-slate-500">
+            現在の要件：クイズ正答率 <b>{minRatePct}%</b> 以上・<b>{minAnswers}問</b> 以上解答。
+            保存するとメタバースの参加判定とサーバーの受付判定に即時反映されます（参加者はエントリー画面を開き直せばOK）。
+          </p>
+          <RequirementsForm initialRatePct={minRatePct} initialAnswers={minAnswers} />
+        </section>
 
         {rankingByCourse.map(({ courseKey, rows }) => (
           <section key={courseKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
