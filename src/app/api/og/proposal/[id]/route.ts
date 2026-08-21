@@ -2,7 +2,7 @@
 // 提案の SNS 告知カード画像（JPEG・1080x1080）を動的生成する。
 // Instagram の Content Publishing API は JPEG の公開 URL しか受け付けないため、
 // satori（レイアウト→SVG、テキストはパス化されるため描画環境のフォント不要）
-// → resvg（SVG→PNG）→ sharp（PNG→JPEG）で変換して返す。
+// → sharp（SVG→JPEG）で変換して返す。
 // ※ next/og の ImageResponse は同梱 sharp の不具合で Windows 環境で
 //   「colourspace: parameter space not set」を出すため使わない（2026-08-06 実測）。
 //
@@ -11,7 +11,6 @@
 
 import { NextResponse } from 'next/server'
 import satori from 'satori'
-import { Resvg } from '@resvg/resvg-js'
 import { createElement as h } from 'react'
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
@@ -158,8 +157,11 @@ async function render(params: Promise<{ id: string }>) {
     },
   )
 
-  const png = new Resvg(svg, { fitTo: { mode: 'width', value: SIZE } }).render().asPng()
-  const jpeg = await sharp(Buffer.from(png))
+  // satori の SVG はテキストがパス化済みなので、sharp（libvips の SVG ローダー）で
+  // 直接 JPEG 化できる。以前は @resvg/resvg-js で PNG 化を挟んでいたが、
+  // 本番（Vercel Linux）でネイティブバイナリのロードに失敗し全カードが 500 になったため
+  // 依存を sharp に一本化した（2026-08-21）
+  const jpeg = await sharp(Buffer.from(svg))
     .jpeg({ quality: 88 })
     .toBuffer()
 

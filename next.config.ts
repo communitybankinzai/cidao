@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    workerThreads: true,
+  },
   // ネイティブバイナリを含むパッケージはバンドルせず実行時に require させる
-  // （@resvg/resvg-js は SNS 告知カード画像の生成で使用。バンドルすると
-  //  プラットフォーム別 .node の解決に失敗する）
-  serverExternalPackages: ["@resvg/resvg-js", "sharp"],
+  // （sharp は SNS 告知カード画像の生成で使用）
+  serverExternalPackages: ["sharp"],
   async redirects() {
     return [
       // 利用規約はCBIサイト側に置いている。お知らせ配信のリンク先が

@@ -7,6 +7,7 @@ import AwaitingList from './_components/AwaitingList'
 import AutoPostToggle from './_components/AutoPostToggle'
 import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
 import RotationScheduleCard from './_components/RotationScheduleCard'
+import RetryButton from './_components/RetryButton'
 import DisasterSnsMonitorRules, { type DisasterMonitorRule } from './_components/DisasterSnsMonitorRules'
 import type { RotationPreset } from './actions'
 
@@ -291,7 +292,8 @@ export default async function AdminSnsPage() {
                   <span className="w-12 shrink-0">{MEDIUM_LABEL[l.medium] ?? l.medium}</span>
                   <span className="w-16 shrink-0">{statusBadge(l.status)}</span>
                   <span className="flex-1 truncate text-slate-700 dark:text-slate-300">{titleOf(l.target_type, l.target_id)}</span>
-                  {l.error_message && <span className="text-[10px] text-slate-400 max-w-[200px] truncate">{l.error_message}</span>}
+                  {l.status === 'failed' && <RetryButton logId={l.id} label={`${titleOf(l.target_type, l.target_id)}（${MEDIUM_LABEL[l.medium] ?? l.medium}）`} />}
+                  {l.error_message && <span className="text-[10px] text-slate-400 max-w-[200px] truncate" title={l.error_message}>{l.error_message}</span>}
                 </li>
               ))}
             </ul>

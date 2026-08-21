@@ -162,6 +162,42 @@ export async function approveAndDispatchDraft(logId: string, content: string): P
   }
 }
 
+// 失敗した配信をその場で再試行する（投稿ログの「✗失敗」行から）。
+// 承認済みの本文をそのまま使い、pending に戻してから即配信する
+export async function retryFailedLog(logId: string): Promise<DraftResult> {
+  try {
+    const { supabase } = await requireAdmin()
+    const { data: log } = await supabase
+      .from('sns_post_logs')
+      .select('id, medium, content, target_type, target_id')
+      .eq('id', logId)
+      .eq('status', 'failed')
+      .maybeSingle()
+    if (!log) return { ok: false, error: '失敗した投稿が見つかりません（既に再試行済みの可能性）' }
+
+    // markLog が success/failed を書き戻せるよう、いったん pending に戻す
+    const { error: upErr } = await supabase
+      .from('sns_post_logs')
+      .update({ status: 'pending', error_message: 'retrying' })
+      .eq('id', logId)
+    if (upErr) return { ok: false, error: `再試行の準備に失敗しました: ${upErr.message}` }
+
+    const results = await dispatchLogs(supabase, [{
+      id: log.id,
+      medium: log.medium,
+      content: log.content as string | null,
+      target_type: log.target_type,
+      target_id: log.target_id,
+    }])
+    const r = results[0]
+    revalidatePath('/admin/sns')
+    if (r?.outcome === 'success') return { ok: true }
+    return { ok: false, error: `再試行も失敗しました（${r?.outcome ?? '不明'}）: ${r?.message ?? ''}` }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // 却下：配信しないと決めた下書きをリストから消す（行ごと削除）。
 // 未配信（pending）の行だけが対象。配信済み・失敗のログは監査のため消せない。
 // 却下してもローテーション対象からは外れないので、いずれ順番が回ってくれば再度候補になる
