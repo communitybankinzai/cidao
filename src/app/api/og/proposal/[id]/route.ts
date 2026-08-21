@@ -10,9 +10,7 @@
 // サブセットを実行時に取得する（satori は woff2 非対応のため ttf/otf を抽出）。
 
 import { NextResponse } from 'next/server'
-import satori from 'satori'
 import { createElement as h } from 'react'
-import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
 import { categoryLabel } from '@/lib/categories'
 
@@ -75,6 +73,11 @@ async function render(params: Promise<{ id: string }>) {
     // satori はフォント必須。取得失敗時は一時エラーとして返す（dispatch 側で failed 記録）
     return NextResponse.json({ error: 'font fetch failed' }, { status: 503 })
   }
+
+  // ネイティブ/WASM を含むライブラリは動的 import にして、読み込み失敗を catch で捕捉できるようにする
+  // （静的 import だとモジュール評価時に落ち、Next のエラーページになって原因が読めない）
+  const satori = (await import('satori')).default
+  const sharp = (await import('sharp')).default
 
   const svg = await satori(
     h(

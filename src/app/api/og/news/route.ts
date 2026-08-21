@@ -10,9 +10,7 @@
 // sig で検証する。未設定時は 503 を返す（安全側に倒す）。
 
 import { NextResponse } from 'next/server'
-import satori from 'satori'
 import { createElement as h } from 'react'
-import sharp from 'sharp'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 export const runtime = 'nodejs'
@@ -75,6 +73,10 @@ async function render(request: Request) {
     // satori はフォント必須。取得失敗時は一時エラーとして返す（GAS 側で失敗記録）
     return NextResponse.json({ error: 'font fetch failed' }, { status: 503 })
   }
+
+  // ネイティブ/WASM を含むライブラリは動的 import（読み込み失敗を catch で捕捉するため）
+  const satori = (await import('satori')).default
+  const sharp = (await import('sharp')).default
 
   const svg = await satori(
     h(
