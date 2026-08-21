@@ -183,9 +183,14 @@ function RequestCountChart({ rows, visitors }: { rows: DailyRequestCount[]; visi
         {formatDay(rows[rows.length - 1].date)}
       </text>
       <polyline points={points} fill="none" stroke="#16a34a" strokeWidth="2" />
-      {hasVisitors && vPoints && (
+      {hasVisitors && (
         <>
           <polyline points={vPoints} fill="none" stroke="#ea580c" strokeWidth="2" strokeDasharray="4 3" />
+          {rows.map((row, i) =>
+            vMap.has(row.date) ? (
+              <circle key={row.date} cx={x(i)} cy={yV(vMap.get(row.date) ?? 0)} r="3.5" fill="#ea580c" />
+            ) : null,
+          )}
           <text x={W - PAD.right + 4} y={yV(vMax) + 4} className="fill-orange-600 text-[11px]">
             {vMax}人
           </text>
