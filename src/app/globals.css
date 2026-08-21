@@ -215,4 +215,32 @@
       animation: none;
     }
   }
+
+  /* ---------- イベント登録：AI 読み取り中の視覚表示（ImageScanField.tsx が制御） ----------
+     テキストだけでは処理中と気づきにくいため、回転スピナーと流れる進捗バーを出す */
+  .cidao-scan-spinner {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    border: 3px solid oklch(0.83 0.16 80 / 0.35);
+    border-top-color: oklch(0.7 0.17 65);
+    animation: cidaoSpin 0.8s linear infinite;
+  }
+  .cidao-scan-progress {
+    animation: cidaoScanProgress 1.4s ease-in-out infinite;
+  }
+  @keyframes cidaoScanProgress {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cidao-scan-spinner,
+    .cidao-scan-progress {
+      animation: none;
+    }
+  }
 }

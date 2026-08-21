@@ -222,14 +222,10 @@ export function ImageScanField({
   }
 
   const statusColor =
-    status === 'done'
-      ? 'text-emerald-700 dark:text-emerald-400'
-      : status === 'loading'
-      ? 'text-slate-600 dark:text-slate-300'
-      : 'text-slate-500'
+    status === 'done' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'
 
   return (
-    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-2">
+    <div className={`bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-4 space-y-2 transition-shadow ${status === 'loading' ? 'ring-2 ring-amber-400 dark:ring-amber-600' : ''}`}>
       <input type="hidden" name="flyer_image_url" value={flyerUrl ?? ''} />
       <div
         className={`flex flex-wrap items-center gap-3 rounded border border-dashed p-2 transition-colors ${
@@ -375,7 +371,21 @@ export function ImageScanField({
           </p>
         </div>
       )}
-      {message && status === 'notice' ? (
+      {status === 'loading' ? (
+        // AI 読み取り中はテキストだけでは気づきにくいため、スピナー＋進捗バーで処理中を明示する
+        <div role="status" aria-live="polite" className="flex items-center gap-3 rounded border border-amber-400 dark:border-amber-700 bg-amber-100/80 dark:bg-amber-900/40 p-3">
+          <span className="cidao-scan-spinner shrink-0" aria-hidden />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-100">{message}</p>
+            <div className="mt-1.5 h-1.5 rounded-full bg-amber-200 dark:bg-amber-800 overflow-hidden">
+              <div className="cidao-scan-progress h-full w-1/3 rounded-full bg-amber-500 dark:bg-amber-400" />
+            </div>
+            <p className="mt-1 text-[10px] text-amber-800/80 dark:text-amber-200/80">
+              AIが読み取り中です。数十秒かかることがあります。このまましばらくお待ちください。
+            </p>
+          </div>
+        </div>
+      ) : message && status === 'notice' ? (
         <div className="rounded border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-2">
           <p className="text-xs font-medium text-slate-700 dark:text-slate-200">お知らせ</p>
           <p className="text-xs text-slate-600 dark:text-slate-300">{message}</p>
