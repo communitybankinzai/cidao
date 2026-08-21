@@ -3,7 +3,7 @@
 // cbi-admin-gas の更新履歴承認フロー（NewsPublish.gs）が Instagram 投稿の
 // image_url としてこの URL を渡す（IG の Content Publishing API は JPEG の
 // 公開 URL しか受け付けない）。生成パイプラインは og/proposal と同じ
-// satori → resvg → sharp（next/og の ImageResponse は Windows で不具合があるため不使用）。
+// satori → sharp（SVG→JPEG直変換）（next/og の ImageResponse は Windows で不具合があるため不使用）。
 //
 // 公開エンドポイントで任意テキストのブランド画像を作られないよう、
 // text に対する HMAC-SHA256（キー: 環境変数 NEWS_OG_SECRET、GAS 側と共有）を
@@ -11,7 +11,6 @@
 
 import { NextResponse } from 'next/server'
 import satori from 'satori'
-import { Resvg } from '@resvg/resvg-js'
 import { createElement as h } from 'react'
 import sharp from 'sharp'
 import { createHmac, timingSafeEqual } from 'crypto'
@@ -140,8 +139,8 @@ async function render(request: Request) {
     },
   )
 
-  const png = new Resvg(svg, { fitTo: { mode: 'width', value: SIZE } }).render().asPng()
-  const jpeg = await sharp(Buffer.from(png))
+  // resvg は本番（Vercel Linux）でロードに失敗するため sharp で SVG を直接 JPEG 化する（2026-08-21）
+  const jpeg = await sharp(Buffer.from(svg))
     .jpeg({ quality: 88 })
     .toBuffer()
 
