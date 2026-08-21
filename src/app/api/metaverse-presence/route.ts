@@ -93,6 +93,15 @@ export async function POST(request: Request) {
       .from('metaverse_presence')
       .upsert({ session_id: sessionId, mode, last_seen: new Date().toISOString() })
     if (error) throw new Error(error.message)
+    // 日別ユニーク人数の蓄積（アクセス分析でタイルリクエスト数と重ねるため）。
+    // 同じ日・同じセッションは1回だけ数える。失敗しても在席表示は止めない
+    const jstDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date())
+    await supabase
+      .from('metaverse_presence_daily')
+      .upsert(
+        { day: jstDay, session_id: sessionId, mode },
+        { onConflict: 'day,session_id', ignoreDuplicates: true },
+      )
     // 古い行の掃除（放置しても数えないが、行数が増え続けるのを防ぐ）
     await supabase
       .from('metaverse_presence')

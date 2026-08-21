@@ -9,6 +9,7 @@
 import { createSign } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
@@ -102,6 +103,7 @@ export async function GET() {
       endTime,
     })
     const daily = buildDailyRequestCounts(timeSeries, startDay, today)
+    const dailyVisitors = await fetchDailyVisitors(startDay)
     const last7Total = sumDaily(daily.slice(-7))
     const previous7Total = sumDaily(daily.slice(-14, -7))
     const weekOverWeekChange =
@@ -114,6 +116,7 @@ export async function GET() {
       filter: MAP_TILES_FILTER,
       generatedAt: new Date().toISOString(),
       daily,
+      dailyVisitors,
       last7Total,
       previous7Total,
       weekOverWeekChange,
@@ -309,3 +312,30 @@ function shiftDate(ymd: string, days: number): string {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+// メタバースの日別ユニーク利用者数（metaverse_presence_daily）。
+// 取得できなくても本体（リクエスト数）は返したいので、失敗時は空配列にする
+async function fetchDailyVisitors(startDay: string): Promise<Array<{ date: string; visitors: number }>> {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    if (!url || !key) return []
+    const service = createServiceClient(url, key, { auth: { persistSession: false } })
+    const { data, error } = await service
+      .from('metaverse_presence_daily')
+      .select('day')
+      .gte('day', startDay)
+    if (error || !data) return []
+    const counts = new Map<string, number>()
+    for (const row of data) {
+      const day = String(row.day)
+      counts.set(day, (counts.get(day) ?? 0) + 1)
+    }
+    return Array.from(counts.entries())
+      .map(([date, visitors]) => ({ date, visitors }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  } catch {
+    return []
+  }
+}
+

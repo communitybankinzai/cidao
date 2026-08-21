@@ -7,12 +7,18 @@ type DailyRequestCount = {
   requestCount: number
 }
 
+type DailyVisitors = {
+  date: string
+  visitors: number
+}
+
 type MapTilesUsageResponse =
   | {
       ok: true
       configured: true
       generatedAt: string
       daily: DailyRequestCount[]
+      dailyVisitors?: DailyVisitors[]
       last7Total: number
       previous7Total: number
       weekOverWeekChange: number | null
@@ -103,7 +109,7 @@ export function MapTilesUsageSection() {
             </div>
           </div>
 
-          <RequestCountChart rows={data.daily} />
+          <RequestCountChart rows={data.daily} visitors={data.dailyVisitors ?? []} />
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -111,6 +117,7 @@ export function MapTilesUsageSection() {
                 <tr className="text-xs text-slate-500 border-b border-slate-200 dark:border-slate-800">
                   <th className="py-2 pr-3 text-left font-normal">日付</th>
                   <th className="py-2 pl-3 text-right font-normal">リクエスト数</th>
+                  <th className="py-2 pl-3 text-right font-normal">利用者数</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,6 +125,7 @@ export function MapTilesUsageSection() {
                   <tr key={row.date} className="border-b border-slate-100 dark:border-slate-800/60">
                     <td className="py-2 pr-3">{formatDay(row.date)}</td>
                     <td className="py-2 pl-3 text-right tabular-nums">{formatCount(row.requestCount)}</td>
+                    <td className="py-2 pl-3 text-right tabular-nums text-orange-600">{visitorsFor(data.dailyVisitors, row.date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -129,18 +137,26 @@ export function MapTilesUsageSection() {
   )
 }
 
-function RequestCountChart({ rows }: { rows: DailyRequestCount[] }) {
+function RequestCountChart({ rows, visitors }: { rows: DailyRequestCount[]; visitors: DailyVisitors[] }) {
   if (rows.length < 2) {
     return <p className="text-sm text-slate-500">グラフはデータが2日分たまると表示されます。</p>
   }
 
   const W = 640
   const H = 180
-  const PAD = { top: 10, right: 10, bottom: 24, left: 48 }
+  const PAD = { top: 14, right: 44, bottom: 24, left: 48 }
+  const vMap = new Map(visitors.map((v) => [v.date, v.visitors]))
+  const vMax = Math.max(...visitors.map((v) => v.visitors), 1)
+  const hasVisitors = visitors.length > 0
   const max = Math.max(...rows.map((row) => row.requestCount), 1)
   const x = (i: number) => PAD.left + (i * (W - PAD.left - PAD.right)) / (rows.length - 1)
   const y = (value: number) => H - PAD.bottom - (value * (H - PAD.top - PAD.bottom)) / max
   const points = rows.map((row, i) => `${x(i)},${y(row.requestCount)}`).join(' ')
+  const yV = (value: number) => H - PAD.bottom - (value * (H - PAD.top - PAD.bottom)) / vMax
+  const vPoints = rows
+    .map((row, i) => (vMap.has(row.date) ? `${x(i)},${yV(vMap.get(row.date) ?? 0)}` : null))
+    .filter(Boolean)
+    .join(' ')
   const gridValues = [0, Math.round(max / 2), max]
 
   return (
@@ -167,6 +183,20 @@ function RequestCountChart({ rows }: { rows: DailyRequestCount[] }) {
         {formatDay(rows[rows.length - 1].date)}
       </text>
       <polyline points={points} fill="none" stroke="#16a34a" strokeWidth="2" />
+      {hasVisitors && vPoints && (
+        <>
+          <polyline points={vPoints} fill="none" stroke="#ea580c" strokeWidth="2" strokeDasharray="4 3" />
+          <text x={W - PAD.right + 4} y={yV(vMax) + 4} className="fill-orange-600 text-[11px]">
+            {vMax}人
+          </text>
+          <text x={W - PAD.right + 4} y={yV(0) + 4} className="fill-orange-600 text-[11px]">
+            0
+          </text>
+        </>
+      )}
+      <text x={PAD.left} y={PAD.top - 4} className="fill-slate-500 text-[10px]">
+        ― リクエスト数（左軸・緑）{hasVisitors ? '　--- 利用者数（右軸・橙）' : ''}
+      </text>
     </svg>
   )
 }
@@ -220,5 +250,10 @@ function TodayQuota({ daily }: { daily: DailyRequestCount[] }) {
       )}
     </div>
   )
+}
+
+function visitorsFor(list: DailyVisitors[] | undefined, date: string): string {
+  const hit = (list ?? []).find((v) => v.date === date)
+  return hit ? hit.visitors.toLocaleString('ja-JP') : '—'
 }
 
