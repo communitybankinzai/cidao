@@ -75,6 +75,63 @@ export async function getTodayMapTilesUsage(): Promise<TodayUsage | null> {
   }
 }
 
+export type DailyRequests = { day: string; requests: number }
+
+const DAILY_CACHE_TTL_MS = 300_000
+let dailyCache: { days: number; value: DailyRequests[]; expiresAt: number } | null = null
+
+// 直近 days 日分の「1日ごとのタイルリクエスト数」。区切りは Google の日次クォータと同じ太平洋時間0時
+// （日本時間16時ごろ）。day ラベルは各区間の終了時刻の JST 日付（getTodayMapTilesUsage の date と同じ流儀）。
+// 管理画面の日別グラフ用。Monitoring への問い合わせは 5 分キャッシュ。取得できなければ null
+export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests[] | null> {
+  const now = Date.now()
+  if (dailyCache && dailyCache.days === days && dailyCache.expiresAt > now) return dailyCache.value
+
+  const projectId = process.env.GCP_PROJECT_ID?.trim()
+  const rawKey = process.env.GCP_SA_KEY?.trim()
+  if (!projectId || !rawKey) return null
+  const sa = parseServiceAccountKey(rawKey)
+  if (!sa) return null
+
+  try {
+    const token = await fetchAccessToken(sa)
+    const todayStart = new Date(pacificDayStartIso()).getTime()
+    const startTime = new Date(todayStart - (days - 1) * 86_400_000).toISOString()
+    const endTime = new Date().toISOString()
+    const url = new URL(`https://monitoring.googleapis.com/v3/projects/${encodeURIComponent(projectId)}/timeSeries`)
+    url.searchParams.set('filter', FILTER)
+    url.searchParams.set('interval.startTime', startTime)
+    url.searchParams.set('interval.endTime', endTime)
+    url.searchParams.set('aggregation.alignmentPeriod', '86400s')
+    url.searchParams.set('aggregation.perSeriesAligner', 'ALIGN_SUM')
+    url.searchParams.set('aggregation.crossSeriesReducer', 'REDUCE_SUM')
+    url.searchParams.set('view', 'FULL')
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+    if (!res.ok) return null
+    const body = (await res.json()) as {
+      timeSeries?: Array<{ points?: Array<{ interval?: { endTime?: string }; value?: { int64Value?: string; doubleValue?: number } }> }>
+    }
+    const jstDay = (iso: string) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date(new Date(iso).getTime() - 1000))
+    const byDay = new Map<string, number>()
+    for (const series of body.timeSeries ?? []) {
+      for (const pt of series.points ?? []) {
+        const end = pt.interval?.endTime
+        if (!end) continue
+        const key = jstDay(end)
+        byDay.set(key, (byDay.get(key) ?? 0) + Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0))
+      }
+    }
+    const value = [...byDay.entries()]
+      .map(([day, requests]) => ({ day, requests: Math.round(requests) }))
+      .sort((x, y) => (x.day < y.day ? -1 : 1))
+    dailyCache = { days, value, expiresAt: now + DAILY_CACHE_TTL_MS }
+    return value
+  } catch {
+    return null
+  }
+}
+
 function parseServiceAccountKey(raw: string): ServiceAccountKey | null {
   const obj = parseJson(raw) ?? parseJson(Buffer.from(raw, 'base64').toString('utf8'))
   if (!obj) return null
