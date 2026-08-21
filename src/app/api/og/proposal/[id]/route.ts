@@ -36,14 +36,20 @@ async function loadNotoSansJP(text: string): Promise<ArrayBuffer | null> {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     return await render(params)
   } catch (e) {
-    console.error('[og/proposal] failed:', e instanceof Error ? `${e.message}\n${e.stack}` : e)
-    return NextResponse.json({ error: 'image generation failed' }, { status: 500 })
+    const msg = e instanceof Error ? `${e.message}\n${e.stack}` : String(e)
+    console.error('[og/proposal] failed:', msg)
+    // ?debug=1 のときだけエラー内容を返す（本番での原因調査用。個人情報は含まれない）
+    const debug = new URL(request.url).searchParams.get('debug') === '1'
+    return NextResponse.json(
+      { error: 'image generation failed', ...(debug ? { detail: msg.slice(0, 600) } : {}) },
+      { status: 500 },
+    )
   }
 }
 
