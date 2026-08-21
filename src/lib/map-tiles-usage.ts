@@ -43,13 +43,16 @@ export async function getTodayMapTilesUsage(): Promise<TodayUsage | null> {
   try {
     const token = await fetchAccessToken(sa)
     const today = jstToday()
-    const startTime = new Date(`${today}T00:00:00+09:00`).toISOString()
+    // Google の1日クォータは太平洋時間の0時（日本時間16時ごろ）にリセットされるため、
+    // 「本日」はクォータ集計日に合わせて直近の太平洋0時からの累計にする
+    const startTime = pacificDayStartIso()
     const endTime = new Date().toISOString()
+    const windowSec = Math.max(60, Math.floor((Date.now() - new Date(startTime).getTime()) / 1000))
     const url = new URL(`https://monitoring.googleapis.com/v3/projects/${encodeURIComponent(projectId)}/timeSeries`)
     url.searchParams.set('filter', FILTER)
     url.searchParams.set('interval.startTime', startTime)
     url.searchParams.set('interval.endTime', endTime)
-    url.searchParams.set('aggregation.alignmentPeriod', '86400s')
+    url.searchParams.set('aggregation.alignmentPeriod', `${windowSec}s`)
     url.searchParams.set('aggregation.perSeriesAligner', 'ALIGN_SUM')
     url.searchParams.set('aggregation.crossSeriesReducer', 'REDUCE_SUM')
     url.searchParams.set('view', 'FULL')
@@ -112,3 +115,16 @@ async function fetchAccessToken(sa: ServiceAccountKey): Promise<string> {
   if (!body.access_token) throw new Error('token-response-invalid')
   return body.access_token
 }
+
+// 直近の太平洋時間0時（Google Maps Platform の日次クォータのリセット時刻）を ISO で返す。夏時間も Intl が吸収する
+function pacificDayStartIso(): string {
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(now)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? '0')
+  const elapsedMs = ((get('hour') % 24) * 3600 + get('minute') * 60 + get('second')) * 1000
+  return new Date(now.getTime() - elapsedMs - now.getMilliseconds()).toISOString()
+}
+
