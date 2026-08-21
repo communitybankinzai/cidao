@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { getDailyMapTilesUsage, getTodayMapTilesUsage, jstToday } from '@/lib/map-tiles-usage'
+import { getDailyMapTilesUsage, getTodayMapTilesUsage, jstToday, pacificDate } from '@/lib/map-tiles-usage'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 10
@@ -50,7 +50,8 @@ export async function GET(request: Request) {
       requestsFetchedAt: usage?.fetchedAt ?? null,
       visitorsToday,
       rootLimitPerDay: ROOT_LIMIT_PER_DAY,
-      ...(daily !== undefined ? { daily } : {}),
+      // requests の集計日は Google の課金日（太平洋時間・JST16時区切り）である旨を明示する
+      ...(daily !== undefined ? { daily, requestsDayBasis: 'pacific', billingDayToday: pacificDate(Date.now()) } : {}),
     },
     { headers: corsHeaders(request) },
   )
@@ -58,7 +59,10 @@ export async function GET(request: Request) {
 
 type DailyRow = { day: string; visitors: number; event: number; bousai: number; requests: number | null }
 
-// 直近 days 日（今日を含む）の日別集計。データの無い日も 0 で埋めて連続した配列にする
+// 直近 days 日（今日を含む）の日別集計。データの無い日も 0 で埋めて連続した配列にする。
+// day は JST の日付。visitors はその JST 日のユニーク端末数。
+// requests は Google の課金日（太平洋時間・JST16時区切り）単位なので、
+// 「その JST 日の16時に始まる課金日」＝同じ日付の太平洋日付の値を対応させる
 async function buildDaily(days: number): Promise<DailyRow[]> {
   const today = jstToday()
   const labels: string[] = []
@@ -73,7 +77,7 @@ async function buildDaily(days: number): Promise<DailyRow[]> {
       visitors: v ? v.event + v.bousai : 0,
       event: v?.event ?? 0,
       bousai: v?.bousai ?? 0,
-      requests: requests ? (reqMap.get(day) ?? 0) : null,
+      requests: requests ? (reqMap.get(day) ?? null) : null,
     }
   })
 }

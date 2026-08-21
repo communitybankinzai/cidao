@@ -80,10 +80,11 @@ export type DailyRequests = { day: string; requests: number }
 const DAILY_CACHE_TTL_MS = 300_000
 let dailyCache: { days: number; value: DailyRequests[]; expiresAt: number } | null = null
 
-// 直近 days 日分の「1日ごとのタイルリクエスト数」。区切りは Google の日次クォータと同じ太平洋時間0時
-// （日本時間16時ごろ）。day ラベルは各区間の終了時刻の JST 日付（getTodayMapTilesUsage の date と同じ流儀）。
-// Monitoring の集計区間は endTime を基準に区切られるため、完了日は endTime を直近の太平洋0時に固定して
-// 区間を日付境界に揃え、本日（進行中）の分は getTodayMapTilesUsage の値を足す。
+// 直近 days 日分の「1日ごとのタイルリクエスト数」。
+// day ラベルは Google の課金日＝太平洋時間の日付（日本時間の16時ごろに翌日へ切り替わる）。
+// Monitoring の集計区間は endTime から遡って区切られるため、endTime を直近の太平洋0時に固定して
+// 区間を課金日の境界に揃える。進行中の当日は完了区間に含まれないので getTodayMapTilesUsage を足す
+// （区間ラベルを JST 日付にすると当日分と同じラベルになり二重計上になる。2026-08-21 に実測して修正）。
 // 管理画面の日別グラフ用。Monitoring への問い合わせは 5 分キャッシュ。取得できなければ null
 export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests[] | null> {
   const now = Date.now()
@@ -100,7 +101,7 @@ export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests
     const todayStart = new Date(pacificDayStartIso()).getTime()
     const today = await getTodayMapTilesUsage()
     if (days === 1) {
-      const value = today ? [{ day: today.date, requests: today.todayRequests }] : []
+      const value = today ? [{ day: pacificDate(now), requests: today.todayRequests }] : []
       dailyCache = { days, value, expiresAt: now + DAILY_CACHE_TTL_MS }
       return value
     }
@@ -119,18 +120,17 @@ export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests
     const body = (await res.json()) as {
       timeSeries?: Array<{ points?: Array<{ interval?: { endTime?: string }; value?: { int64Value?: string; doubleValue?: number } }> }>
     }
-    const jstDay = (iso: string) =>
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date(new Date(iso).getTime() - 1000))
     const byDay = new Map<string, number>()
     for (const series of body.timeSeries ?? []) {
       for (const pt of series.points ?? []) {
         const end = pt.interval?.endTime
         if (!end) continue
-        const key = jstDay(end)
+        // 区間 [end-24h, end] の中身は「終了直前の太平洋日付」＝その課金日
+        const key = pacificDate(new Date(end).getTime() - 1000)
         byDay.set(key, (byDay.get(key) ?? 0) + Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0))
       }
     }
-    if (today) byDay.set(today.date, (byDay.get(today.date) ?? 0) + today.todayRequests)
+    if (today) byDay.set(pacificDate(now), today.todayRequests)
     const value = [...byDay.entries()]
       .map(([day, requests]) => ({ day, requests: Math.round(requests) }))
       .sort((x, y) => (x.day < y.day ? -1 : 1))
@@ -183,6 +183,11 @@ async function fetchAccessToken(sa: ServiceAccountKey): Promise<string> {
 }
 
 // 直近の太平洋時間0時（Google Maps Platform の日次クォータのリセット時刻）を ISO で返す。夏時間も Intl が吸収する
+// 太平洋時間の日付 YYYY-MM-DD（Google Maps Platform の課金日）
+export function pacificDate(ms: number): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date(ms))
+}
+
 function pacificDayStartIso(): string {
   const now = new Date()
   const parts = new Intl.DateTimeFormat('en-US', {
