@@ -50,8 +50,10 @@ export async function GET(request: Request) {
       requestsFetchedAt: usage?.fetchedAt ?? null,
       visitorsToday,
       rootLimitPerDay: ROOT_LIMIT_PER_DAY,
-      // requests の集計日は Google の課金日（太平洋時間・JST16時区切り）である旨を明示する
-      ...(daily !== undefined ? { daily, requestsDayBasis: 'pacific', billingDayToday: pacificDate(Date.now()) } : {}),
+      // daily は JST 日基準。todayRequests（枠管理用）は課金日基準で別物である旨を明示する
+      ...(daily !== undefined
+        ? { daily, dayBasis: 'jst', todayRequestsDayBasis: 'pacific', billingDayToday: pacificDate(Date.now()) }
+        : {}),
     },
     { headers: corsHeaders(request) },
   )
@@ -60,9 +62,9 @@ export async function GET(request: Request) {
 type DailyRow = { day: string; visitors: number; event: number; bousai: number; requests: number | null }
 
 // 直近 days 日（今日を含む）の日別集計。データの無い日も 0 で埋めて連続した配列にする。
-// day は JST の日付。visitors はその JST 日のユニーク端末数。
-// requests は Google の課金日（太平洋時間・JST16時区切り）単位なので、
-// 「その JST 日の16時に始まる課金日」＝同じ日付の太平洋日付の値を対応させる
+// day / visitors / requests すべて JST の日付で揃える（1人あたりのタイル消費を出せるようにするため）。
+// requests は getDailyMapTilesUsage が JST 0時区切りで集計したもの。
+// クォータ枠の消化率に使う todayRequests だけは課金日（太平洋時間）基準で別物なので混同しないこと
 async function buildDaily(days: number): Promise<DailyRow[]> {
   const today = jstToday()
   const labels: string[] = []
