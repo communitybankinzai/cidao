@@ -82,6 +82,8 @@ let dailyCache: { days: number; value: DailyRequests[]; expiresAt: number } | nu
 
 // 直近 days 日分の「1日ごとのタイルリクエスト数」。区切りは Google の日次クォータと同じ太平洋時間0時
 // （日本時間16時ごろ）。day ラベルは各区間の終了時刻の JST 日付（getTodayMapTilesUsage の date と同じ流儀）。
+// Monitoring の集計区間は endTime を基準に区切られるため、完了日は endTime を直近の太平洋0時に固定して
+// 区間を日付境界に揃え、本日（進行中）の分は getTodayMapTilesUsage の値を足す。
 // 管理画面の日別グラフ用。Monitoring への問い合わせは 5 分キャッシュ。取得できなければ null
 export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests[] | null> {
   const now = Date.now()
@@ -96,8 +98,14 @@ export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests
   try {
     const token = await fetchAccessToken(sa)
     const todayStart = new Date(pacificDayStartIso()).getTime()
+    const today = await getTodayMapTilesUsage()
+    if (days === 1) {
+      const value = today ? [{ day: today.date, requests: today.todayRequests }] : []
+      dailyCache = { days, value, expiresAt: now + DAILY_CACHE_TTL_MS }
+      return value
+    }
     const startTime = new Date(todayStart - (days - 1) * 86_400_000).toISOString()
-    const endTime = new Date().toISOString()
+    const endTime = new Date(todayStart).toISOString()
     const url = new URL(`https://monitoring.googleapis.com/v3/projects/${encodeURIComponent(projectId)}/timeSeries`)
     url.searchParams.set('filter', FILTER)
     url.searchParams.set('interval.startTime', startTime)
@@ -122,6 +130,7 @@ export async function getDailyMapTilesUsage(days: number): Promise<DailyRequests
         byDay.set(key, (byDay.get(key) ?? 0) + Number(pt.value?.int64Value ?? pt.value?.doubleValue ?? 0))
       }
     }
+    if (today) byDay.set(today.date, (byDay.get(today.date) ?? 0) + today.todayRequests)
     const value = [...byDay.entries()]
       .map(([day, requests]) => ({ day, requests: Math.round(requests) }))
       .sort((x, y) => (x.day < y.day ? -1 : 1))
