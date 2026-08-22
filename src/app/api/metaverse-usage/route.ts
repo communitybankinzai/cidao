@@ -38,10 +38,11 @@ export function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   const daysParam = Number(new URL(request.url).searchParams.get('days') ?? '')
   const days = Number.isFinite(daysParam) && daysParam >= 1 ? Math.min(90, Math.floor(daysParam)) : 0
-  const [usage, visitorsToday, daily] = await Promise.all([
+  const [usage, visitorsToday, daily, renderQuality] = await Promise.all([
     getTodayMapTilesUsage(),
     countVisitorsToday(),
     days ? buildDaily(days) : Promise.resolve(undefined),
+    getRenderQuality(),
   ])
   return NextResponse.json(
     {
@@ -50,6 +51,9 @@ export async function GET(request: Request) {
       requestsFetchedAt: usage?.fetchedAt ?? null,
       visitorsToday,
       rootLimitPerDay: ROOT_LIMIT_PER_DAY,
+      // 3Dの描画精度。サイト側が実行中の tileset に反映する（小さいほど鮮明・タイル取得は増える）。
+      // 管理画面 /admin/timetrial から変更でき、開いたままの画面にも5分以内に届く
+      maximumScreenSpaceError: renderQuality,
       // daily は JST 日基準。todayRequests（枠管理用）は課金日基準で別物である旨を明示する
       ...(daily !== undefined
         ? { daily, dayBasis: 'jst', todayRequestsDayBasis: 'pacific', billingDayToday: pacificDate(Date.now()) }
@@ -107,6 +111,30 @@ async function countVisitorsByDay(fromDay: string): Promise<Map<string, { event:
     return map
   } catch {
     return null
+  }
+}
+
+// 描画精度（maximumScreenSpaceError）。管理画面 /admin/timetrial で設定した値を返す。
+// 未設定・取得失敗のときは既定の 8（鮮明）。サイト側にも同じ既定値がある
+const DEFAULT_SSE = 8
+
+async function getRenderQuality(): Promise<number> {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    if (!url || !key) return DEFAULT_SSE
+    const supabase = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'metaverse_render_quality')
+      .maybeSingle()
+    if (error || !data) return DEFAULT_SSE
+    const sse = Number((data.value as { maximumScreenSpaceError?: unknown } | null)?.maximumScreenSpaceError)
+    if (!Number.isFinite(sse) || sse < 2 || sse > 64) return DEFAULT_SSE
+    return sse
+  } catch {
+    return DEFAULT_SSE
   }
 }
 

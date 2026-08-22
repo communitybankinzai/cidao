@@ -67,6 +67,52 @@ export function RequirementsForm({ initialRatePct, initialAnswers }: { initialRa
   )
 }
 
+// 3Dワールドの描画精度。小さいほど鮮明だがタイル取得が増え、Google側の1日上限に早く達する。
+// 課金は root リクエスト単位のため、この値を変えても費用は増えない
+export function RenderQualityForm({ initialSse }: { initialSse: number }) {
+  const [pending, startTransition] = useTransition()
+  const [sse, setSse] = useState(String(initialSse))
+  const [saved, setSaved] = useState(false)
+  const router = useRouter()
+  const presets = [
+    { v: 4, label: '4（最も鮮明・上限に達しやすい）' },
+    { v: 8, label: '8（鮮明・既定）' },
+    { v: 16, label: '16（粗め・Cesium標準）' },
+    { v: 32, label: '32（かなり粗い・上限に強い）' },
+  ]
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">描画精度（小さいほど鮮明）</span>
+        <select
+          value={sse}
+          onChange={(e) => { setSse(e.target.value); setSaved(false) }}
+          className="px-2 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+        >
+          {presets.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
+        </select>
+      </label>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          startTransition(async () => {
+            const { saveRenderQuality } = await import('../actions')
+            const res = await saveRenderQuality(Number(sse))
+            if (!res.ok) { alert(`保存に失敗しました: ${res.error}`); return }
+            setSaved(true)
+            router.refresh()
+          })
+        }}
+        className="text-sm px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {pending ? '保存中…' : '保存'}
+      </button>
+      {saved && <span className="text-sm text-green-600">✅ 保存しました（開いている画面にも5分以内に反映）</span>}
+    </div>
+  )
+}
+
 export function ResetAllButton({ total }: { total: number }) {
   const [pending, startTransition] = useTransition()
   const [text, setText] = useState('')

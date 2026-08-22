@@ -46,6 +46,31 @@ export async function saveTtRequirements(minRatePct: number, minAnswers: number)
   }
 }
 
+// 3Dワールドの描画精度（Cesium の maximumScreenSpaceError）を保存する。
+// 値が小さいほど細かいタイルを読むため鮮明になるが、取得数が増えて Google 側の
+// renderer 1日上限に早く達する（達すると429で詳細タイルが止まる）。課金は root
+// リクエスト単位なのでこの値を変えても費用は増えない。
+// サイト側は /api/metaverse-usage 経由で受け取り、開いたままの画面にも5分以内に反映される。
+// 目安: 8=鮮明（既定）／16=Cesium標準・粗め／32=かなり粗いが上限に強い
+// （app_settings key: metaverse_render_quality）
+export async function saveRenderQuality(maximumScreenSpaceError: number): Promise<TtActionResult> {
+  try {
+    await requireAdmin()
+    const sse = Math.round(Number(maximumScreenSpaceError))
+    if (!Number.isFinite(sse) || sse < 2 || sse > 64) {
+      return { ok: false, error: '描画精度は2〜64で指定してください（小さいほど鮮明）' }
+    }
+    const { error } = await serviceClient()
+      .from('app_settings')
+      .upsert({ key: 'metaverse_render_quality', value: { maximumScreenSpaceError: sse } })
+    if (error) throw new Error(error.message)
+    revalidatePath('/admin/timetrial')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // 記録を1件削除する
 export async function deleteTrial(id: string): Promise<TtActionResult> {
   try {

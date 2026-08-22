@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { DeleteTrialButton, ResetAllButton, RequirementsForm } from './_components/TrialControls'
+import { DeleteTrialButton, ResetAllButton, RequirementsForm, RenderQualityForm } from './_components/TrialControls'
 
 // メタバース印西「文化財タイムトライアル」の記録管理。
 // ランキング（公式記録）・フラグ付き記録（要確認）・全記録の一覧と、
@@ -80,6 +80,16 @@ export default async function AdminTimetrialPage() {
   const minRatePct = Number.isFinite(Number(reqValue.minRatePct)) ? Number(reqValue.minRatePct) : 80
   const minAnswers = Number.isFinite(Number(reqValue.minAnswers)) ? Number(reqValue.minAnswers) : 10
 
+  // 3Dの描画精度（未設定なら既定 8＝鮮明）。サイト側は /api/metaverse-usage 経由で受け取る
+  const { data: rqRow } = await service
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'metaverse_render_quality')
+    .maybeSingle()
+  const rqValue = (rqRow?.value ?? {}) as { maximumScreenSpaceError?: number }
+  const sseRaw = Number(rqValue.maximumScreenSpaceError)
+  const maximumScreenSpaceError = Number.isFinite(sseRaw) && sseRaw >= 2 && sseRaw <= 64 ? sseRaw : 8
+
   const finished = trials.filter((t) => t.status === 'finished')
   const flagged = trials.filter((t) => t.status === 'flagged')
   const running = trials.filter((t) => t.status === 'running')
@@ -116,6 +126,20 @@ export default async function AdminTimetrialPage() {
             保存するとメタバースの参加判定とサーバーの受付判定に即時反映されます（参加者はエントリー画面を開き直せばOK）。
           </p>
           <RequirementsForm initialRatePct={minRatePct} initialAnswers={minAnswers} />
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg p-5 space-y-2">
+          <h2 className="text-lg font-semibold">🖼 3Dの描画精度</h2>
+          <p className="text-xs text-slate-500">
+            現在の設定：<b>{maximumScreenSpaceError}</b>（小さいほど鮮明）。
+            値を下げると建物が細かく表示されますが、タイルの取得数が増えて Google 側の1日上限に早く達します
+            （達すると詳細タイルが止まり「本日の利用枠に達しました」の案内が出ます）。
+            課金は閲覧開始のリクエスト単位なので、この値を変えても<b>費用は増えません</b>。
+            <br />
+            イベントで同時利用が多い日は 16〜32 に上げてください。保存すると、
+            <b>すでに開いている画面にも5分以内に反映</b>されます。
+          </p>
+          <RenderQualityForm initialSse={maximumScreenSpaceError} />
         </section>
 
         {rankingByCourse.map(({ courseKey, rows }) => (
