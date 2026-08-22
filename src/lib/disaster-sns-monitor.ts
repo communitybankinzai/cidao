@@ -43,8 +43,21 @@ type MonitorCredentials = Awaited<ReturnType<typeof loadSnsCredentials>> & {
   blueskyAuthError: string | null
 }
 
-const LOCATION_SIGNAL = /印西|千葉ニュータウン|木下|大森|六軒|小林|牧の原|印旛|本埜|中央北|中央南|草深|高花|平賀|瀬戸|宗甫|船尾|鎌苅|師戸|岩戸|吉高|萩原/
-const DISASTER_SIGNAL = /冠水|浸水|洪水|氾濫|越水|大雨|豪雨|線状降水帯|通行止|通れな|通行でき|道路.{0,8}水|アンダーパス|土砂|土石流|崖崩|がけ崩|倒木|停電|断水|救助|取り残|避難|地震|揺れ|震度|倒壊|液状化|警報|注意報|河川.{0,8}(増水|危険)/
+// 印西市の地名辞書（日本郵便の郵便番号データ由来の全68町域を2026-08-22に取得）。
+// 全国に同名が多い語（大森=東京都大田区、小林=人名/宮崎県 等）を単独で拾うと
+// 市外の投稿を大量に取り込むため、2段構えにしている。
+// STRONG: 単独で印西市内と判断してよい固有性の高い地名
+// WEAK  : 「印西」「千葉ニュータウン」等の併記があるときだけ場所語として扱う
+const LOCATION_CORE = /印西|千葉ニュータウン|千葉NT|印旛|本埜|北総線/
+const LOCATION_STRONG = /つくりや台|吉高|多々羅田|宗甫|小林北|小林大門下|小林浅間|岩戸|師戸|平賀|平賀学園台|戸神台|木下|木下南|木下東|木刈|松虫|武西学園台|浦幡新田|浦部|浦部村新田|牧の原|牧の木戸|発作|結縁寺|若萩|草深|萩原|西の原|鎌苅|高花|高西新田|鹿黒|鹿黒南|六軒/
+const LOCATION_WEAK = /中央北|中央南|亀成|内野|別所|原|原山|吉田|和泉|大塚|大廻|大森|小倉|小倉台|小林|山田|平岡|戸神|東の原|松崎|松崎台|武西|泉|泉野|浅間前|瀬戸|牧の台|白幡|相嶋|竹袋|美瀬|舞姫|船尾|造谷/
+
+function hasLocationSignal(text: string): boolean {
+  if (LOCATION_CORE.test(text) || LOCATION_STRONG.test(text)) return true
+  // あいまい地名は市名等の併記が必要（例:「大森」だけでは東京都大田区と区別できない）
+  return LOCATION_WEAK.test(text) && LOCATION_CORE.test(text)
+}
+const DISASTER_SIGNAL = /冠水|浸水|洪水|氾濫|越水|大雨|豪雨|線状降水帯|通行止|通れな|通行でき|道路.{0,8}水|アンダーパス|土砂|土石流|崖崩|がけ崩|倒木|停電|断水|救助|取り残|避難|地震|揺れ|震度|倒壊|液状化|警報|注意報|河川.{0,8}(増水|危険)|水没|水浸し|冠水注意|池のよう|川のよう|濁り水|信号.{0,4}(消え|停止)|電柱.{0,4}(倒|折)|屋根.{0,6}(飛|剥が|壊)|瓦.{0,4}(飛|落)|看板.{0,4}(倒|飛)|土のう|土嚢/
 const LOOKBACK_MS = 6 * 60 * 60 * 1000
 const MAX_INITIAL_LOOKBACK_MS = 24 * 60 * 60 * 1000
 
@@ -75,7 +88,7 @@ function scanSince(lastScannedAt: string | null): Date {
 
 function matchesScope(item: MonitorItem): boolean {
   const searchable = `${item.text}\n${item.commentsText}\n${item.locationName}`
-  return (LOCATION_SIGNAL.test(searchable) || LOCATION_SIGNAL.test(item.query))
+  return (hasLocationSignal(searchable) || hasLocationSignal(item.query))
     && (DISASTER_SIGNAL.test(searchable) || DISASTER_SIGNAL.test(item.query))
 }
 
