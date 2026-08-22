@@ -55,6 +55,8 @@ export async function GET(request: Request) {
       requestsFetchedAt: usage?.fetchedAt ?? null,
       visitorsToday,
       rootLimitPerDay: ROOT_LIMIT_PER_DAY,
+      // タイル取得の1日上限（目安）。画面側はこの値で70%／85%の警告を出す
+      rendererLimitPerDay: RENDERER_LIMIT_PER_DAY,
       // 3Dの描画精度。サイト側が実行中の tileset に反映する（小さいほど鮮明・タイル取得は増える）。
       // 管理画面 /admin/timetrial から変更でき、開いたままの画面にも5分以内に届く
       maximumScreenSpaceError: renderQuality,
