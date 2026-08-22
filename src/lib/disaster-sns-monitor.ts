@@ -86,6 +86,41 @@ function scanSince(lastScannedAt: string | null): Date {
   return new Date(Math.max(previous - 5 * 60 * 1000, now - LOOKBACK_MS))
 }
 
+// 災害時に優先して確認すべき公式・準公式アカウント。
+// キーワード検索で拾えた投稿のうち、これらの発信を「重要」として先頭に出す。
+// Instagramのハッシュタグ検索は username を返さないため、本文の署名や
+// permalink から判定する（business_discovery API は App Review 未取得のため使えない）。
+const PRIORITY_ACCOUNTS: Array<{ handle: string; label: string; textHints: RegExp }> = [
+  {
+    handle: 'fujishiro.kengo',
+    label: '印西市長',
+    // 市長投稿は「印西市長」「市長の藤代」等の署名や、市の対応報告の言い回しを含む
+    textHints: /印西市長|市長の藤代|藤代健吾|一部職員の皆さんにご参集|市内の見回り/,
+  },
+  {
+    handle: 'inzai_city',
+    label: '印西市公式',
+    textHints: /印西市役所|印西市.{0,6}(公式|防災課|災害対策本部)/,
+  },
+]
+
+// permalink（https://www.instagram.com/<user>/p/xxx/ 等）からユーザー名を復元する。
+// ハッシュタグ検索の media では username が返らないため、これが唯一の手掛かりになる。
+function usernameFromPermalink(permalink: string): string {
+  const m = String(permalink || '').match(/^https:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9._]+)\/(?:p|reel|tv)\//)
+  return m ? m[1] : ''
+}
+
+// 重要アカウント判定。一致すればラベル（例「印西市長」）を返す
+function priorityLabelOf(item: MonitorItem): string {
+  const handle = (item.username || usernameFromPermalink(item.permalink)).toLowerCase()
+  for (const account of PRIORITY_ACCOUNTS) {
+    if (handle && handle === account.handle.toLowerCase()) return account.label
+    if (account.textHints.test(item.text)) return account.label
+  }
+  return ''
+}
+
 function matchesScope(item: MonitorItem): boolean {
   const searchable = `${item.text}\n${item.commentsText}\n${item.locationName}`
   return (hasLocationSignal(searchable) || hasLocationSignal(item.query))
@@ -404,7 +439,8 @@ async function saveCandidates(
     platform: item.platform,
     external_id: item.externalId,
     permalink: item.permalink,
-    author_username: item.username || null,
+    // ハッシュタグ検索は username を返さないため permalink から補完する
+    author_username: item.username || usernameFromPermalink(item.permalink) || null,
     body_text: item.text,
     comments_text: item.commentsText,
     media_url: item.mediaUrl || null,
@@ -414,7 +450,8 @@ async function saveCandidates(
     latitude: item.lat,
     longitude: item.lng,
     location_name: item.locationName || null,
-    raw_payload: item.raw,
+    // 重要アカウント（市長・市公式）の投稿は画面で先頭に出せるよう印を付ける
+    raw_payload: { ...item.raw, priority_label: priorityLabelOf(item) || undefined },
   }))
   const { data, error } = await supabase
     .from('disaster_sns_candidates')

@@ -61,7 +61,7 @@ async function readMonitorState(request: Request) {
   const [{ data: candidates, error: candidateError }, { data: rules }, { data: latestRun }] = await Promise.all([
     supabase
       .from('disaster_sns_candidates')
-      .select('id, platform, external_id, permalink, author_username, body_text, comments_text, media_url, posted_at, discovered_at, matched_query, latitude, longitude, location_name, review_status')
+      .select('id, platform, external_id, permalink, author_username, body_text, comments_text, media_url, posted_at, discovered_at, matched_query, latitude, longitude, location_name, review_status, raw_payload')
       .gte('posted_at', range.start)
       .lt('posted_at', range.end)
       .neq('review_status', 'dismissed')
@@ -105,6 +105,8 @@ async function readMonitorState(request: Request) {
     externalId: candidate.external_id,
     permalink: candidate.permalink,
     username: candidate.author_username ?? '',
+    // 市長・市公式など優先確認すべき発信元。巡回時に判定して raw_payload へ格納している
+    priorityLabel: (candidate.raw_payload as { priority_label?: string } | null)?.priority_label ?? '',
     text: candidate.body_text ?? '',
     commentsText: candidate.comments_text ?? '',
     mediaUrl: candidate.media_url ?? '',
