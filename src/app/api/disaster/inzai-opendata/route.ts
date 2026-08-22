@@ -23,6 +23,16 @@ type Feature = {
   longitude: number
 }
 
+// 道路・鉄道は本来が線。CSVは線の頂点を間引いた点しか持たないため、
+// 線として見せたいデータセットはKML（LineString）から取得する。
+type LineFeature = {
+  id: string
+  name: string
+  category: string
+  // [[lat, lng], ...] Leafletのpolylineへそのまま渡せる順序で返す
+  path: Array<[number, number]>
+}
+
 const PUBLIC_ORIGINS = new Set([
   'https://communitybankinzai.github.io',
   'http://127.0.0.1:8766',
@@ -34,6 +44,7 @@ const PUBLIC_ORIGINS = new Set([
 const OPEN_DATA_PAGE_URL = 'https://www2.wagmap.jp/inzai/OpenData'
 const OPEN_DATA_LICENSE_URL = 'https://www2.wagmap.jp/inzai/OpenDataAgreement'
 const CSV_BASE = 'https://www2.wagmap.jp/inzai/inzai/opendata/map/CSV'
+const KML_BASE = 'https://www2.wagmap.jp/inzai/inzai/opendata/map/KML'
 
 // 名前列がデータセットごとに違う（名称/箇所名/NAME）ため個別に指定する
 const DATASETS: Record<string, {
@@ -42,6 +53,8 @@ const DATASETS: Record<string, {
   nameColumn: string
   fallbackName: string
   note?: string
+  // 'line' はKMLのLineStringを返す（道路・鉄道）。既定は点データ
+  geometry?: 'point' | 'line'
 }> = {
   landslideWarning: {
     file: 21,
@@ -65,14 +78,16 @@ const DATASETS: Record<string, {
     label: '緊急輸送路',
     nameColumn: '名称',
     fallbackName: '緊急輸送路',
-    note: '災害時の輸送に使われる主要路線の代表点です。通行可否を示すものではありません。',
+    note: '災害時の輸送に使われる主要路線です。通行可否を示すものではありません。',
+    geometry: 'line',
   },
   railway: {
     file: 32,
     label: '鉄道',
     nameColumn: '名称',
-    fallbackName: '鉄道施設',
-    note: '公表データに名称が含まれないため、地点のみ表示しています。',
+    fallbackName: '鉄道',
+    note: '公表データに路線名が含まれないため、線のみ表示しています。',
+    geometry: 'line',
   },
 }
 
@@ -113,6 +128,41 @@ function decodeCsv(buffer: ArrayBuffer) {
   return utf8
 }
 
+// KMLのPlacemarkからLineStringを取り出す。
+// 依存を増やさず正規表現で読む（対象は市が出力する単純な構造のKMLのみ）。
+async function fetchLineFeatures(setKey: string, file: number, fallbackName: string) {
+  const url = `${KML_BASE}/opendata_${file}.kml`
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) throw new Error(`KMLの取得に失敗しました（HTTP ${response.status}）`)
+  const xml = decodeCsv(await response.arrayBuffer())
+  const lines: LineFeature[] = []
+  const placemarks = xml.match(/<Placemark>[\s\S]*?<\/Placemark>/g) ?? []
+  placemarks.forEach((placemark, index) => {
+    const name = (placemark.match(/<name>([\s\S]*?)<\/name>/)?.[1] ?? '').trim()
+    const coordinateBlocks = placemark.match(/<coordinates>([\s\S]*?)<\/coordinates>/g) ?? []
+    coordinateBlocks.forEach((block, blockIndex) => {
+      const raw = block.replace(/<\/?coordinates>/g, '').trim()
+      const path: Array<[number, number]> = []
+      raw.split(/\s+/).forEach((pair) => {
+        const [lonText, latText] = pair.split(',')
+        const lon = Number(lonText)
+        const lat = Number(latText)
+        // KMLは経度,緯度の順。Leaflet用に緯度,経度へ入れ替える
+        if (Number.isFinite(lon) && Number.isFinite(lat)) path.push([lat, lon])
+      })
+      if (path.length >= 2) {
+        lines.push({
+          id: `${setKey}:${index + 1}-${blockIndex + 1}`,
+          name: name || fallbackName,
+          category: fallbackName,
+          path,
+        })
+      }
+    })
+  })
+  return { lines, url }
+}
+
 export async function GET(request: Request) {
   const setKey = new URL(request.url).searchParams.get('set') ?? ''
   const dataset = DATASETS[setKey]
@@ -121,6 +171,26 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (dataset.geometry === 'line') {
+      const { lines, url } = await fetchLineFeatures(setKey, dataset.file, dataset.fallbackName)
+      return json(request, {
+        fetchedAt: new Date().toISOString(),
+        set: setKey,
+        label: dataset.label,
+        note: dataset.note ?? '',
+        geometry: 'line',
+        lines,
+        features: [],
+        sources: {
+          organization: '印西市',
+          openDataPageUrl: OPEN_DATA_PAGE_URL,
+          openDataLicenseUrl: OPEN_DATA_LICENSE_URL,
+          resources: [{ resourceName: dataset.label, url }],
+          license: 'CC BY 2.1 JP',
+        },
+      })
+    }
+
     const url = `${CSV_BASE}/opendata_${dataset.file}.csv`
     const response = await fetch(url, { cache: 'no-store' })
     if (!response.ok) {
@@ -158,6 +228,8 @@ export async function GET(request: Request) {
       set: setKey,
       label: dataset.label,
       note: dataset.note ?? '',
+      geometry: 'point',
+      lines: [],
       features,
       sources: {
         organization: '印西市',
