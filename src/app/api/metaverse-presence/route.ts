@@ -13,6 +13,8 @@ const PUBLIC_ORIGINS = new Set([
   'https://communitybankinzai.github.io',
   'http://localhost:8765',
   'http://127.0.0.1:8765',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
 ])
 
 const ACTIVE_SEC = 90      // これ以内に合図があれば「参加中」
@@ -45,7 +47,7 @@ export function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) })
 }
 
-type Counts = { total: number; event: number; bousai: number }
+type Counts = { total: number; event: number; bousai: number; disasterMap: number }
 
 async function countActive(supabase: NonNullable<ReturnType<typeof adminClient>>): Promise<Counts> {
   const since = new Date(Date.now() - ACTIVE_SEC * 1000).toISOString()
@@ -57,8 +59,10 @@ async function countActive(supabase: NonNullable<ReturnType<typeof adminClient>>
   const rows = data ?? []
   return {
     total: rows.length,
-    event: rows.filter((r) => r.mode !== 'bousai').length,
+    // 3Dワールド側の内訳。防災MAP(disaster-map)は3Dを使わないため event に含めない
+    event: rows.filter((r) => r.mode !== 'bousai' && r.mode !== 'disaster-map').length,
     bousai: rows.filter((r) => r.mode === 'bousai').length,
+    disasterMap: rows.filter((r) => r.mode === 'disaster-map').length,
   }
 }
 
@@ -86,7 +90,8 @@ export async function POST(request: Request) {
     return json(request, { error: 'invalid json' }, 400)
   }
   const sessionId = String(body.sessionId ?? '').slice(0, 64)
-  const mode = String(body.mode ?? 'event') === 'bousai' ? 'bousai' : 'event'
+  const rawMode = String(body.mode ?? 'event')
+  const mode = rawMode === 'bousai' ? 'bousai' : rawMode === 'disaster-map' ? 'disaster-map' : 'event'
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(sessionId)) return json(request, { error: 'invalid session' }, 400)
   try {
     const { error } = await supabase
