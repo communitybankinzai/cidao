@@ -18,10 +18,12 @@ const PUBLIC_ORIGINS = new Set([
   'http://127.0.0.1:8765',
 ])
 const ROOT_LIMIT_PER_DAY = 30
-// タイル本体（renderer requests）の1日あたり上限。Google既定は3万回で、2026-08-21に実際に枯渇した。
-// 「割り当ての調整」を有効にしてあるため実際は使用量に応じて自動で増えるが、
-// 警告を出すための目安としてこの値を配る（画面側で固定値を持たせず1か所で管理する）
-const RENDERER_LIMIT_PER_DAY = 30000
+// タイル本体（renderer requests）の1日あたり上限。
+// Google既定の3万回では2026-08-20・08-23に実際に枯渇したため、
+// 2026-08-23に Cloud Console から 500,000 へ引き上げを申請し即時承認された。
+// タイル本体は無償のためこの値を上げても費用は増えない（課金は root リクエスト単位）。
+// 警告の閾値に使うため、Console 側を変えたらここも必ず合わせること。
+const RENDERER_LIMIT_PER_DAY = 500000
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') ?? ''
