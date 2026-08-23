@@ -1,6 +1,6 @@
 import { parse } from 'csv-parse/sync'
-import { XMLParser } from 'fast-xml-parser'
 import { NextResponse } from 'next/server'
+import { CITY_PORTAL_URL, fetchOfficialUpdates, type OfficialUpdate } from '@/lib/inzai-city-alerts'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -9,13 +9,6 @@ type ShelterKind = 'specified' | 'special' | 'wide-area'
 type OpeningStatus = 'open' | 'closed' | 'not-announced'
 
 type SourceRow = Record<string, string>
-
-type OfficialUpdate = {
-  title: string
-  message: string
-  publishedAt: string
-  sourceUrl: string
-}
 
 type Shelter = {
   id: string
@@ -42,9 +35,6 @@ const PUBLIC_ORIGINS = new Set([
   'http://localhost:8766',
 ])
 
-const CITY_PORTAL_URL = 'https://www.city.inzai.lg.jp/bousaiportal/'
-const CITY_ALERT_INDEX_URL = 'https://www.city.inzai.lg.jp/bousaiinzai/get_bousai_xml.php'
-const CITY_ALERT_BASE_URL = 'https://www.city.inzai.lg.jp/bousaiinzai/'
 const OPEN_DATA_PAGE_URL = 'https://www2.wagmap.jp/inzai/OpenData'
 const OPEN_DATA_LICENSE_URL = 'https://www2.wagmap.jp/inzai/OpenDataAgreement'
 
@@ -73,12 +63,6 @@ const DATASETS: Array<{
     url: 'https://www2.wagmap.jp/inzai/inzai/opendata/map/CSV/opendata_24.csv',
   },
 ]
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  trimValues: true,
-  parseTagValue: false,
-})
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') ?? ''
@@ -145,67 +129,6 @@ async function fetchShelterDataset(dataset: typeof DATASETS[number]): Promise<Sh
       openingStatus: 'not-announced' as const,
       openingEvidence: null,
     }]
-  })
-}
-
-function collectNodes(value: unknown, key: string, results: Record<string, unknown>[] = []) {
-  if (!value || typeof value !== 'object') return results
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectNodes(item, key, results))
-    return results
-  }
-  for (const [entryKey, entryValue] of Object.entries(value as Record<string, unknown>)) {
-    if (entryKey.toLowerCase() === key.toLowerCase()) {
-      const entries = Array.isArray(entryValue) ? entryValue : [entryValue]
-      entries.forEach((entry) => {
-        if (entry && typeof entry === 'object') results.push(entry as Record<string, unknown>)
-      })
-    }
-    collectNodes(entryValue, key, results)
-  }
-  return results
-}
-
-function stringValue(value: unknown) {
-  if (typeof value === 'string' || typeof value === 'number') return String(value).trim()
-  return ''
-}
-
-function normalizeAlertFilename(value: unknown) {
-  const filename = stringValue(value)
-  return /^[a-zA-Z0-9_.-]+\.xml$/.test(filename) ? filename : ''
-}
-
-async function fetchOfficialUpdates(): Promise<OfficialUpdate[]> {
-  const indexResponse = await fetch(CITY_ALERT_INDEX_URL, {
-    headers: { Accept: 'application/json', 'User-Agent': 'cidao-inzai-disaster-map/1.0' },
-    cache: 'no-store',
-  })
-  if (!indexResponse.ok) throw new Error(`印西市防災速報 HTTP ${indexResponse.status}`)
-  const payload = await indexResponse.json().catch(() => [])
-  const indexItems = Array.isArray(payload) ? payload : [payload]
-  const filenames = indexItems.map((item) => normalizeAlertFilename(item?.fname)).filter(Boolean)
-  if (filenames.length === 0) return []
-
-  const xmlDocuments = await Promise.all(filenames.map(async (filename) => {
-    const response = await fetch(`${CITY_ALERT_BASE_URL}${filename}`, {
-      headers: { Accept: 'application/xml,text/xml', 'User-Agent': 'cidao-inzai-disaster-map/1.0' },
-      cache: 'no-store',
-    })
-    if (!response.ok) throw new Error(`印西市防災速報XML HTTP ${response.status}`)
-    return xmlParser.parse(await response.text()) as Record<string, unknown>
-  }))
-
-  return xmlDocuments.flatMap((document) => {
-    const publishedAt = collectNodes(document, 'control')
-      .map((node) => stringValue(node.DateTime))
-      .find(Boolean) ?? ''
-    return collectNodes(document, 'homepage').map((node) => ({
-      title: stringValue(node.Title),
-      message: stringValue(node.Message),
-      publishedAt,
-      sourceUrl: CITY_PORTAL_URL,
-    })).filter((item) => item.title || item.message)
   })
 }
 
