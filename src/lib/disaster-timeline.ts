@@ -163,6 +163,18 @@ async function fetchText(url: string, accept = 'text/html,*/*;q=0.8') {
   return response.text()
 }
 
+/** Error でも Supabase の PostgrestError（plain object）でも読める文言にする */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const e = error as { message?: unknown; details?: unknown; code?: unknown; hint?: unknown }
+    const parts = [e.message, e.details, e.hint].filter((v) => typeof v === 'string' && v).map(String)
+    if (parts.length) return `${parts.join(' / ')}${typeof e.code === 'string' ? ` (${e.code})` : ''}`
+    try { return JSON.stringify(error) } catch { /* fallthrough */ }
+  }
+  return String(error)
+}
+
 async function fetchJson<T = unknown>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
@@ -274,7 +286,7 @@ const cityCategoryHtml: SourceParser = async (source) => {
           lastError = error
         }
       }
-      if (lastError) body = `（本文取得失敗: ${lastError instanceof Error ? lastError.message : String(lastError)}）`
+      if (lastError) body = `（本文取得失敗: ${errorMessage(lastError)}）`
     }
     drafts.push({
       externalKey: absolute,
@@ -492,7 +504,7 @@ const jmaQuake: SourceParser = async (source) => {
         headline = stringValue(detail.Head?.Headline?.Text)
         tsunami = stringValue(detail.Body?.Comments?.ForecastComment?.Text)
       } catch (error) {
-        headline = `（詳細取得失敗: ${error instanceof Error ? error.message : String(error)}）`
+        headline = `（詳細取得失敗: ${errorMessage(error)}）`
       }
     }
     const mag = stringValue(entry.mag)
@@ -592,8 +604,16 @@ export async function upsertTimelineItems(
   drafts: TimelineItemDraft[],
 ) {
   const counts = { inserted: 0, updated: 0, unchanged: 0 }
+  // 同じ external_key が1バッチに複数あると2件目の insert がユニーク制約に当たる
+  // （気象庁の地震一覧は同じ eid の続報が並ぶ）。先頭＝最新を採用して重複を落とす
+  const seen = new Set<string>()
+  drafts = drafts.filter((draft) => {
+    if (!draft.externalKey || seen.has(draft.externalKey)) return false
+    seen.add(draft.externalKey)
+    return true
+  })
   if (drafts.length === 0) return counts
-  const keys = Array.from(new Set(drafts.map((draft) => draft.externalKey)))
+  const keys = Array.from(seen)
   const { data: existingRows, error: existingError } = await supabase
     .from('disaster_timeline_items')
     .select('id, external_key, content_hash')
@@ -707,7 +727,7 @@ export async function runDisasterTimeline(
         updated_at: fetchedAt,
       }).eq('id', source.id)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'failed', fetched: 0, inserted: 0, updated: 0, unchanged: 0, error: message })
       await supabase.from('disaster_info_sources').update({
         last_fetched_at: fetchedAt,
