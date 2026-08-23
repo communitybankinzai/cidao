@@ -3,6 +3,7 @@
 // 呼び出し元：/api/disaster/timeline（POST, cron）、/admin/disaster-sources（テスト取得・今すぐ巡回）。
 
 import { createHash } from 'node:crypto'
+import { priorityLabelOf, type MonitorItem } from './disaster-sns-monitor'
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
@@ -529,16 +530,35 @@ const jmaQuake: SourceParser = async (source) => {
 
 const snsPriority: SourceParser = async (_source, context) => {
   if (!context.supabase) throw new Error('sns-priority は DB 接続が必要です')
+  // 保存時の priority_label だけに頼らず、読み出し時にも判定し直す。
+  // 判定ロジックの追加より前に保存された投稿（例: 2026-08-23 未明の市長投稿）を取りこぼさないため
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await context.supabase
     .from('disaster_sns_candidates')
     .select('external_id, platform, permalink, body_text, posted_at, author_username, raw_payload')
-    .not('raw_payload->>priority_label', 'is', null)
+    .gte('posted_at', since)
     .neq('review_status', 'dismissed')
     .order('posted_at', { ascending: false })
-    .limit(100)
+    .limit(400)
   if (error) throw error
   return (data ?? []).flatMap((row) => {
-    const label = stringValue((row.raw_payload as { priority_label?: string } | null)?.priority_label)
+    const stored = stringValue((row.raw_payload as { priority_label?: string } | null)?.priority_label)
+    const probe = {
+      platform: row.platform,
+      externalId: row.external_id,
+      permalink: stringValue(row.permalink),
+      username: stringValue(row.author_username),
+      text: stringValue(row.body_text),
+      commentsText: '',
+      mediaUrl: '',
+      timestamp: stringValue(row.posted_at),
+      locationName: '',
+      lat: null,
+      lng: null,
+      query: '',
+      raw: {},
+    } as MonitorItem
+    const label = stored || priorityLabelOf(probe)
     if (!label) return []
     return [{
       externalKey: `${row.platform}:${row.external_id}`,
@@ -548,9 +568,83 @@ const snsPriority: SourceParser = async (_source, context) => {
       url: stringValue(row.permalink) || null,
       areaTag: '印西市',
       priority: 1,
-      raw: { platform: row.platform, username: row.author_username },
+      raw: { platform: row.platform, username: row.author_username, labelSource: stored ? 'stored' : 'computed' },
     }]
   })
+}
+
+// ---------------------------------------------------------------------------
+// chiba-bousai-portal: 千葉県防災ポータル（Salesforce Visualforce）トップの緊急情報と被害情報PDF一覧
+// 緊急情報は <dt><span id="...:N:j_id64">日時</span></dt> と <dd><span><span id="...:N:j_id66">本文</span>
+// の組（N が対応番号）。被害情報PDFは onclick の fileId とファイル名・日時。PDF本体は JS ポストバックが
+// 必要で直接取得できないため、タイトルと掲載時刻のみを記録し、リンクは一覧ページへ向ける。
+// id の末尾（j_id64/j_id66）はサイト更新で変わる可能性があるので config で差し替えられるようにする。
+// ---------------------------------------------------------------------------
+
+function parseChibaDateTime(text: string): string {
+  // "2026/08/23 5:20" → JST
+  const m = String(text).trim().match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/)
+  if (!m) return toIsoAsJst(text)
+  const pad = (v: string) => v.padStart(2, '0')
+  return toIsoAsJst(`${m[1]}-${pad(m[2])}-${pad(m[3])}T${pad(m[4] ?? '0')}:${m[5] ?? '00'}:00`)
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const chibaBousaiPortal: SourceParser = async (source) => {
+  const html = await fetchText(source.url)
+  const dateSuffix = configString(source, 'emergencyDateId', 'j_id64')
+  const textSuffix = configString(source, 'emergencyTextId', 'j_id66')
+  const docsUrl = configString(source, 'docsUrl', 'https://www.bousai.pref.chiba.lg.jp/PUB_VF_Detail_Docs')
+  const drafts: TimelineItemDraft[] = []
+
+  // 緊急情報：番号 N で日時と本文を突き合わせる
+  const dates = new Map<string, string>()
+  for (const m of html.matchAll(new RegExp(`:(\\d+):${dateSuffix}">([^<]+)</span>`, 'g'))) dates.set(m[1], m[2].trim())
+  for (const m of html.matchAll(new RegExp(`:(\\d+):${textSuffix}">([\\s\\S]*?)</span>`, 'g'))) {
+    const date = dates.get(m[1])
+    const text = stripTags(m[2])
+    if (!date || !text) continue
+    const firstLine = text.match(/^【[^】]+】/)?.[0] ?? text.slice(0, 40)
+    drafts.push({
+      externalKey: `emergency:${date}:${firstLine}`,
+      occurredAt: parseChibaDateTime(date),
+      title: `千葉県 緊急情報 ${firstLine}`,
+      body: truncate(text),
+      url: source.url,
+      areaTag: text.includes('印西') ? '印西市' : '千葉県',
+      priority: 1,
+      raw: { date, index: m[1] },
+    })
+  }
+
+  // 被害情報PDF：fileId・掲載時刻・ファイル名
+  const pdfRe = /fileId,([0-9A-Za-z]{15,18})'[\s\S]*?<p class="day"><span[^>]*>([^<]+)<\/span><\/p>\s*<p><span[^>]*>([^<]+)<\/span>/g
+  for (const m of html.matchAll(pdfRe)) {
+    const [, fileId, date, name] = m
+    drafts.push({
+      externalKey: `doc:${fileId}`,
+      occurredAt: parseChibaDateTime(date.trim()),
+      title: `千葉県 ${stripTags(name).replace(/\.pdf$/i, '')}`,
+      body: '千葉県防災ポータルの「被害情報」に掲載されたPDF。本文は県ポータルで確認してください（自動取得不可）。',
+      url: docsUrl,
+      areaTag: '千葉県',
+      priority: 1,
+      raw: { fileId, date },
+    })
+  }
+  return drafts
 }
 
 // ---------------------------------------------------------------------------
@@ -570,6 +664,7 @@ export const PARSERS: Record<string, SourceParser> = {
   'jma-overview': jmaOverview,
   'jma-quake': jmaQuake,
   'sns-priority': snsPriority,
+  'chiba-bousai-portal': chibaBousaiPortal,
   manual,
 }
 
@@ -580,6 +675,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'jma-overview', label: '気象庁 天気概況', help: 'config なし' },
   { id: 'jma-quake', label: '気象庁 地震情報', help: 'config: cityCode, detailBase' },
   { id: 'sns-priority', label: '市長・市公式SNS（巡回結果から）', help: 'URL・config なし。SNS巡回の priority_label 付き投稿を取り込む' },
+  { id: 'chiba-bousai-portal', label: '千葉県防災ポータル（緊急情報・被害情報PDF）', help: 'URL は https://www.bousai.pref.chiba.lg.jp/ 。config: emergencyDateId, emergencyTextId, docsUrl（通常は空でよい）' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 

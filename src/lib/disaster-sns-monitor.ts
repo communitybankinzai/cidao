@@ -112,7 +112,7 @@ function usernameFromPermalink(permalink: string): string {
 }
 
 // 重要アカウント判定。一致すればラベル（例「印西市長」）を返す
-function priorityLabelOf(item: MonitorItem): string {
+export function priorityLabelOf(item: MonitorItem): string {
   const handle = (item.username || usernameFromPermalink(item.permalink)).toLowerCase()
   for (const account of PRIORITY_ACCOUNTS) {
     if (handle && handle === account.handle.toLowerCase()) return account.label
