@@ -79,6 +79,21 @@ function numberValue(value: unknown): number | null {
   return Number.isFinite(number) ? number : null
 }
 
+// プラットフォーム別の最短巡回間隔。cron は5分ごとだが、Instagram Graph API は
+// アプリ単位の時間あたり呼出上限（エラー #4 "Application request limit reached"）が厳しく、
+// 4語×5分の巡回で 2026-08-23 に上限へ達したため 20 分に間引く（ルールの last_scanned_at 基準）。
+// scanSince は前回時刻の5分前から検索するため、間引いても取りこぼしは出ない。
+const PLATFORM_MIN_INTERVAL_MS: Partial<Record<MonitorPlatform, number>> = {
+  instagram: 20 * 60 * 1000,
+}
+
+function shouldSkipForInterval(rule: MonitorRule, now: Date): boolean {
+  const interval = PLATFORM_MIN_INTERVAL_MS[rule.platform]
+  if (!interval || !rule.last_scanned_at) return false
+  const previous = new Date(rule.last_scanned_at).getTime()
+  return Number.isFinite(previous) && now.getTime() - previous < interval
+}
+
 function scanSince(lastScannedAt: string | null): Date {
   const now = Date.now()
   const previous = lastScannedAt ? new Date(lastScannedAt).getTime() : Number.NaN
@@ -524,6 +539,10 @@ export async function runDisasterSnsMonitor(supabase: SupabaseClient) {
 
   for (const rawRule of rules ?? []) {
     const rule = rawRule as MonitorRule
+    if (shouldSkipForInterval(rule, until)) {
+      results.push({ ruleId: rule.id, platform: rule.platform, query: rule.query, status: 'skipped', fetched: 0, matched: 0, inserted: 0, message: '巡回間隔の間引き（Instagramは20分ごと）' })
+      continue
+    }
     const since = scanSince(rule.last_scanned_at)
     try {
       const fetchedItems = await searchRule(rule, credentials, since, until)
