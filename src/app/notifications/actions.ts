@@ -12,15 +12,22 @@ export type NotificationRow = {
   created_at: string
 }
 
-/** 自分宛の通知（最新30件）と未読数を返す。未ログイン時は loggedIn: false */
+/**
+ * 自分宛の通知（最新30件）と未読数を返す。未ログイン時は loggedIn: false
+ *
+ * userId は NotificationBell が Realtime 購読のフィルタ
+ * （recipient_id=eq.<userId>）に使う。クライアントで別途
+ * auth.getUser() を呼ばずに済ませるため、ここで一緒に返している。
+ */
 export async function getMyNotifications(): Promise<{
   loggedIn: boolean
+  userId: string | null
   rows: NotificationRow[]
   unread: number
 }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { loggedIn: false, rows: [], unread: 0 }
+  if (!user) return { loggedIn: false, userId: null, rows: [], unread: 0 }
 
   const { data } = await supabase
     .from('notifications')
@@ -30,7 +37,7 @@ export async function getMyNotifications(): Promise<{
 
   const rows = (data ?? []) as NotificationRow[]
   const unread = rows.filter((r) => !r.read_at).length
-  return { loggedIn: true, rows, unread }
+  return { loggedIn: true, userId: user.id, rows, unread }
 }
 
 /** 自分宛の未読通知をすべて既読化 */

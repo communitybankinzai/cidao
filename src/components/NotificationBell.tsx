@@ -1,15 +1,20 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
   getMyNotifications,
   markAllNotificationsRead,
   type NotificationRow,
 } from '@/app/notifications/actions'
+import { createClient } from '@/lib/supabase/client'
 import { KIND_ICON } from '@/lib/notification-kinds'
 
-/** 通知の再取得間隔。Vercel の無料枠を守るため長めに取る（下の useEffect のコメント参照） */
-const POLL_INTERVAL_MS = 5 * 60_000
+/**
+ * Realtime を購読できなかったときだけ使う保険の再取得間隔。
+ * 通常は WebSocket で届くのでこのタイマーは動かない。
+ */
+const FALLBACK_POLL_INTERVAL_MS = 5 * 60_000
 
 /**
  * 全ページ右上に固定表示するアプリ内通知ベル。
@@ -22,59 +27,101 @@ export function NotificationBell() {
   const [loggedIn, setLoggedIn] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  /** 取得してログイン中かどうかを返す（失敗時は状態を変えず true 扱いで継続） */
-  const reload = useCallback(async (): Promise<boolean> => {
+  /** 取得して、ログイン状態と自分の member id を返す（失敗時は状態を変えない） */
+  const reload = useCallback(async (): Promise<{
+    loggedIn: boolean
+    userId: string | null
+  }> => {
     try {
       const r = await getMyNotifications()
       setLoggedIn(r.loggedIn)
       setRows(r.rows)
       setUnread(r.unread)
-      return r.loggedIn
+      return { loggedIn: r.loggedIn, userId: r.userId }
     } catch {
-      // 取得失敗は表示だけ諦める
-      return true
+      // 取得失敗は表示だけ諦める。購読も張らず、保険のポーリングに任せる
+      return { loggedIn: true, userId: null }
     }
   }, [])
 
   // getMyNotifications は Server Action のため、呼ぶたびに Vercel Function が起動する。
-  // 旧実装（全ページで60秒ごと・未ログインでも継続・タブ非表示でも継続）が
-  // Fluid Active CPU の無料枠（4時間/月）の大半を消費していたため、
-  // 次の3点で呼び出しを絞る（2026-08-26）。
-  //   1. 未ログインと判明した時点でポーリングを止める（訪問者の大半は未ログイン）
-  //   2. 間隔は5分（通知ベルに即時性は要らない）
-  //   3. タブが非表示の間は呼ばない（開きっぱなしのタブが枠を食っていた）
-  // ログイン直後は /auth/callback からの遷移で再マウントされるため、
-  // 停止したポーリングはそこで張り直される。
+  // 旧実装は全ページで60秒ごとに呼んでおり、未ログインでもタブ非表示でも止まらず、
+  // Fluid Active CPU の無料枠（4時間/月）の大半を消費していた（2026-08-26）。
+  //
+  // そこでポーリングをやめ、Supabase Realtime の購読に切り替えた。
+  //   - Server Action を呼ぶのはマウント時の1回だけ（初期表示と userId の取得）
+  //   - 以降の新着は WebSocket で届く。Vercel を経由しないので無料枠を消費しない
+  //   - 未ログインなら購読も張らない（訪問者の大半は未ログイン）
+  //   - 購読に失敗したときだけ 5分間隔のポーリングへ退避する
+  // notifications テーブルが supabase_realtime publication に入っていないと
+  // 購読は失敗するが、その場合も上の退避が効くので通知は届く。
   useEffect(() => {
-    let polling = true
+    let disposed = false
     let timer: ReturnType<typeof setInterval> | null = null
+    let channel: RealtimeChannel | null = null
+    const supabase = createClient()
 
-    const stop = () => {
-      polling = false
+    const stopPolling = () => {
       if (timer) {
         clearInterval(timer)
         timer = null
       }
     }
 
-    const tick = async () => {
-      if (!polling) return
-      if (document.visibilityState === 'hidden') return
-      if (!(await reload())) stop()
+    /** 購読が張れなかったときの保険。タブが非表示の間は呼ばない */
+    const startPollingFallback = () => {
+      if (timer || disposed) return
+      timer = setInterval(() => {
+        if (document.visibilityState === 'hidden') return
+        void reload()
+      }, FALLBACK_POLL_INTERVAL_MS)
     }
 
-    // タブが前面に戻ったときだけ、非表示中の取りこぼしを1回補う
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void tick()
+    const subscribe = (uid: string) => {
+      channel = supabase
+        .channel(`notifications-${uid}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            // RLS でも本人以外は届かないが、無駄な受信を避けるため絞る
+            filter: `recipient_id=eq.${uid}`,
+          },
+          (payload) => {
+            const row = payload.new as NotificationRow
+            setRows((prev) => [row, ...prev.filter((r) => r.id !== row.id)].slice(0, 30))
+            setUnread((prev) => prev + 1)
+          },
+        )
+        .subscribe((status) => {
+          if (disposed) return
+          if (status === 'SUBSCRIBED') stopPolling()
+          else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') startPollingFallback()
+        })
     }
 
-    timer = setInterval(tick, POLL_INTERVAL_MS)
-    void tick()
-    document.addEventListener('visibilitychange', onVisibilityChange)
+    const init = async () => {
+      const r = await reload()
+      if (disposed || !r.loggedIn) return
+      if (!r.userId) {
+        startPollingFallback()
+        return
+      }
+      // RLS 付きテーブルの購読にはアクセストークンが要る。
+      // セッション復元を待ってから購読する（Cookie を読むだけで Vercel は経由しない）
+      await supabase.auth.getSession()
+      if (disposed) return
+      subscribe(r.userId)
+    }
+
+    void init()
 
     return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibilityChange)
+      disposed = true
+      stopPolling()
+      if (channel) void supabase.removeChannel(channel)
     }
   }, [reload])
 

@@ -1,0 +1,22 @@
+-- =============================================================
+-- notifications を Realtime 配信対象に追加する
+--
+-- 背景（2026-08-26）
+--   通知ベル（NotificationBell）は全ページで60秒ごとに Server Action を
+--   呼んでおり、Vercel の Fluid Active CPU 無料枠（4時間/月）の大半を
+--   消費していた。ポーリングをやめて Realtime 購読に切り替えるため、
+--   notifications を supabase_realtime publication に追加する。
+--
+--   これにより通知は WebSocket で即時に届き、Vercel Function は
+--   ページを開いたときの1回しか起動しない。
+--
+-- 安全性
+--   RLS の notifications_select_own（recipient_id = auth.uid()）が
+--   Realtime にも適用されるため、他人宛の通知は配信されない。
+--   クライアント側でも filter: recipient_id=eq.<自分のid> で絞っている。
+--
+--   購読するのは INSERT のみのため REPLICA IDENTITY の変更は不要
+--   （UPDATE/DELETE を filter 付きで購読する場合は FULL が必要になる）。
+-- =============================================================
+
+alter publication supabase_realtime add table public.notifications;
