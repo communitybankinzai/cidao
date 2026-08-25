@@ -8,6 +8,9 @@ import {
 } from '@/app/notifications/actions'
 import { KIND_ICON } from '@/lib/notification-kinds'
 
+/** 通知の再取得間隔。Vercel の無料枠を守るため長めに取る（下の useEffect のコメント参照） */
+const POLL_INTERVAL_MS = 5 * 60_000
+
 /**
  * 全ページ右上に固定表示するアプリ内通知ベル。
  * 未ログイン時・通知0件時はベルのみ（バッジなし）。ドロップダウンを開くと既読化する。
@@ -19,23 +22,59 @@ export function NotificationBell() {
   const [loggedIn, setLoggedIn] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  const reload = useCallback(async () => {
+  /** 取得してログイン中かどうかを返す（失敗時は状態を変えず true 扱いで継続） */
+  const reload = useCallback(async (): Promise<boolean> => {
     try {
       const r = await getMyNotifications()
       setLoggedIn(r.loggedIn)
       setRows(r.rows)
       setUnread(r.unread)
+      return r.loggedIn
     } catch {
       // 取得失敗は表示だけ諦める
+      return true
     }
   }, [])
 
+  // getMyNotifications は Server Action のため、呼ぶたびに Vercel Function が起動する。
+  // 旧実装（全ページで60秒ごと・未ログインでも継続・タブ非表示でも継続）が
+  // Fluid Active CPU の無料枠（4時間/月）の大半を消費していたため、
+  // 次の3点で呼び出しを絞る（2026-08-26）。
+  //   1. 未ログインと判明した時点でポーリングを止める（訪問者の大半は未ログイン）
+  //   2. 間隔は5分（通知ベルに即時性は要らない）
+  //   3. タブが非表示の間は呼ばない（開きっぱなしのタブが枠を食っていた）
+  // ログイン直後は /auth/callback からの遷移で再マウントされるため、
+  // 停止したポーリングはそこで張り直される。
   useEffect(() => {
-    const initial = setTimeout(reload, 0)
-    const timer = setInterval(reload, 60_000)
+    let polling = true
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const stop = () => {
+      polling = false
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+
+    const tick = async () => {
+      if (!polling) return
+      if (document.visibilityState === 'hidden') return
+      if (!(await reload())) stop()
+    }
+
+    // タブが前面に戻ったときだけ、非表示中の取りこぼしを1回補う
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void tick()
+    }
+
+    timer = setInterval(tick, POLL_INTERVAL_MS)
+    void tick()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
-      clearTimeout(initial)
-      clearInterval(timer)
+      stop()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [reload])
 
