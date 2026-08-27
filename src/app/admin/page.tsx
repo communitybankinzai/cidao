@@ -130,6 +130,15 @@ export default async function AdminHomePage() {
           </li>
           <li>
             <Link
+              href="/admin/approvals"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">電子決裁</h2>
+              <p className="text-sm text-slate-500">CBI役員の起案・電子印・決裁記録（役員のみ利用可）</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/timetrial"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
