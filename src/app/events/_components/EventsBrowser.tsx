@@ -174,7 +174,10 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <Link href={`/events?ym=${prevYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="前の月">‹</Button>
           </Link>
-          <MonthPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
+          <span className="mx-1 flex items-center gap-1">
+            <YearPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
+            <MonthPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
+          </span>
           <Link href={`/events?ym=${nextYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="次の月">›</Button>
           </Link>
@@ -280,24 +283,19 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   )
 }
 
-// 年月ジャンプ用のポップオーバー。ボタンを押すと年送り + 12ヶ月グリッドが開く。
-// 一覧が長くなる select より、数ヶ月先を1〜2タップで選べる
-function MonthPicker({
-  year, month, today, disabled, onPick,
+// 年月ジャンプの土台。ボタンを押すと下に小さなパネルを開く。
+// 開閉・外側クリック・Escape はここで面倒を見て、中身（年 or 月）は呼び出し側が渡す
+function PickerPopover({
+  label, ariaLabel, disabled, width, children,
 }: {
-  year: number
-  month: number
-  today: string
+  label: string
+  ariaLabel: string
   disabled: boolean
-  onPick: (ym: string) => void
+  width: string
+  children: (close: () => void) => React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [viewYear, setViewYear] = useState(year)
   const boxRef = useRef<HTMLDivElement>(null)
-  const [todayYear, todayMonth] = today.split('-').map(Number)
-  // 行き先のない年まで送れてしまわないよう、今年の前後で範囲を区切る
-  const minYear = todayYear - 1
-  const maxYear = todayYear + 2
 
   useEffect(() => {
     if (!open) return
@@ -317,82 +315,151 @@ function MonthPicker({
     }
   }, [open])
 
-  function toggle() {
-    setViewYear(year)  // 開くたびに表示中の月の年から始める
-    setOpen((v) => !v)
-  }
-
   return (
-    <div ref={boxRef} className="relative mx-1">
+    <div ref={boxRef} className="relative">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setOpen((v) => !v)}
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`表示中: ${year}年${month}月。年月を選ぶ`}
-        className="flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-lg font-medium tabular-nums hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60"
+        aria-label={ariaLabel}
+        className="flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-lg font-medium tabular-nums hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60"
       >
-        {year}年{month}月
-        <span className={`text-xs text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>▾</span>
+        {label}
+        <span className={`text-xs text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>&#9662;</span>
       </button>
       {open && (
         <div
           role="dialog"
-          aria-label="年月を選ぶ"
-          className="absolute left-0 top-full z-30 mt-1 w-[268px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-lg"
+          aria-label={ariaLabel}
+          className={`absolute left-0 top-full z-30 mt-1 ${width} rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-lg`}
         >
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setViewYear((y) => Math.max(minYear, y - 1))}
-              disabled={viewYear <= minYear}
-              aria-label="前の年"
-              className="rounded px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
-            >
-              &lsaquo;
-            </button>
-            <span className="text-sm font-semibold tabular-nums">{viewYear}年</span>
-            <button
-              type="button"
-              onClick={() => setViewYear((y) => Math.min(maxYear, y + 1))}
-              disabled={viewYear >= maxYear}
-              aria-label="次の年"
-              className="rounded px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
-            >
-              &rsaquo;
-            </button>
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => {
-              const isSelected = viewYear === year && mm === month
-              const isThisMonth = viewYear === todayYear && mm === todayMonth
-              return (
-                <button
-                  key={mm}
-                  type="button"
-                  onClick={() => {
-                    setOpen(false)
-                    onPick(`${viewYear}-${String(mm).padStart(2, '0')}`)
-                  }}
-                  aria-current={isSelected ? 'true' : undefined}
-                  className={`rounded-md py-2 text-sm tabular-nums transition ${
-                    isSelected
-                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  } ${isThisMonth && !isSelected ? 'ring-1 ring-inset ring-amber-400 dark:ring-amber-600' : ''}`}
-                >
-                  {mm}月
-                </button>
-              )
-            })}
-          </div>
-          <p className="mt-2 text-[10px] text-slate-500">
-            <span className="inline-block h-2 w-2 rounded-sm ring-1 ring-amber-400 align-middle" aria-hidden /> が今月です
-          </p>
+          {children(() => setOpen(false))}
         </div>
       )}
     </div>
+  )
+}
+
+// パネル内の選択肢ボタン（年・月で共通）。選択中は反転、今年・今月はリングで示す
+function PickerCell({
+  selected, isNow, onClick, children,
+}: {
+  selected: boolean
+  isNow: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={selected ? 'true' : undefined}
+      className={`rounded-md py-2 text-sm tabular-nums transition ${
+        selected
+          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+      } ${isNow && !selected ? 'ring-1 ring-inset ring-amber-400 dark:ring-amber-600' : ''}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function NowLegend({ text }: { text: string }) {
+  return (
+    <p className="mt-2 text-[10px] text-slate-500">
+      <span className="inline-block h-2 w-2 rounded-sm ring-1 ring-amber-400 align-middle" aria-hidden /> {text}
+    </p>
+  )
+}
+
+// 年だけを選ぶパネル（月は今の表示のまま持ち越す）
+function YearPicker({
+  year, month, today, disabled, onPick,
+}: {
+  year: number
+  month: number
+  today: string
+  disabled: boolean
+  onPick: (ym: string) => void
+}) {
+  const todayYear = Number(today.split('-')[0])
+  // 行き先のない年は出さない。矢印で範囲外へ移動していた場合はその年も残す
+  const years = useMemo(() => {
+    const set = new Set<number>()
+    for (let y = todayYear - 1; y <= todayYear + 2; y++) set.add(y)
+    set.add(year)
+    return Array.from(set).sort((a, b) => a - b)
+  }, [todayYear, year])
+  const mm = String(month).padStart(2, '0')
+
+  return (
+    <PickerPopover
+      label={`${year}年`}
+      ariaLabel={`表示中の年: ${year}年。年を選ぶ`}
+      disabled={disabled}
+      width="w-[176px]"
+    >
+      {(close) => (
+        <>
+          <div className="grid grid-cols-2 gap-1.5">
+            {years.map((y) => (
+              <PickerCell
+                key={y}
+                selected={y === year}
+                isNow={y === todayYear}
+                onClick={() => { close(); onPick(`${y}-${mm}`) }}
+              >
+                {y}年
+              </PickerCell>
+            ))}
+          </div>
+          <NowLegend text="が今年です" />
+        </>
+      )}
+    </PickerPopover>
+  )
+}
+
+// 月だけを選ぶパネル（年は今の表示のまま持ち越す）
+function MonthPicker({
+  year, month, today, disabled, onPick,
+}: {
+  year: number
+  month: number
+  today: string
+  disabled: boolean
+  onPick: (ym: string) => void
+}) {
+  const [todayYear, todayMonth] = today.split('-').map(Number)
+
+  return (
+    <PickerPopover
+      label={`${month}月`}
+      ariaLabel={`表示中の月: ${month}月。月を選ぶ`}
+      disabled={disabled}
+      width="w-[236px]"
+    >
+      {(close) => (
+        <>
+          <div className="grid grid-cols-3 gap-1.5">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => (
+              <PickerCell
+                key={mm}
+                selected={mm === month}
+                isNow={year === todayYear && mm === todayMonth}
+                onClick={() => { close(); onPick(`${year}-${String(mm).padStart(2, '0')}`) }}
+              >
+                {mm}月
+              </PickerCell>
+            ))}
+          </div>
+          <NowLegend text="が今月です" />
+        </>
+      )}
+    </PickerPopover>
   )
 }
 
