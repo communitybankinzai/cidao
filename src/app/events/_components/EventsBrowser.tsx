@@ -140,25 +140,6 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const thisYm = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   const viewSuffix = view === 'list' ? '&view=list' : ''
 
-  // 年月ジャンプ用の選択肢。今日を基準に前12ヶ月〜先24ヶ月。
-  // 矢印で範囲外まで移動した場合でも、表示中の月は必ず候補に含める
-  const monthOptions = useMemo(() => {
-    const [ty, tm] = today.split('-').map(Number)
-    const base = ty * 12 + (tm - 1)
-    const sel = year * 12 + (month - 1)
-    const from = Math.min(base - 12, sel)
-    const to = Math.max(base + 24, sel)
-    const opts: Array<{ ym: string; label: string }> = []
-    for (let t = from; t <= to; t++) {
-      const yy = Math.floor(t / 12)
-      const mm = (t % 12) + 1
-      opts.push({
-        ym: `${yy}-${String(mm).padStart(2, '0')}`,
-        label: `${yy}年${mm}月${t === base ? '（今月）' : ''}`,
-      })
-    }
-    return opts
-  }, [today, year, month])
   const selectedYm = `${year}-${String(month).padStart(2, '0')}`
 
   function jumpToYm(ym: string) {
@@ -193,19 +174,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <Link href={`/events?ym=${prevYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="前の月">‹</Button>
           </Link>
-          <label htmlFor="ym-jump" className="sr-only">表示する年月</label>
-          <select
-            id="ym-jump"
-            value={selectedYm}
-            onChange={(e) => jumpToYm(e.target.value)}
-            disabled={navPending}
-            aria-label="表示する年月を選ぶ"
-            className="mx-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-lg font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60"
-          >
-            {monthOptions.map((o) => (
-              <option key={o.ym} value={o.ym}>{o.label}</option>
-            ))}
-          </select>
+          <MonthPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
           <Link href={`/events?ym=${nextYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="次の月">›</Button>
           </Link>
@@ -307,6 +276,122 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
         <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} />
       )}
       </div>
+    </div>
+  )
+}
+
+// 年月ジャンプ用のポップオーバー。ボタンを押すと年送り + 12ヶ月グリッドが開く。
+// 一覧が長くなる select より、数ヶ月先を1〜2タップで選べる
+function MonthPicker({
+  year, month, today, disabled, onPick,
+}: {
+  year: number
+  month: number
+  today: string
+  disabled: boolean
+  onPick: (ym: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [viewYear, setViewYear] = useState(year)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [todayYear, todayMonth] = today.split('-').map(Number)
+  // 行き先のない年まで送れてしまわないよう、今年の前後で範囲を区切る
+  const minYear = todayYear - 1
+  const maxYear = todayYear + 2
+
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(e: MouseEvent | TouchEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function toggle() {
+    setViewYear(year)  // 開くたびに表示中の月の年から始める
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div ref={boxRef} className="relative mx-1">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`表示中: ${year}年${month}月。年月を選ぶ`}
+        className="flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-lg font-medium tabular-nums hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60"
+      >
+        {year}年{month}月
+        <span className={`text-xs text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>▾</span>
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label="年月を選ぶ"
+          className="absolute left-0 top-full z-30 mt-1 w-[268px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setViewYear((y) => Math.max(minYear, y - 1))}
+              disabled={viewYear <= minYear}
+              aria-label="前の年"
+              className="rounded px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+            >
+              &lsaquo;
+            </button>
+            <span className="text-sm font-semibold tabular-nums">{viewYear}年</span>
+            <button
+              type="button"
+              onClick={() => setViewYear((y) => Math.min(maxYear, y + 1))}
+              disabled={viewYear >= maxYear}
+              aria-label="次の年"
+              className="rounded px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+            >
+              &rsaquo;
+            </button>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => {
+              const isSelected = viewYear === year && mm === month
+              const isThisMonth = viewYear === todayYear && mm === todayMonth
+              return (
+                <button
+                  key={mm}
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    onPick(`${viewYear}-${String(mm).padStart(2, '0')}`)
+                  }}
+                  aria-current={isSelected ? 'true' : undefined}
+                  className={`rounded-md py-2 text-sm tabular-nums transition ${
+                    isSelected
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  } ${isThisMonth && !isSelected ? 'ring-1 ring-inset ring-amber-400 dark:ring-amber-600' : ''}`}
+                >
+                  {mm}月
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[10px] text-slate-500">
+            <span className="inline-block h-2 w-2 rounded-sm ring-1 ring-amber-400 align-middle" aria-hidden /> が今月です
+          </p>
+        </div>
+      )}
     </div>
   )
 }
