@@ -243,4 +243,21 @@
       animation: none;
     }
   }
+
+  /* ---------- イベントカレンダー：年月ジャンプ中の読み込み表示（EventsBrowser.tsx が制御） ---------- */
+  .cidao-ym-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: cidaoSpin 0.7s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cidao-ym-spinner {
+      animation: none;
+    }
+  }
+
 }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { categoryLabel } from '@/lib/categories'
@@ -132,11 +133,38 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const hasActiveFilter = !!query || orgFilter !== 'all' || typeFilter !== null || onlineOnly
 
   // 月送り URL（view + 既存フィルタは URL に乗せず client state のみ）
-  const monthLabel = `${year}年${month}月`
+  const router = useRouter()
+  const [navPending, startNav] = useTransition()
   const prevYm = (() => { const total = year * 12 + (month - 1) - 1; return `${Math.floor(total / 12)}-${String((total % 12 + 12) % 12 + 1).padStart(2, '0')}` })()
   const nextYm = (() => { const total = year * 12 + (month - 1) + 1; return `${Math.floor(total / 12)}-${String((total % 12 + 12) % 12 + 1).padStart(2, '0')}` })()
   const thisYm = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   const viewSuffix = view === 'list' ? '&view=list' : ''
+
+  // 年月ジャンプ用の選択肢。今日を基準に前12ヶ月〜先24ヶ月。
+  // 矢印で範囲外まで移動した場合でも、表示中の月は必ず候補に含める
+  const monthOptions = useMemo(() => {
+    const [ty, tm] = today.split('-').map(Number)
+    const base = ty * 12 + (tm - 1)
+    const sel = year * 12 + (month - 1)
+    const from = Math.min(base - 12, sel)
+    const to = Math.max(base + 24, sel)
+    const opts: Array<{ ym: string; label: string }> = []
+    for (let t = from; t <= to; t++) {
+      const yy = Math.floor(t / 12)
+      const mm = (t % 12) + 1
+      opts.push({
+        ym: `${yy}-${String(mm).padStart(2, '0')}`,
+        label: `${yy}年${mm}月${t === base ? '（今月）' : ''}`,
+      })
+    }
+    return opts
+  }, [today, year, month])
+  const selectedYm = `${year}-${String(month).padStart(2, '0')}`
+
+  function jumpToYm(ym: string) {
+    if (ym === selectedYm) return
+    startNav(() => router.push(`/events?ym=${ym}${viewSuffix}`))
+  }
 
   // 日付ごと集約（フィルタ後のもの）
   const byDate = useMemo(() => {
@@ -165,13 +193,31 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <Link href={`/events?ym=${prevYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="前の月">‹</Button>
           </Link>
-          <span className="px-3 text-lg font-medium tabular-nums">{monthLabel}</span>
+          <label htmlFor="ym-jump" className="sr-only">表示する年月</label>
+          <select
+            id="ym-jump"
+            value={selectedYm}
+            onChange={(e) => jumpToYm(e.target.value)}
+            disabled={navPending}
+            aria-label="表示する年月を選ぶ"
+            className="mx-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-lg font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60"
+          >
+            {monthOptions.map((o) => (
+              <option key={o.ym} value={o.ym}>{o.label}</option>
+            ))}
+          </select>
           <Link href={`/events?ym=${nextYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="次の月">›</Button>
           </Link>
           <Link href={`/events?ym=${thisYm}${viewSuffix}`}>
             <Button variant="ghost" size="sm">今月</Button>
           </Link>
+          {navPending && (
+            <span role="status" className="ml-1 flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="cidao-ym-spinner" aria-hidden />
+              読み込み中…
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1 text-xs">
           <Link href={`/events?ym=${year}-${String(month).padStart(2, '0')}`}>
@@ -247,7 +293,8 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
         )}
       </div>
 
-      {/* ビュー本体 */}
+      {/* ビュー本体（月の読み込み中は淡くして待ちを示す） */}
+      <div className={navPending ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
       {view === 'calendar' ? (
         <>
           <p className="md:hidden text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 -mt-1">
@@ -259,6 +306,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
       ) : (
         <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} />
       )}
+      </div>
     </div>
   )
 }
