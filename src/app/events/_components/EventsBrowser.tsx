@@ -42,15 +42,24 @@ type Props = {
   today: string
   isLoggedIn: boolean
   view: 'calendar' | 'list'
+  currentUserId?: string | null
+  isAdmin?: boolean
 }
 
 const TYPE_ORDER: Array<'civic_group' | 'business' | 'government'> = ['civic_group', 'business', 'government']
 
-export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view }: Props) {
+export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false }: Props) {
   const [query, setQuery] = useState('')
   const [orgFilter, setOrgFilter] = useState<string>('all')  // 'all' | 'member_only' | orgId
   const [typeFilter, setTypeFilter] = useState<string | null>(null)  // null | 'civic_group' | 'business' | 'government'
   const [onlineOnly, setOnlineOnly] = useState(false)
+
+  // 一覧に「編集」リンクを出すか。ここで拾えるのは管理者と登録者本人の分だけで、
+  // 団体役員など他の編集権限者にはリンクが出ない（その場合は従来どおり詳細ページの「編集」から入る）。
+  // 誤って出すと押した先で弾かれてしまうため、確実に編集できる条件だけに絞っている。
+  function canEditRow(r: EventRow): boolean {
+    return isAdmin || (!!currentUserId && r.organizer_id === currentUserId)
+  }
 
   // 主催団体ラベル
   function organizerLabel(r: EventRow): string {
@@ -276,7 +285,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
         </>
       ) : (
-        <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} />
+        <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} />
       )}
       </div>
     </div>
@@ -685,7 +694,7 @@ function RevealItem({
   )
 }
 
-function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo> }) {
+function ListView({ events, organizerLabel, orgInfo, canEditRow }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean }) {
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const groups = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
@@ -730,6 +739,7 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
               return (
                 <RevealItem key={e.id} id={e.id} fromLeft={false} itemsRef={itemsRef}>
+                  <div className="relative">
                   <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <DateBadge iso={e.start_at} />
                     {e.flyer_image_url ? (
@@ -756,6 +766,15 @@ function ListView({ events, organizerLabel, orgInfo }: { events: EventRow[]; org
                       </div>
                     </div>
                   </Link>
+                  {canEditRow(e) && (
+                    <Link
+                      href={`/events/${e.id}/edit`}
+                      className="absolute right-3 bottom-2 text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline"
+                    >
+                      {e.flyer_image_url ? '編集' : '編集（画像なし）'}
+                    </Link>
+                  )}
+                  </div>
                 </RevealItem>
               )
             })}

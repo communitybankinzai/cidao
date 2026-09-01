@@ -198,10 +198,18 @@ export async function POST(request: Request) {
   const mediaType = file.type as MediaType
 
   const buf = Buffer.from(await file.arrayBuffer())
-  const base64 = buf.toString('base64')
 
   // 画像アップロードと AI 抽出は独立。AI が失敗してもアップロード結果は返す
   const uploadPromise = uploadFlyer(supabase, user.id, buf, mediaType)
+
+  // skip_ai=1 のときは画像を保存するだけで AI 抽出を行わない。
+  // 既に内容が入っているイベントへ後から写真だけ足す用途（編集画面）で使う。
+  // AI を通すと本文や日時が上書きされてしまい、費用も無駄になるため。
+  if (form.get('skip_ai') === '1') {
+    return NextResponse.json({ ok: true, skipped_ai: true, flyer_image_url: await uploadPromise })
+  }
+
+  const base64 = buf.toString('base64')
 
   let scan: ScanResult
   const apiKey = process.env.ANTHROPIC_API_KEY

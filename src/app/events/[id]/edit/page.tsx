@@ -121,7 +121,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
         </nav>
         <h1 className="text-3xl font-serif font-bold">イベントを編集</h1>
 
-        <ImageScanField initialFlyerUrl={event.flyer_image_url ?? null} />
+        {/* 編集画面では AI 自動入力を既定 OFF にする。
+            既に入っている本文・日時を画像から上書きしてしまう事故と、無用な AI 利用料を避けるため
+            （写真だけ後から足したい、というのが編集時のほとんどの用途）。 */}
+        <ImageScanField initialFlyerUrl={event.flyer_image_url ?? null} defaultScan={false} />
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
           <L label="タイトル" req>

@@ -45,8 +45,12 @@ const REASON_MESSAGES: Record<string, string> = {
 
 export function ImageScanField({
   initialFlyerUrl = null,
+  defaultScan = true,
 }: {
   initialFlyerUrl?: string | null
+  // 画像を選んだときに AI で内容も読み取るかどうかの初期値。
+  // 新規登録は true（自動入力が主目的）、編集画面は false（既にある本文を上書きしないため）。
+  defaultScan?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
@@ -58,6 +62,7 @@ export function ImageScanField({
   const [urlValue, setUrlValue] = useState('')
   const [candidates, setCandidates] = useState<Extracted[]>([])
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const [scanWithAi, setScanWithAi] = useState(defaultScan)
 
   // 抽出結果1件をフォームへ反映する（画像スキャン・URL スキャン共通）。
   // 複数日程（occurrences）があれば既存の日程チェック UI に流す
@@ -115,18 +120,36 @@ export function ImageScanField({
 
   async function handleFile(file: File) {
     setStatus('loading')
-    setMessage(`「${file.name}」をアップロード + AI 読み取り中…`)
+    setMessage(
+      scanWithAi
+        ? `「${file.name}」をアップロード + AI 読み取り中…`
+        : `「${file.name}」をアップロード中…`,
+    )
     try {
       const fd = new FormData()
       fd.append('image', file)
+      // AI を使わないときはサーバー側で抽出を行わない（本文が上書きされず、AI 利用料もかからない）
+      if (!scanWithAi) fd.append('skip_ai', '1')
       const res = await fetch('/api/events/scan', { method: 'POST', body: fd })
       const data = (await res.json().catch(() => ({}))) as Extracted & {
         ok?: boolean
         reason?: string
         error?: string
+        skipped_ai?: boolean
       }
       // 画像アップロード自体は成功している可能性があるので flyer_image_url が来ていれば反映
       if (data.flyer_image_url) setFlyerUrl(data.flyer_image_url)
+
+      // AI を通していない場合はフォームの他項目に一切触れずに終える
+      if (data.skipped_ai) {
+        setStatus(data.flyer_image_url ? 'done' : 'notice')
+        setMessage(
+          data.flyer_image_url
+            ? '画像を添付しました。ほかの項目は変更していません。'
+            : '画像を保存できませんでした。もう一度お試しください。',
+        )
+        return
+      }
       if (!res.ok || data.ok === false) {
         // AI 抽出は入力補助。失敗してもエラーにせず「お知らせ」として案内し、手入力を促す
         const reason = data.reason ?? (res.status === 413 ? 'too_large' : 'unknown')
@@ -247,7 +270,9 @@ export function ImageScanField({
       >
         <label className="text-sm font-medium flex items-center gap-1">
           <span aria-hidden>📷</span>
-          チラシ画像（アップロード + AI 自動入力、ドラッグ&ドロップ可）
+          {scanWithAi
+            ? 'チラシ画像（アップロード + AI 自動入力、ドラッグ&ドロップ可）'
+            : 'チラシ画像（アップロードのみ、ドラッグ&ドロップ可）'}
         </label>
         <input
           ref={inputRef}
@@ -269,6 +294,15 @@ export function ImageScanField({
             画像を外す
           </button>
         )}
+        <label className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 w-full">
+          <input
+            type="checkbox"
+            checked={scanWithAi}
+            onChange={(e) => setScanWithAi(e.target.checked)}
+            disabled={status === 'loading'}
+          />
+          画像からAIで内容も読み取る（タイトル・日時・場所などが上書きされます／AI利用料がかかります）
+        </label>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="scan-url-input" className="text-sm font-medium flex items-center gap-1">

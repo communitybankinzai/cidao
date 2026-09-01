@@ -48,6 +48,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // 一覧に「編集」リンクを出すかの判定に使う。厳密な編集権限（団体役員・連絡先メール一致）は
+  // 編集ページ側で判定されるため、ここでは1件ずつ RPC を呼ばずに済む条件だけを見る。
+  const { data: isAdmin } = user ? await supabase.rpc('is_admin') : { data: false }
+
   const { startUtc, endUtc } = monthRangeUtc(y, m)
   const fetchStart = new Date(startUtc.getTime() - 7 * 86_400_000)
   // リスト表示は「選択月から6ヶ月先」まで連続表示するため取得範囲を広げる。カレンダー表示は単月のまま。
@@ -121,6 +125,8 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           today={today}
           isLoggedIn={!!user}
           view={view}
+          currentUserId={user?.id ?? null}
+          isAdmin={!!isAdmin}
         />
       </div>
     </div>
