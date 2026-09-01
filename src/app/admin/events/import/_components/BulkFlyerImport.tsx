@@ -101,6 +101,7 @@ export function BulkFlyerImport() {
 
         const occ = Array.isArray(data.occurrences) ? data.occurrences : []
         const base = {
+          source: 'flyer' as const,
           fileName: file.name,
           title: (data.title ?? '').replace('（読み取り失敗）', '').slice(0, 80),
           description: data.description ?? '',
@@ -125,7 +126,7 @@ export function BulkFlyerImport() {
               {
                 ...base,
                 rowKey: `${sha}#${idx}`,
-                image_sha256: `${sha}#${idx}`,
+                dedupe_key: `${sha}#${idx}`,
                 start_at: s,
                 end_at: normalizeDt(o.end_at) || (s ? plusOneHour(s) : ''),
                 occurrenceLabel: `${idx + 1}/${occ.length} 回目`,
@@ -139,7 +140,7 @@ export function BulkFlyerImport() {
             {
               ...base,
               rowKey: sha,
-              image_sha256: sha,
+              dedupe_key: sha,
               start_at: s,
               end_at: normalizeDt(data.end_at) || (s ? plusOneHour(s) : ''),
             },
@@ -166,7 +167,8 @@ export function BulkFlyerImport() {
     try {
       const res = await importScannedEvents(
         targets.map((r) => ({
-          image_sha256: r.image_sha256,
+          dedupe_key: r.dedupe_key,
+          source: r.source,
           title: r.title,
           description: r.description,
           category: r.category,
@@ -182,9 +184,9 @@ export function BulkFlyerImport() {
       )
       setResults(res)
       const okKeys = new Set(
-        res.filter((x) => x.status === 'created' || x.status === 'duplicated').map((x) => x.image_sha256),
+        res.filter((x) => x.status === 'created' || x.status === 'duplicated').map((x) => x.dedupe_key),
       )
-      setRows((prev) => prev.filter((r) => !okKeys.has(r.image_sha256)))
+      setRows((prev) => prev.filter((r) => !okKeys.has(r.dedupe_key)))
     } catch (e) {
       setNotices([e instanceof Error ? e.message : '登録に失敗しました'])
     } finally {
@@ -234,7 +236,7 @@ export function BulkFlyerImport() {
             {results.filter((r) => r.status === 'failed').length} 件
           </p>
           {results.filter((r) => r.status === 'failed').map((r) => (
-            <p key={r.image_sha256} className="text-xs text-rose-700 dark:text-rose-400">
+            <p key={r.dedupe_key} className="text-xs text-rose-700 dark:text-rose-400">
               失敗: {r.message}
             </p>
           ))}
