@@ -6,8 +6,9 @@
 // 1号あたりのイベント候補が数十件あり（実測: 令和8年9月号は日時付き記事が77件）、
 // カードを縦に並べると全体を見渡して取捨選択できないため。
 //
-// /api/events/scan-pdf は1回の応答を25件までに抑えるので、has_more が返る限り
-// afterPage を進めながら続きを読む。PDF 本体はキャッシュされるので2回目以降は入力コストが下がる。
+// /api/events/scan-pdf は1回に10ページ分しか読まない（Vercel の60秒制限に収めるため）。
+// ここでは総ページ数を見ながら 1-10 / 11-20 … とページ範囲をずらして呼び直す。
+// どこまで読んだかはサーバーが返すため、AI の判断による読み飛ばしは起きない。
 
 import { useState } from 'react'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
@@ -41,9 +42,10 @@ type ScanResponse = {
   ok?: boolean
   reason?: string
   doc_id?: string
+  total_pages?: number
+  from_page?: number
+  to_page?: number
   events?: ScannedEvent[]
-  last_page?: number
-  has_more?: boolean
 }
 
 const REASON_MESSAGES: Record<string, string> = {
@@ -58,9 +60,12 @@ const REASON_MESSAGES: Record<string, string> = {
   unknown: 'PDFの読み取りに失敗しました',
 }
 
-// 続きを読む回数の上限。1回25件なので最大125件まで拾える。
-// 上限に達したら打ち切り、何ページまで読んだかを利用者に伝える（黙って切り捨てない）。
-const MAX_PASSES = 5
+// 1回の呼び出しで読むページ数。10ページだと出力が3,000トークン規模になり
+// Vercel の60秒に収まらない恐れがあるため、6ページ（実測で1回あたり約2,000字の入力）に抑える。
+const PAGES_PER_CALL = 6
+// 呼び出し回数の上限。10ページ×8回＝80ページ分。広報いんざいは30ページ前後なので足りるが、
+// 想定外に長いPDFを延々と読み続けないための歯止め（打ち切ったことは利用者に伝える）。
+const MAX_PASSES = 8
 
 const inp =
   'w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs'
@@ -106,20 +111,22 @@ export function KouhouPdfImport() {
     setRows([])
     const newNotices: string[] = []
     const collected: Row[] = []
-    let afterPage = 0
+    let fromPage = 1
+    let totalPages = 0
 
     try {
       for (let pass = 0; pass < MAX_PASSES; pass++) {
+        const toPage = fromPage + PAGES_PER_CALL - 1
         setProgress(
-          afterPage === 0
-            ? 'PDFを読み取り中…（1回目）'
-            : `${afterPage}ページまで読み終えました。続きを読み取り中…（${pass + 1}回目）`,
+          totalPages > 0
+            ? `${fromPage}〜${Math.min(toPage, totalPages)}ページを読み取り中…（全${totalPages}ページ）`
+            : `${fromPage}〜${toPage}ページを読み取り中…`,
         )
 
         const res = await fetch('/api/events/scan-pdf', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url: url.trim(), afterPage }),
+          body: JSON.stringify({ url: url.trim(), fromPage, toPage }),
         })
         const data = (await res.json().catch(() => ({}))) as ScanResponse
 
@@ -130,10 +137,11 @@ export function KouhouPdfImport() {
         }
 
         const docId = data.doc_id ?? 'kouhou'
+        totalPages = data.total_pages ?? totalPages
         const events = Array.isArray(data.events) ? data.events : []
 
         for (const ev of events) {
-          const page = typeof ev.page === 'number' ? ev.page : afterPage + 1
+          const page = typeof ev.page === 'number' ? ev.page : fromPage
           const title = (ev.title ?? '').slice(0, 80)
           if (!title) continue
 
@@ -182,13 +190,16 @@ export function KouhouPdfImport() {
         }
 
         setRows([...collected])
-        afterPage = typeof data.last_page === 'number' ? data.last_page : afterPage
 
-        if (!data.has_more) break
+        // 何ページまで読んだかはサーバーが返す。AI の判断に頼らないので読み飛ばしが起きない。
+        const readTo = data.to_page ?? toPage
+        if (totalPages > 0 && readTo >= totalPages) break
+        fromPage = readTo + 1
+
         if (pass === MAX_PASSES - 1) {
           newNotices.push(
-            `読み取り回数の上限（${MAX_PASSES}回）に達したため${afterPage}ページで打ち切りました。` +
-              '続きが必要な場合はもう一度実行してください（登録済みのものは重複しません）。',
+            `読み取り回数の上限（${MAX_PASSES}回）に達したため${readTo}ページで打ち切りました。` +
+              'このPDFは想定より長いようです。',
           )
         }
       }

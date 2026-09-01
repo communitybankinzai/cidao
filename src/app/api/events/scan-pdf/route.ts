@@ -1,21 +1,24 @@
 // 広報いんざい（PDF）→ Claude で「市民が参加できるイベント」だけを構造化抽出する。
-// 管理画面 /admin/events/import の「広報いんざい取り込み」タブから呼ばれる。
+// 管理画面 /admin/events/import の「広報いんざいから取り込む」から呼ばれる。
 //
-// なぜ PDF を直接 Claude に渡すか:
-//   紙面は3段組みで、テキスト抽出ライブラリでは欄をまたいだ誤結合が起きる。
-//   Claude の document 入力はレイアウトを保ったまま読めるので、抽出ライブラリを足さずに済む。
+// なぜ PDF をそのまま Claude に渡さないか:
+//   当初は PDF を document ブロックで直接渡していたが、11MB・30ページの読み取りに
+//   60秒以上かかり、Vercel（Hobby プラン）の実行時間上限で 504 になった（2026-09-01 実測）。
+//   unpdf でページ単位のテキストにしてから渡すと入力が約1/5になり、処理時間もコストも下がる。
+//   紙面は3段組みだが、pypdf / unpdf いずれでも段ごとの読み順は保たれることを実測で確認している。
 //
 // なぜ1回で全ページを処理しないか:
 //   1号あたりのイベント候補が約70件あり（実測: 令和8年9月号は日時付き記事が77件）、
-//   全件を1回で出すと出力トークンが Vercel の実行時間上限に収まらない。
-//   afterPage を進めながら複数回に分けて呼び、そのたび最大 MAX_EVENTS_PER_CALL 件だけ返す。
-//   PDF 本体は cache_control でキャッシュするため、2回目以降の入力コストは約1/10になる。
+//   全件を1回で出すと出力トークンだけで60秒を超える。
+//   呼び出し側が fromPage/toPage をずらしながら複数回に分けて呼ぶ。
+//   総ページ数はこちらが返すので、どこまで読んだかを AI の判断に委ねなくて済む。
 //
 // env: ANTHROPIC_API_KEY 必須
 // 認可: 管理者のみ（is_admin）。取得先は印西市の公式ドメインに限定する（SSRF対策）。
 
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { extractText } from 'unpdf'
 import { createClient } from '@/lib/supabase/server'
 import { classifyScanError, type ScanFailReason } from '@/lib/event-scan'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
@@ -25,10 +28,14 @@ export const maxDuration = 60
 // 取得を許可するホスト。広報いんざいは印西市公式サイトでのみ配布されている。
 const ALLOWED_HOSTS = ['www.city.inzai.lg.jp', 'city.inzai.lg.jp']
 
-// Anthropic の PDF 入力上限はリクエスト32MB。base64 は約4/3に膨らむため元データで20MBを上限とする。
 const MAX_PDF_BYTES = 20 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 30_000
-const MAX_EVENTS_PER_CALL = 25
+
+// 1回の呼び出しで読むページ数の上限。呼び出し側は6ページずつ送ってくる。
+// ここを増やすと出力トークンが伸びて 504 の危険が戻るので、上限も低く抑えておく。
+const MAX_PAGES_PER_CALL = 8
+// 念のための文字数上限。1ページ約1,600字なので8ページなら1万3千字前後になる（実測値）。
+const MAX_TEXT_CHARS = 40_000
 
 const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] } as const
 const nullableInteger = { anyOf: [{ type: 'integer' }, { type: 'null' }] } as const
@@ -37,7 +44,15 @@ const CATEGORY_KEYS = PROPOSAL_CATEGORIES.map((c) => c.key)
 const CATEGORY_GUIDE = PROPOSAL_CATEGORIES.map((c) => `${c.key}=${c.label}`).join(' / ')
 
 type ScanPdfResult =
-  | { ok: true; doc_id: string; events: unknown[]; last_page: number; has_more: boolean; usage: unknown }
+  | {
+      ok: true
+      doc_id: string
+      total_pages: number
+      from_page: number
+      to_page: number
+      events: unknown[]
+      usage: unknown
+    }
   | { ok: false; reason: ScanFailReason }
 
 // PDF の URL から安定した紙面ID を作る（例: .../kouhou_2609.pdf → kouhou_2609）。
@@ -47,7 +62,7 @@ function docIdFromUrl(url: URL): string {
   return base.replace(/\.pdf$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'kouhou'
 }
 
-async function fetchPdf(url: URL): Promise<{ ok: true; base64: string } | { ok: false; reason: ScanFailReason }> {
+async function fetchPdf(url: URL): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: ScanFailReason }> {
   let res: Response
   try {
     res = await fetch(url, {
@@ -77,14 +92,14 @@ async function fetchPdf(url: URL): Promise<{ ok: true; base64: string } | { ok: 
   const head = new TextDecoder('latin1').decode(raw.slice(0, 5))
   if (!head.startsWith('%PDF-')) return { ok: false, reason: 'fetch' }
 
-  return { ok: true, base64: Buffer.from(raw).toString('base64') }
+  return { ok: true, bytes: new Uint8Array(raw) }
 }
 
-function buildInstruction(afterPage: number): string {
-  const from = afterPage > 0 ? `${afterPage + 1}ページ以降` : '最初のページから'
+function buildInstruction(fromPage: number, toPage: number, pageText: string): string {
   return [
-    'これは千葉県印西市の広報紙「広報いんざい」のPDFです。',
-    `PDFの${from}を順に読み、市民が参加・申込できるイベントだけを抽出してください。`,
+    'これは千葉県印西市の広報紙「広報いんざい」から取り出した本文です。',
+    `${fromPage}〜${toPage}ページ分が「=== Nページ ===」の見出しで区切られています。`,
+    'この中から、市民が参加・申込できるイベントだけを抽出してください。',
     '',
     '【抽出するもの】講座・教室・講演会・イベント・催し・体験会・相談会・見学会・健診の集団開催日・',
     'コンサート・展示会・スポーツ教室・ボランティア募集の説明会など、',
@@ -101,32 +116,33 @@ function buildInstruction(afterPage: number): string {
     '',
     '【説明文】紙面の文章をそのまま書き写さず、100〜150字で要約してください。',
     '',
+    '【記号の意味】時=日時 / 場=会場 / 内=内容 / 対=対象 / 定=定員 / 費=費用 / 申=申込方法 / 問=問い合わせ先 / 講=講師',
+    '',
     `【分野】次のいずれかのキーを選んでください: ${CATEGORY_GUIDE}`,
     '',
-    `【出力量】1回の応答で最大${MAX_EVENTS_PER_CALL}件までにしてください。`,
-    `${MAX_EVENTS_PER_CALL}件に達したらそこで止め、has_more を true、last_page に最後に読み終えたページ番号を入れます。`,
-    'PDFの最後まで読み切った場合は has_more を false、last_page にPDFの総ページ数を入れてください。',
-    'page には、そのイベントが載っているPDFのページ番号（1始まり）を必ず入れてください。',
+    'page には、そのイベントが載っていたページ番号（「=== Nページ ===」の N）を入れてください。',
+    '',
+    '--- ここから本文 ---',
+    pageText,
   ].join('\n')
 }
 
 async function extractEvents(
   apiKey: string,
-  pdfBase64: string,
-  afterPage: number,
-): Promise<
-  | { ok: true; events: unknown[]; last_page: number; has_more: boolean; usage: unknown }
-  | { ok: false; reason: ScanFailReason }
-> {
+  fromPage: number,
+  toPage: number,
+  pageText: string,
+): Promise<{ ok: true; events: unknown[]; usage: unknown } | { ok: false; reason: ScanFailReason }> {
   const client = new Anthropic({ apiKey })
 
   let response: Anthropic.Message
   try {
     response = await client.messages.create({
       model: 'claude-opus-5',
-      max_tokens: 16000,
+      max_tokens: 12000,
       output_config: {
-        effort: 'medium',
+        // 60秒以内に応答を返し切る必要があるため、抽出の深さより速度を優先する
+        effort: 'low',
         format: {
           type: 'json_schema',
           schema: {
@@ -138,7 +154,7 @@ async function extractEvents(
                 items: {
                   type: 'object',
                   properties: {
-                    page: { type: 'integer', description: 'このイベントが載っているPDFのページ番号（1始まり）' },
+                    page: { type: 'integer', description: 'このイベントが載っていたページ番号' },
                     title: { type: 'string', description: 'イベント名。80字以内。' },
                     description: { type: 'string', description: 'イベント内容を100〜150字で要約（原文の写しは不可）。' },
                     start_at: { ...nullableString, description: '開始日時。YYYY-MM-DDTHH:MM（JST）。読み取れない場合 null。' },
@@ -182,27 +198,13 @@ async function extractEvents(
                   additionalProperties: false,
                 },
               },
-              last_page: { type: 'integer', description: '今回読み終えたページ番号（1始まり）' },
-              has_more: { type: 'boolean', description: 'まだ読んでいないページが残っていれば true' },
             },
-            required: ['events', 'last_page', 'has_more'],
+            required: ['events'],
             additionalProperties: false,
           },
         },
       },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
-              cache_control: { type: 'ephemeral' },
-            },
-            { type: 'text', text: buildInstruction(afterPage) },
-          ],
-        },
-      ],
+      messages: [{ role: 'user', content: buildInstruction(fromPage, toPage, pageText) }],
     })
   } catch (err) {
     return { ok: false, reason: classifyScanError(err, 'events/scan-pdf') }
@@ -211,7 +213,7 @@ async function extractEvents(
   const text = response.content.find((b) => b.type === 'text')
   if (!text || text.type !== 'text') return { ok: false, reason: 'parse' }
 
-  let parsed: { events?: unknown[]; last_page?: number; has_more?: boolean }
+  let parsed: { events?: unknown[] }
   try {
     parsed = JSON.parse(text.text)
   } catch {
@@ -219,15 +221,7 @@ async function extractEvents(
     return { ok: false, reason: 'parse' }
   }
 
-  const events = Array.isArray(parsed.events) ? parsed.events : []
-  return {
-    ok: true,
-    events,
-    last_page: typeof parsed.last_page === 'number' ? parsed.last_page : afterPage,
-    // 1件も取れなかった回で続きを促すと無限ループになるため、件数が0なら打ち切る
-    has_more: parsed.has_more === true && events.length > 0,
-    usage: response.usage,
-  }
+  return { ok: true, events: Array.isArray(parsed.events) ? parsed.events : [], usage: response.usage }
 }
 
 export async function POST(request: Request): Promise<NextResponse<ScanPdfResult>> {
@@ -240,9 +234,9 @@ export async function POST(request: Request): Promise<NextResponse<ScanPdfResult
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ ok: false, reason: 'config' })
 
-  let body: { url?: string; afterPage?: number }
+  let body: { url?: string; fromPage?: number; toPage?: number }
   try {
-    body = (await request.json()) as { url?: string; afterPage?: number }
+    body = (await request.json()) as { url?: string; fromPage?: number; toPage?: number }
   } catch {
     return NextResponse.json({ ok: false, reason: 'blocked_url' })
   }
@@ -260,20 +254,57 @@ export async function POST(request: Request): Promise<NextResponse<ScanPdfResult
     return NextResponse.json({ ok: false, reason: 'blocked_url' })
   }
 
-  const afterPage = Number.isFinite(body.afterPage) ? Math.max(0, Math.floor(body.afterPage as number)) : 0
-
   const pdf = await fetchPdf(url)
   if (!pdf.ok) return NextResponse.json(pdf)
 
-  const result = await extractEvents(apiKey, pdf.base64, afterPage)
+  let totalPages: number
+  let pages: string[]
+  try {
+    const extracted = await extractText(pdf.bytes, { mergePages: false })
+    totalPages = extracted.totalPages
+    pages = extracted.text
+  } catch (err) {
+    console.error('[events/scan-pdf] text extraction failed:', err instanceof Error ? err.message : String(err))
+    return NextResponse.json({ ok: false, reason: 'parse' })
+  }
+  if (totalPages === 0) return NextResponse.json({ ok: false, reason: 'parse' })
+
+  // ページ範囲を決める。未指定なら先頭から MAX_PAGES_PER_CALL ページ分。
+  const fromPage = Math.min(Math.max(1, Math.floor(body.fromPage ?? 1)), totalPages)
+  const requestedTo = Math.floor(body.toPage ?? fromPage + MAX_PAGES_PER_CALL - 1)
+  const toPage = Math.min(Math.max(fromPage, requestedTo), fromPage + MAX_PAGES_PER_CALL - 1, totalPages)
+
+  let pageText = ''
+  for (let p = fromPage; p <= toPage; p++) {
+    const body = (pages[p - 1] ?? '').trim()
+    if (!body) continue
+    pageText += `=== ${p}ページ ===\n${body}\n\n`
+  }
+  pageText = pageText.slice(0, MAX_TEXT_CHARS)
+
+  // 本文が実質空なら、テキストを持たない紙面（画像PDF）。AI に投げても意味がない。
+  if (pageText.trim().length < 50) {
+    return NextResponse.json({
+      ok: true,
+      doc_id: docIdFromUrl(url),
+      total_pages: totalPages,
+      from_page: fromPage,
+      to_page: toPage,
+      events: [],
+      usage: null,
+    })
+  }
+
+  const result = await extractEvents(apiKey, fromPage, toPage, pageText)
   if (!result.ok) return NextResponse.json(result)
 
   return NextResponse.json({
     ok: true,
     doc_id: docIdFromUrl(url),
+    total_pages: totalPages,
+    from_page: fromPage,
+    to_page: toPage,
     events: result.events,
-    last_page: result.last_page,
-    has_more: result.has_more,
     usage: result.usage,
   })
 }
