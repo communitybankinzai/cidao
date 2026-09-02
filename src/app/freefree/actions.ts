@@ -8,6 +8,7 @@ import { canUserEditOrg } from '@/lib/org-permissions'
 import { periodToDays, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
 import { notifyAllMembers } from '@/lib/notify'
 import { recordWrite } from '@/lib/audit'
+import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 
 type CouponInput = {
   content: string
@@ -28,6 +29,11 @@ type CreateInput = {
   sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
   sns_display_name?: string         // SNSで名指しに使う表示名（本人が出すと決めたときだけ）
   links?: { label: string; url: string }[]  // 参考リンク最大5件（元の告知ページ・申込フォーム等）
+  // 🗺 メタバース印西のお店ピン（2026-09-02）。住所を緯度経度へ変換してピンを立てる。
+  // お店のリンク（ホームページ・オンラインショップ・SNS）は links に合流させる
+  metaverse_pin?: boolean
+  address?: string
+  shop_links?: { label: string; url: string }[]
 }
 
 export async function createFreefreePost(input: CreateInput) {
@@ -70,6 +76,28 @@ export async function createFreefreePost(input: CreateInput) {
     dbPosterType = 'org'; dbPosterId = org.id
   }
 
+  // 🗺 お店ピン：住所を国土地理院APIで緯度経度に変換する。変換できない住所は保存せずに知らせる
+  // （掲載者が住所を直すか、ピンを外すかを選べる）。ピンを出さない掲載ではこの列に触れない
+  // （migration 未適用でも通常の掲載が止まらないようにするため）
+  let pin: { metaverse_pin: true; address: string; lat: number; lon: number } | null = null
+  if (input.metaverse_pin) {
+    const address = (input.address ?? '').trim().slice(0, 120)
+    if (!address) throw new Error('メタバースにお店のピンを出すには住所が必要です')
+    const g = await geocodeAddress(address)
+    if (!g) throw new Error(`住所「${address}」から場所を特定できませんでした。番地まで入れるか、表記を見直してください`)
+    if (!isNearInzai(g.lat, g.lon)) {
+      throw new Error(`住所「${address}」は印西市から遠い場所（${g.title || '不明'}）と判定されました。表記を見直してください`)
+    }
+    pin = { metaverse_pin: true, address, lat: g.lat, lon: g.lon }
+  }
+  // お店のリンクを先頭に置き、URL の重複を除いて最大5件に収める
+  const seenUrls = new Set<string>()
+  const mergedLinks = [...(input.shop_links ?? []), ...(input.links ?? [])]
+    .filter((l) => l && l.label && /^https?:\/\//i.test(l.url))
+    .filter((l) => (seenUrls.has(l.url) ? false : (seenUrls.add(l.url), true)))
+    .slice(0, 5)
+    .map((l) => ({ label: l.label.slice(0, 30), url: l.url }))
+
   const expires_at = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
   const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
   const { data, error } = await supabase
@@ -89,10 +117,8 @@ export async function createFreefreePost(input: CreateInput) {
       // 団体掲載では organizations.name を使うため保存しない
       sns_display_name:
         dbPosterType === 'org' ? null : (input.sns_display_name?.trim().slice(0, 40) || null),
-      links: (input.links ?? [])
-        .filter((l) => l && l.label && /^https?:\/\//i.test(l.url))
-        .slice(0, 5)
-        .map((l) => ({ label: l.label.slice(0, 30), url: l.url })),
+      links: mergedLinks,
+      ...(pin ?? {}),
     })
     .select('id')
     .single()

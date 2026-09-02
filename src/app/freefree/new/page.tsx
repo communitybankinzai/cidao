@@ -71,6 +71,19 @@ export default async function NewFreefreePage() {
       body: String(formData.get('body') ?? ''),
       category: String(formData.get('category') ?? 'event'),
       location: (formData.get('location') as string | null) || undefined,
+      // 🗺 メタバース印西のお店ピン
+      metaverse_pin: formData.get('metaverse_pin') === 'on',
+      address: String(formData.get('address') ?? '').trim() || undefined,
+      shop_links: ([
+        ['ホームページ', 'link_hp'],
+        ['オンラインショップ', 'link_shop'],
+        ['SNS', 'link_sns'],
+      ] as [string, string][])
+        .map(([label, name]) => {
+          const url = String(formData.get(name) ?? '').trim()
+          return /^https?:\/\//i.test(url) ? { label, url } : null
+        })
+        .filter((l): l is { label: string; url: string } => l !== null),
       period: String(formData.get('period') ?? 'p_1month') as 'p_1week' | 'p_1month' | 'p_3months',
       images,
       coupon,

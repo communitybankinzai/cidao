@@ -31,6 +31,7 @@ export default function NewFreefreeForm({
   const [posterKind, setPosterKind] = useState<string>('member')
   const [couponEnabled, setCouponEnabled] = useState(false)
   const [snsShare, setSnsShare] = useState(true)
+  const [metaversePin, setMetaversePin] = useState(false) // 🗺 メタバース印西にお店ピンを出す
 
   // チラシ読み取りで書き換わる項目。読み取り後も掲載者が直せるよう制御コンポーネントにする
   const [title, setTitle] = useState('')
@@ -223,6 +224,46 @@ export default function NewFreefreeForm({
               ))}
             </ul>
             <p className="text-[11px] text-slate-500">表示名は自由に直せます。不要なものは「外す」で消してください。</p>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            name="metaverse_pin"
+            checked={metaversePin}
+            onChange={(e) => setMetaversePin(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm font-medium">🗺 CBIメタバース印西にお店のピンを出す</span>
+        </label>
+        <p className="text-[11px] text-slate-500">
+          3Dの印西市にこの掲載のピンが立ち、クリックすると下のリンクへ飛べます。
+          ピンは掲載期間のあいだだけ出て、期限が切れると消えます（再掲載でまた出ます）。
+        </p>
+        {metaversePin && (
+          <div className="space-y-3 pl-6 border-l-2 border-sky-200 dark:border-sky-800">
+            <L label="住所（ピンの位置に使います）" req>
+              <input
+                name="address"
+                required={metaversePin}
+                maxLength={120}
+                placeholder="例: 千葉県印西市大森2535"
+                className={inp}
+              />
+              <p className="mt-1 text-[11px] text-slate-500">番地まで入れると正確に置けます。国土地理院の住所検索で位置に変換します。</p>
+            </L>
+            <L label="ホームページURL">
+              <input name="link_hp" type="url" placeholder="https://" className={inp} />
+            </L>
+            <L label="オンラインショップURL">
+              <input name="link_shop" type="url" placeholder="https://" className={inp} />
+            </L>
+            <L label="SNSのURL（Instagram・X など）">
+              <input name="link_sns" type="url" placeholder="https://" className={inp} />
+            </L>
           </div>
         )}
       </div>
