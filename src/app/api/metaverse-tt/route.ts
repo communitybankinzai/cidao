@@ -28,8 +28,86 @@ const DEFAULT_MIN_QUIZ_RATE_PCT = 80
 const DEFAULT_MIN_QUIZ_ANSWERS = 10
 const RANKING_LIMIT = 10
 const REQUIREMENTS_KEY = 'metaverse_tt_requirements'
+// イベント期間（app_settings key: metaverse_tt_event）。管理画面 /admin/timetrial で設定する。
+// 期間内はサイトのランキング既定が「イベント」になり、ゴール時にイベント内の順位も返す
+const EVENT_KEY = 'metaverse_tt_event'
 
 type Requirements = { minRatePct: number; minAnswers: number }
+type TtEvent = { name: string; from: string; to: string; active: boolean }
+type RankInfo = { rank: number; total: number }
+
+async function loadEvent(supabase: NonNullable<ReturnType<typeof adminClient>>): Promise<TtEvent | null> {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', EVENT_KEY).maybeSingle()
+    const v = (data?.value ?? {}) as Partial<TtEvent>
+    const from = new Date(String(v.from ?? ''))
+    const to = new Date(String(v.to ?? ''))
+    if (!v.name || Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null
+    const now = Date.now()
+    return {
+      name: String(v.name).slice(0, 40),
+      from: from.toISOString(),
+      to: to.toISOString(),
+      active: now >= from.getTime() && now <= to.getTime(),
+    }
+  } catch {
+    return null
+  }
+}
+
+// 期間の指定 → finished_at の範囲。all=全期間、month=今月（JST）、week=直近7日、event=イベント期間、
+// custom=from/to（ISO）。範囲が決められないときは全期間
+function periodRange(period: string, from: string | null, to: string | null, event: TtEvent | null): { from?: string; to?: string } {
+  const now = new Date()
+  if (period === 'month') {
+    // JST の月初を UTC に直す（JST = UTC+9）
+    const jst = new Date(now.getTime() + 9 * 3600 * 1000)
+    const start = Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), 1) - 9 * 3600 * 1000
+    return { from: new Date(start).toISOString() }
+  }
+  if (period === 'week') return { from: new Date(now.getTime() - 7 * 86400 * 1000).toISOString() }
+  if (period === 'event' && event) return { from: event.from, to: event.to }
+  if (period === 'custom') {
+    const f = from ? new Date(from) : null
+    const t = to ? new Date(to) : null
+    const r: { from?: string; to?: string } = {}
+    if (f && !Number.isNaN(f.getTime())) r.from = f.toISOString()
+    if (t && !Number.isNaN(t.getTime())) r.to = t.toISOString()
+    return r
+  }
+  return {}
+}
+
+// 人ごとのベストタイム（同じニックネームは1人とみなす）を集めて順位を出す。
+// 「参加者のうち何位か」を答えるための集計なので、記録の件数ではなく人数で数える
+async function rankAmongPeople(
+  supabase: NonNullable<ReturnType<typeof adminClient>>,
+  courseKey: string,
+  range: { from?: string; to?: string },
+  myName: string,
+  myElapsedMs: number,
+): Promise<RankInfo> {
+  let q = supabase
+    .from('metaverse_tt_trials')
+    .select('name, elapsed_ms')
+    .eq('course_key', courseKey)
+    .eq('status', 'finished')
+    .limit(5000)
+  if (range.from) q = q.gte('finished_at', range.from)
+  if (range.to) q = q.lte('finished_at', range.to)
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  const best = new Map<string, number>()
+  for (const r of data ?? []) {
+    const ms = Number(r.elapsed_ms)
+    const prev = best.get(r.name)
+    if (prev === undefined || ms < prev) best.set(r.name, ms)
+  }
+  let faster = 0
+  for (const [name, ms] of best) if (name !== myName && ms < myElapsedMs) faster++
+  const total = best.has(myName) ? best.size : best.size + 1
+  return { rank: faster + 1, total }
+}
 
 async function loadRequirements(supabase: NonNullable<ReturnType<typeof adminClient>>): Promise<Requirements> {
   try {
@@ -92,29 +170,42 @@ export function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) })
 }
 
-// GET ?action=ranking : コースごとの上位記録（公開ランキング）
+// GET : コースごとの上位記録（公開ランキング）
+//   ?period=all|month|week|event|custom（&from=ISO&to=ISO）で期間を絞る。省略時は全期間。
+//   応答の event に設定中のイベント期間（あれば）と active（期間内か）を含める
 export async function GET(request: Request) {
   const supabase = adminClient()
   if (!supabase) return json(request, { error: 'server not configured' }, 503)
   try {
-    const requirements = await loadRequirements(supabase)
+    const url = new URL(request.url)
+    const period = (url.searchParams.get('period') ?? 'all').toLowerCase()
+    const [requirements, event] = await Promise.all([loadRequirements(supabase), loadEvent(supabase)])
+    const range = periodRange(period, url.searchParams.get('from'), url.searchParams.get('to'), event)
     const ranking: Record<string, Array<{ name: string; elapsedMs: number; date: string }>> = {}
     for (const key of Object.keys(COURSES)) {
-      const { data, error } = await supabase
+      let q = supabase
         .from('metaverse_tt_trials')
         .select('name, elapsed_ms, finished_at')
         .eq('course_key', key)
         .eq('status', 'finished')
         .order('elapsed_ms', { ascending: true })
-        .limit(RANKING_LIMIT)
+        .limit(RANKING_LIMIT * 5)
+      if (range.from) q = q.gte('finished_at', range.from)
+      if (range.to) q = q.lte('finished_at', range.to)
+      const { data, error } = await q
       if (error) throw new Error(error.message)
-      ranking[key] = (data ?? []).map((r) => ({
-        name: r.name,
-        elapsedMs: Number(r.elapsed_ms),
-        date: String(r.finished_at ?? '').slice(0, 10),
-      }))
+      // 同じ人（ニックネーム）はベストの1件だけ載せる
+      const seen = new Set<string>()
+      ranking[key] = (data ?? [])
+        .filter((r) => (seen.has(r.name) ? false : (seen.add(r.name), true)))
+        .slice(0, RANKING_LIMIT)
+        .map((r) => ({
+          name: r.name,
+          elapsedMs: Number(r.elapsed_ms),
+          date: String(r.finished_at ?? '').slice(0, 10),
+        }))
     }
-    return json(request, { ranking, requirements })
+    return json(request, { ranking, requirements, event, period, range })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[metaverse-tt GET]', message)
@@ -198,7 +289,7 @@ export async function POST(request: Request) {
       if (!trialId) return json(request, { error: 'invalid finish' }, 400)
       const { data: trial, error } = await supabase
         .from('metaverse_tt_trials')
-        .select('id, status, checkpoints_total, checkpoints_passed, started_at, flags')
+        .select('id, status, checkpoints_total, checkpoints_passed, started_at, flags, course_key, name')
         .eq('id', trialId)
         .single()
       if (error || !trial) return json(request, { error: 'trial not found' }, 404)
@@ -221,7 +312,26 @@ export async function POST(request: Request) {
         })
         .eq('id', trialId)
       if (upErr) throw new Error(upErr.message)
-      return json(request, { elapsedMs, recordCode: code, flagged: status === 'flagged' })
+      // 参加者のうち何位か（人ごとのベストで数える）。全期間・今月・イベント期間（設定中なら）
+      let rank: Record<string, RankInfo | (RankInfo & { name: string })> | null = null
+      if (status === 'finished') {
+        try {
+          const courseKey = String(trial.course_key)
+          const event = await loadEvent(supabase)
+          const [all, month] = await Promise.all([
+            rankAmongPeople(supabase, courseKey, {}, trial.name, elapsedMs),
+            rankAmongPeople(supabase, courseKey, periodRange('month', null, null, null), trial.name, elapsedMs),
+          ])
+          rank = { all, month }
+          if (event?.active) {
+            const ev = await rankAmongPeople(supabase, courseKey, { from: event.from, to: event.to }, trial.name, elapsedMs)
+            rank.event = { ...ev, name: event.name }
+          }
+        } catch (e) {
+          console.error('[metaverse-tt finish rank]', e instanceof Error ? e.message : String(e))
+        }
+      }
+      return json(request, { elapsedMs, recordCode: code, flagged: status === 'flagged', rank })
     }
 
     return json(request, { error: 'unknown action' }, 400)

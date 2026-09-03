@@ -4,7 +4,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { deleteTrial, resetAllTrials } from '../actions'
+import { deleteTrial, resetAllTrials, saveTtEvent } from '../actions'
 
 export function DeleteTrialButton({ id, name }: { id: string; name: string }) {
   const [pending, startTransition] = useTransition()
@@ -142,6 +142,59 @@ export function ResetAllButton({ total }: { total: number }) {
       >
         {pending ? 'リセット中…' : '🗑 全記録をリセット'}
       </button>
+    </div>
+  )
+}
+
+// datetime-local 用（ローカル時刻の yyyy-MM-ddTHH:mm）
+function toLocalInput(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+export function EventForm({ initialName, initialFrom, initialTo }: { initialName: string; initialFrom: string; initialTo: string }) {
+  const [pending, startTransition] = useTransition()
+  const [name, setName] = useState(initialName)
+  const [from, setFrom] = useState(toLocalInput(initialFrom))
+  const [to, setTo] = useState(toLocalInput(initialTo))
+  const [saved, setSaved] = useState(false)
+  const router = useRouter()
+  const submit = (clear: boolean) => {
+    startTransition(async () => {
+      const res = await saveTtEvent(clear ? '' : name, from ? new Date(from).toISOString() : '', to ? new Date(to).toISOString() : '')
+      if (!res.ok) { alert(`保存に失敗しました: ${res.error}`); return }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      router.refresh()
+    })
+  }
+  const input = 'border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-950'
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">イベント名（40字まで）</span>
+        <input type="text" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} className={input + ' w-56'} placeholder="例: 第1回オンライン競技会" />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">開始</span>
+        <input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className={input} />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-slate-500 mb-1">終了</span>
+        <input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className={input} />
+      </label>
+      <button type="button" disabled={pending} onClick={() => submit(false)}
+        className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50">
+        {pending ? '保存中…' : '保存'}
+      </button>
+      <button type="button" disabled={pending || !initialName} onClick={() => { if (confirm('イベント期間を解除して通常運用に戻します。よろしいですか？')) submit(true) }}
+        className="px-3 py-1.5 rounded border border-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+        解除
+      </button>
+      {saved ? <span className="text-xs text-emerald-600">保存しました</span> : null}
     </div>
   )
 }

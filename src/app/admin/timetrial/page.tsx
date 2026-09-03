@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { DeleteTrialButton, ResetAllButton, RequirementsForm, RenderQualityForm } from './_components/TrialControls'
+import { DeleteTrialButton, ResetAllButton, RequirementsForm, RenderQualityForm, EventForm } from './_components/TrialControls'
 
 // メタバース印西「文化財タイムトライアル」の記録管理。
 // ランキング（公式記録）・フラグ付き記録（要確認）・全記録の一覧と、
@@ -90,6 +90,19 @@ export default async function AdminTimetrialPage() {
   const sseRaw = Number(rqValue.maximumScreenSpaceError)
   const maximumScreenSpaceError = Number.isFinite(sseRaw) && sseRaw >= 2 && sseRaw <= 64 ? sseRaw : 8
 
+  // イベント期間（未設定なら通常運用）。サイト側は API の event として受け取る
+  const { data: evRow } = await service
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'metaverse_tt_event')
+    .maybeSingle()
+  const evValue = (evRow?.value ?? {}) as { name?: string; from?: string; to?: string }
+  const eventName = String(evValue.name ?? '')
+  const eventFrom = String(evValue.from ?? '')
+  const eventTo = String(evValue.to ?? '')
+  const eventActive = !!eventName && !!eventFrom && !!eventTo &&
+    Date.now() >= new Date(eventFrom).getTime() && Date.now() <= new Date(eventTo).getTime()
+
   const finished = trials.filter((t) => t.status === 'finished')
   const flagged = trials.filter((t) => t.status === 'flagged')
   const running = trials.filter((t) => t.status === 'running')
@@ -126,6 +139,20 @@ export default async function AdminTimetrialPage() {
             保存するとメタバースの参加判定とサーバーの受付判定に即時反映されます（参加者はエントリー画面を開き直せばOK）。
           </p>
           <RequirementsForm initialRatePct={minRatePct} initialAnswers={minAnswers} />
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg p-5 space-y-2">
+          <h2 className="text-lg font-semibold">🎪 イベント期間</h2>
+          <p className="text-xs text-slate-500">
+            {eventName
+              ? <>現在の設定：<b>{eventName}</b>（{fmtDate(eventFrom)} 〜 {fmtDate(eventTo)}）{eventActive ? <b className="text-emerald-600">・開催中</b> : '・期間外'}</>
+              : <>未設定（通常運用）。</>}
+            <br />
+            設定するとメタバースのランキングに「イベント」の期間が選べるようになり、期間中はそれが既定になります。
+            ゴール時の結果画面にはイベント内の順位も出ます。通常時は参加者が「全期間／今月／直近7日」で切り替えられます。
+            名前を空にして保存すると解除します。
+          </p>
+          <EventForm initialName={eventName} initialFrom={eventFrom} initialTo={eventTo} />
         </section>
 
         <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg p-5 space-y-2">
