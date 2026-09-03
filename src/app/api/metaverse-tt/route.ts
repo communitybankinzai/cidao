@@ -205,7 +205,31 @@ export async function GET(request: Request) {
           date: String(r.finished_at ?? '').slice(0, 10),
         }))
     }
-    return json(request, { ranking, requirements, event, period, range })
+    // ?name=ニックネーム が付いていれば、その人のコースごとの順位（同じ期間・人ごとのベストで比較）も返す。
+    // 上位に入っていない人が「自分は何位か」をエントリー画面で確かめるため
+    const myName = (url.searchParams.get('name') ?? '').trim().slice(0, 20)
+    let myRank: Record<string, RankInfo & { bestMs: number }> | null = null
+    if (myName) {
+      myRank = {}
+      for (const key of Object.keys(COURSES)) {
+        let q = supabase
+          .from('metaverse_tt_trials')
+          .select('elapsed_ms')
+          .eq('course_key', key)
+          .eq('status', 'finished')
+          .eq('name', myName)
+          .order('elapsed_ms', { ascending: true })
+          .limit(1)
+        if (range.from) q = q.gte('finished_at', range.from)
+        if (range.to) q = q.lte('finished_at', range.to)
+        const { data: mine } = await q
+        if (!mine || !mine.length) continue
+        const bestMs = Number(mine[0].elapsed_ms)
+        const r = await rankAmongPeople(supabase, key, range, myName, bestMs)
+        myRank[key] = { ...r, bestMs }
+      }
+    }
+    return json(request, { ranking, requirements, event, period, range, myRank })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[metaverse-tt GET]', message)
