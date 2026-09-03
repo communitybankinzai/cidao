@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
         destination: "https://communitybankinzai.github.io/cbi-site/terms/",
         permanent: false,
       },
+      // 木製看板などに載せる短いQR用の転送先（2026-09-04）。
+      // QRを英数モード（大文字のみ）で最小にするため /CBI（大文字）も受ける
+      {
+        source: "/:slug(cbi|CBI)",
+        destination: "https://communitybankinzai.github.io/cbi-site/",
+        permanent: false,
+      },
     ];
   },
 };
