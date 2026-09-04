@@ -25,6 +25,8 @@ const COURSES: Record<string, { checkpoints: number; minSecondsPerLeg: number; n
   // 夜景フライトモードの「いんザイ君ゲート10か所」コース（2026-09-04・イルミライ会場向け）。
   // 会場の来場者がその場で遊ぶため、クイズの参加要件は問わない（noQuiz）。ゲート間は約540m
   night: { checkpoints: 10, minSecondsPerLeg: 3, noQuiz: true, loginRequired: true },
+  // 短縮コース（会場向け・5か所・約6km）
+  night5: { checkpoints: 5, minSecondsPerLeg: 3, noQuiz: true, loginRequired: true },
 }
 // 参加要件の既定値。app_settings（key: metaverse_tt_requirements）で
 // イベントごとに上書きできる（管理画面 /admin/timetrial から変更）
