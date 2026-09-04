@@ -32,11 +32,13 @@ const COURSE_LABEL: Record<string, string> = {
   intermediate: '🥈 中級（5か所）',
   advanced: '🥇 上級（7か所）',
   full: '🏁 完走（50か所）',
+  night: '🌃 夜景 いんザイ君ゲート（10か所）',
 }
 const AGE_LABEL: Record<string, string> = {
   kids: '小学生以下',
   teens: '中高生',
   adult: '一般',
+  night: '夜景（区分なし）',
 }
 
 function fmtTime(ms: number | null): string {

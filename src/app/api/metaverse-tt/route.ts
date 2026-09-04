@@ -15,12 +15,15 @@ const PUBLIC_ORIGINS = new Set([
   'http://127.0.0.1:8765',
 ])
 
-const COURSES: Record<string, { checkpoints: number; minSecondsPerLeg: number }> = {
+const COURSES: Record<string, { checkpoints: number; minSecondsPerLeg: number; noQuiz?: boolean }> = {
   // minSecondsPerLeg: 隣接チェックポイント間の物理的な最短所要秒（最高速度120m/s＋余裕から算出した下限）
   beginner: { checkpoints: 3, minSecondsPerLeg: 4 },
   intermediate: { checkpoints: 5, minSecondsPerLeg: 4 },
   advanced: { checkpoints: 7, minSecondsPerLeg: 4 },
   full: { checkpoints: 50, minSecondsPerLeg: 3 },
+  // 夜景フライトモードの「いんザイ君ゲート10か所」コース（2026-09-04・イルミライ会場向け）。
+  // 会場の来場者がその場で遊ぶため、クイズの参加要件は問わない（noQuiz）。ゲート間は約540m
+  night: { checkpoints: 10, minSecondsPerLeg: 3, noQuiz: true },
 }
 // 参加要件の既定値。app_settings（key: metaverse_tt_requirements）で
 // イベントごとに上書きできる（管理画面 /admin/timetrial から変更）
@@ -257,9 +260,11 @@ export async function POST(request: Request) {
       const course = COURSES[courseKey]
       if (!name || !course) return json(request, { error: 'invalid entry' }, 400)
       // 参加要件はサーバー側でも下限を確認する（クライアント申告値ベース・要件は設定から読む）
-      const req = await loadRequirements(supabase)
-      if (!(quizRatePct >= req.minRatePct) || !(quizAnswers >= req.minAnswers)) {
-        return json(request, { error: 'quiz requirement not met' }, 403)
+      if (!course.noQuiz) {
+        const req = await loadRequirements(supabase)
+        if (!(quizRatePct >= req.minRatePct) || !(quizAnswers >= req.minAnswers)) {
+          return json(request, { error: 'quiz requirement not met' }, 403)
+        }
       }
       const { data, error } = await supabase
         .from('metaverse_tt_trials')
