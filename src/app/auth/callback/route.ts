@@ -29,6 +29,10 @@ export async function GET(request: Request) {
           return NextResponse.redirect(`${origin}/me/edit?welcome=1`)
         }
       }
+      // メタバース印西（別オリジン）からログインしに来た場合は、/api/metaverse-auth が
+      // Cookie に覚えた戻り先へ署名トークン付きで返す（2026-09-04 夜景タイムトライアルの参加制限）
+      const mvReturn = request.headers.get('cookie')?.split(';').some((c) => c.trim().startsWith('mv_return='))
+      if (mvReturn) return NextResponse.redirect(`${origin}/api/metaverse-auth`)
       return NextResponse.redirect(`${origin}${next}`)
     }
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`)
