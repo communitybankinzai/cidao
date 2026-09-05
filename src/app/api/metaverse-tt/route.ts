@@ -258,6 +258,23 @@ export async function POST(request: Request) {
     // LINE ログインを来場者ごとに行うのが現実的でないため（2026-09-05 中司さん指示）。
     // 本人確認は表示名の一致のみ（会場ではスタッフが見ている前提）。有効期限は 12 時間
     if (action === 'claim') {
+      // 会員証 QR（https://cidao.vercel.app/talent/<uuid> または UUID 単体）を会場PCのWebカメラで読んだ場合は uid で照合する。
+      // UUID は推測できないので、表示名より確かな本人確認になる
+      const qr = String(body.uid ?? body.qr ?? '').trim()
+      const uidMatch = qr.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+      if (uidMatch) {
+        const { data: m, error } = await supabase
+          .from('members')
+          .select('id, display_name, deleted_at')
+          .eq('id', uidMatch[0].toLowerCase())
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (error) throw new Error(error.message)
+        if (!m) return json(request, { error: 'not found' }, 404)
+        const nick = String(m.display_name).trim().slice(0, 20) || '名無しさん'
+        const token = signMetaverseToken({ uid: m.id, nick, exp: Date.now() + 12 * 60 * 60 * 1000 })
+        return json(request, { token, nick, via: 'qr' })
+      }
       const raw = String(body.name ?? '').normalize('NFKC').trim().slice(0, 40)
       if (!raw) return json(request, { error: 'name required' }, 400)
       const { data: rows, error } = await supabase
@@ -274,7 +291,7 @@ export async function POST(request: Request) {
       const hit = exact[0]
       const nick = String(hit.display_name).trim().slice(0, 20)
       const token = signMetaverseToken({ uid: hit.id, nick, exp: Date.now() + 12 * 60 * 60 * 1000 })
-      return json(request, { token, nick })
+      return json(request, { token, nick, via: 'name' })
     }
     if (action === 'start') {
       let name = String(body.name ?? '').trim().slice(0, 20)
