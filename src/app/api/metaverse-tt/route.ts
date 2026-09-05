@@ -275,16 +275,18 @@ export async function POST(request: Request) {
         const token = signMetaverseToken({ uid: m.id, nick, exp: Date.now() + 12 * 60 * 60 * 1000 })
         return json(request, { token, nick, via: 'qr' })
       }
-      const raw = String(body.name ?? '').normalize('NFKC').trim().slice(0, 40)
+      // 表示名の比較は両側を NFKC 正規化（全角英数・全角カッコ・空白の違いを吸収）して行う。
+      // DB 側の値は正規化されていないので ilike では取りこぼす → 会員数は少ないため候補を取り出して JS で比較する
+      const norm = (v: unknown) => String(v ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+      const raw = norm(body.name).slice(0, 40)
       if (!raw) return json(request, { error: 'name required' }, 400)
       const { data: rows, error } = await supabase
         .from('members')
-        .select('id, display_name, deleted_at')
-        .ilike('display_name', raw)
+        .select('id, display_name')
         .is('deleted_at', null)
-        .limit(5)
+        .limit(5000)
       if (error) throw new Error(error.message)
-      const exact = (rows ?? []).filter((r) => String(r.display_name).normalize('NFKC').trim().toLowerCase() === raw.toLowerCase())
+      const exact = (rows ?? []).filter((r) => norm(r.display_name) === raw)
       if (exact.length === 0) return json(request, { error: 'not found' }, 404)
       // 表示名は一意制約が無い。同名が複数いるときは本人を特定できないので照合を断り、LINE ログインに回す
       if (exact.length > 1) return json(request, { error: 'ambiguous' }, 409)
