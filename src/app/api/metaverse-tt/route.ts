@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { verifyMetaverseToken } from '@/lib/metaverse-token'
+import { verifyMetaverseToken, signMetaverseToken } from '@/lib/metaverse-token'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -254,6 +254,28 @@ export async function POST(request: Request) {
   }
   const action = String(body.action ?? '')
   try {
+    // 会場の共用PC向け：CiDAO の表示名（ニックネーム）を打ち込んで会員登録と照合し、参加トークンを発行する。
+    // LINE ログインを来場者ごとに行うのが現実的でないため（2026-09-05 中司さん指示）。
+    // 本人確認は表示名の一致のみ（会場ではスタッフが見ている前提）。有効期限は 12 時間
+    if (action === 'claim') {
+      const raw = String(body.name ?? '').normalize('NFKC').trim().slice(0, 40)
+      if (!raw) return json(request, { error: 'name required' }, 400)
+      const { data: rows, error } = await supabase
+        .from('members')
+        .select('id, display_name, deleted_at')
+        .ilike('display_name', raw)
+        .is('deleted_at', null)
+        .limit(5)
+      if (error) throw new Error(error.message)
+      const exact = (rows ?? []).filter((r) => String(r.display_name).normalize('NFKC').trim().toLowerCase() === raw.toLowerCase())
+      if (exact.length === 0) return json(request, { error: 'not found' }, 404)
+      // 表示名は一意制約が無い。同名が複数いるときは本人を特定できないので照合を断り、LINE ログインに回す
+      if (exact.length > 1) return json(request, { error: 'ambiguous' }, 409)
+      const hit = exact[0]
+      const nick = String(hit.display_name).trim().slice(0, 20)
+      const token = signMetaverseToken({ uid: hit.id, nick, exp: Date.now() + 12 * 60 * 60 * 1000 })
+      return json(request, { token, nick })
+    }
     if (action === 'start') {
       let name = String(body.name ?? '').trim().slice(0, 20)
       const ageKey = String(body.ageKey ?? '').slice(0, 20)
