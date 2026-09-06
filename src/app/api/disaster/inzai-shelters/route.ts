@@ -132,6 +132,27 @@ async function fetchShelterDataset(dataset: typeof DATASETS[number]): Promise<Sh
   })
 }
 
+// 市の公開CSV（わが街ガイド55施設）に載っていないが、実際に避難所として開設される施設。
+// 2026-09-06の大雨で印旛公民館が防災行政無線と市ホームページで開設と発表されたのに
+// CSVに無く、地図から抜け落ちた。市の発表と地図が食い違う方が危険なので補う。
+// 座標は国土地理院の住所検索、風水害・土砂への対応は市が特別避難所として開設した実績による。
+const SUPPLEMENTAL_SHELTERS = [
+  {
+    id: 'supplemental-inba-kominkan',
+    kind: 'special' as const,
+    kindLabel: '特別避難所（市公表・公開データ未収載）',
+    name: '印旛公民館',
+    address: '印西市瀬戸1518番地',
+    phone: '',
+    district: '印旛',
+    latitude: 35.780167,
+    longitude: 140.224731,
+    suitableFor: { earthquake: false, windFlood: true, landslide: true },
+    openingStatus: 'not-announced' as const,
+    openingEvidence: null,
+  },
+]
+
 function normalizeMatchText(value: string) {
   return value
     .normalize('NFKC')
@@ -166,7 +187,11 @@ export async function GET(request: Request) {
       Promise.all(DATASETS.map(fetchShelterDataset)),
       fetchOfficialUpdates(),
     ])
-    const shelters = datasetResults.flat().map((shelter) => ({
+    const base = datasetResults.flat()
+    const supplemental = SUPPLEMENTAL_SHELTERS.filter(
+      (extra) => !base.some((shelter) => shelter.name === extra.name),
+    )
+    const shelters = [...base, ...supplemental].map((shelter) => ({
       ...shelter,
       ...classifyOpeningStatus(shelter.name, officialUpdates),
     }))
