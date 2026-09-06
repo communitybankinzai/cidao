@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { DeleteTrialButton, ResetAllButton, RequirementsForm, RenderQualityForm, EventForm } from './_components/TrialControls'
+import { SIGNUP_SOURCE_LABEL } from '@/lib/signup-source'
 
 // メタバース印西「文化財タイムトライアル」の記録管理。
 // ランキング（公式記録）・フラグ付き記録（要確認）・全記録の一覧と、
@@ -106,6 +107,22 @@ export default async function AdminTimetrialPage() {
   const eventActive = !!eventName && !!eventFrom && !!eventTo &&
     Date.now() >= new Date(eventFrom).getTime() && Date.now() <= new Date(eventTo).getTime()
 
+  // ３次元MAPの入場受付（登録QR・LINE ボタン）経由で新規登録した会員（2026-09-06 入場受付の必須化＝CiDAO 加入の導線の効果測定）
+  const { data: signupRows } = await service
+    .from('members')
+    .select('display_name, created_at, signup_source')
+    .like('signup_source', 'metaverse:%')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  const signups = (signupRows ?? []) as { display_name: string; created_at: string; signup_source: string }[]
+  const signupBySource = signups.reduce<Record<string, number>>((acc, r) => { acc[r.signup_source] = (acc[r.signup_source] ?? 0) + 1; return acc }, {})
+  const signupByDay = signups.reduce<Record<string, number>>((acc, r) => {
+    const d = new Date(r.created_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    acc[d] = (acc[d] ?? 0) + 1
+    return acc
+  }, {})
+
   const finished = trials.filter((t) => t.status === 'finished')
   const flagged = trials.filter((t) => t.status === 'flagged')
   const running = trials.filter((t) => t.status === 'running')
@@ -134,6 +151,43 @@ export default async function AdminTimetrialPage() {
             {error ? <span className="text-red-600">（読み込みエラー: {error.message}）</span> : null}
           </p>
         </header>
+
+        <section className="bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 rounded-lg p-5 space-y-2">
+          <h2 className="text-lg font-semibold">🆕 ３次元MAP 入場受付 経由の新規登録：{signups.length} 人</h2>
+          <p className="text-xs text-slate-500">
+            入場受付（登録QR・LINE ボタン）から CiDAO に初めて登録した人数。初回ログインの時点で members.signup_source に記録され、退会者は除いています。
+            {Object.keys(signupBySource).length > 0 && (
+              <> 内訳：{Object.entries(signupBySource).map(([k, n]) => `${SIGNUP_SOURCE_LABEL[k] ?? k} ${n}人`).join(' ／ ')}</>
+            )}
+          </p>
+          {signups.length === 0 ? (
+            <p className="text-sm text-slate-500">まだ受付経由の登録はありません。</p>
+          ) : (
+            <div className="flex flex-wrap gap-6">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1">日別</p>
+                <ul className="text-sm space-y-0.5">
+                  {Object.entries(signupByDay).map(([d, n]) => <li key={d}>{d}：{n}人</li>)}
+                </ul>
+              </div>
+              <div className="overflow-x-auto">
+                <p className="text-xs font-semibold text-slate-500 mb-1">最近の登録（20件まで）</p>
+                <table className="border-collapse">
+                  <thead><tr><th className={th}>登録日時</th><th className={th}>表示名</th><th className={th}>経路</th></tr></thead>
+                  <tbody>
+                    {signups.slice(0, 20).map((r, i) => (
+                      <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                        <td className={td}>{fmtDate(r.created_at)}</td>
+                        <td className={td}>{r.display_name}</td>
+                        <td className={td}>{SIGNUP_SOURCE_LABEL[r.signup_source] ?? r.signup_source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
 
         <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg p-5 space-y-2">
           <h2 className="text-lg font-semibold">⚙ 参加要件（イベントごとに変更できます）</h2>

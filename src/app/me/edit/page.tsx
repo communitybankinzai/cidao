@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,9 @@ export default async function EditProfilePage({
 
   const alreadyJoinedIds = (myMemberships ?? []).map((m) => m.org_id)
 
+  // 印西市３次元MAP（メタバース印西）からログインしに来た初回登録者は、保存後にそちらへ戻す（Cookie は /api/metaverse-auth が置く）
+  const fromMetaverse = (await cookies()).get('mv_return') !== undefined
+
   async function handleSubmit(formData: FormData) {
     'use server'
 
@@ -93,7 +97,8 @@ export default async function EditProfilePage({
       claimsResult = await claimMemberships(parsed)
     }
 
-    // 3. リダイレクト（クエリで結果を区別）
+    // 3. リダイレクト（クエリで結果を区別）。３次元MAPから来た人は署名トークン付きでそちらへ戻す（2026-09-06）
+    if ((await cookies()).get('mv_return') !== undefined) redirect('/api/metaverse-auth')
     const params = new URLSearchParams({ updated: '1' })
     if (claimsResult && claimsResult.inserted > 0) {
       params.set('claims', String(claimsResult.inserted))
@@ -128,6 +133,11 @@ export default async function EditProfilePage({
               表示名はCiDAO内で<strong>他の参加者に公開されます</strong>ので、
               実名を出したくない場合は、公開してもよいニックネームに変更して保存してください（あとからいつでも変更できます）。
             </p>
+            {fromMetaverse && (
+              <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                🛸 保存すると <strong>印西市３次元MAP</strong> に戻ります。ランキングにはこの表示名が載ります。
+              </p>
+            )}
           </div>
         )}
 

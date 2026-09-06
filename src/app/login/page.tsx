@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { SIGNUP_SOURCE_COOKIE, SIGNUP_SOURCE_MAX_AGE, buildSignupSource } from '@/lib/signup-source'
 
 // LINEログイン一本化（仕様書 v2.1、2026-07-20）
 // Supabase Custom OIDC Provider として登録した LINE Login を使用。
@@ -48,6 +49,16 @@ export default function LoginPage() {
       // 保存できなくてもチェック自体は有効
     }
   }
+
+  // 登録経路（utm）を Cookie に覚える。印西市３次元MAPの受付画面に出す登録QR（utm_source=metaverse）から来た人が
+  // 初回ログインしたときに auth/callback が members.signup_source に残し、受付経由の新規登録数を数えられるようにする
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const src = buildSignupSource(q.get('utm_source'), q.get('utm_medium'), q.get('utm_campaign'))
+    if (!src) return
+    const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+    document.cookie = `${SIGNUP_SOURCE_COOKIE}=${encodeURIComponent(src)}; Max-Age=${SIGNUP_SOURCE_MAX_AGE}; Path=/; SameSite=Lax${secure}`
+  }, [])
 
   // LINEアプリ内蔵ブラウザ（WebView）は、OAuth往復でストレージが分離されることがあり
   // 「PKCE code verifier not found」エラーの主な原因になる。事前に検出して案内する。

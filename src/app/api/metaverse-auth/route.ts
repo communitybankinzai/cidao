@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { signMetaverseToken } from '@/lib/metaverse-token'
+import { SIGNUP_SOURCE_COOKIE, SIGNUP_SOURCE_MAX_AGE } from '@/lib/signup-source'
 
 // メタバース印西（GitHub Pages・別オリジン）が「CiDAO 登録者だけ遊べる」機能を出すための橋渡し。
 //   GET /api/metaverse-auth?return=<メタバースのURL>
@@ -42,7 +43,10 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     const res = NextResponse.redirect(`${origin}/login?next=/api/metaverse-auth`)
-    res.cookies.set(RETURN_COOKIE, ret, { httpOnly: true, sameSite: 'lax', secure: origin.startsWith('https'), maxAge: 600, path: '/' })
+    // 30 分：初回ログインの人は表示名の確認（/me/edit）を挟むので、10 分では戻り先を忘れることがあった（2026-09-06）
+    res.cookies.set(RETURN_COOKIE, ret, { httpOnly: true, sameSite: 'lax', secure: origin.startsWith('https'), maxAge: 1800, path: '/' })
+    // 受付の LINE ボタンから初めて登録した人を数える（既存会員なら auth/callback が無視する）
+    res.cookies.set(SIGNUP_SOURCE_COOKIE, 'metaverse:auth:line', { sameSite: 'lax', secure: origin.startsWith('https'), maxAge: SIGNUP_SOURCE_MAX_AGE, path: '/' })
     return res
   }
 
