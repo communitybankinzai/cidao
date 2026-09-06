@@ -658,6 +658,70 @@ const chibaBousaiPortal: SourceParser = async (source) => {
 }
 
 // ---------------------------------------------------------------------------
+// x-timeline: X（旧Twitter）公開アカウントのタイムライン
+// X API は有料だが、埋め込み用の syndication エンドポイントは認証なしで公開投稿を返す
+// （2026-09-06 実測。千葉県防災 @chibaken_saigai・印西市長 @Fujishiro_1102 とも取得可）。
+// 検索はできないので「このアカウントの投稿を読む」用途に限る。
+// config: screenName（必須）, days（既定3）, keywords（カンマ区切り。指定時はいずれかを含む投稿だけ）
+// ---------------------------------------------------------------------------
+
+type XTweet = { id_str?: string; full_text?: string; created_at?: string }
+
+function collectTweets(value: unknown, out: XTweet[] = []): XTweet[] {
+  if (!value || typeof value !== 'object') return out
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTweets(item, out))
+    return out
+  }
+  const node = value as Record<string, unknown>
+  if (typeof node.full_text === 'string' && typeof node.created_at === 'string') out.push(node as XTweet)
+  Object.values(node).forEach((child) => collectTweets(child, out))
+  return out
+}
+
+const xTimeline: SourceParser = async (source) => {
+  const screenName = configString(source, 'screenName').replace(/^@/, '')
+  if (!screenName) throw new Error('config に screenName（例: chibaken_saigai）が必要です')
+  const days = Math.min(Math.max(Number(configString(source, 'days', '3')) || 3, 1), 14)
+  const keywords = configString(source, 'keywords')
+    .split(',')
+    .map((word) => word.trim())
+    .filter(Boolean)
+
+  const url = source.url || `https://syndication.twitter.com/srv/timeline-profile/screen-name/${encodeURIComponent(screenName)}`
+  const html = await fetchText(url, 'text/html')
+  const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+  if (!match) throw new Error('タイムラインのデータが見つかりません（X側の仕様変更の可能性）')
+  const data = JSON.parse(match[1]) as unknown
+
+  const since = Date.now() - days * 24 * 60 * 60 * 1000
+  const seen = new Set<string>()
+  const drafts: TimelineItemDraft[] = []
+  for (const tweet of collectTweets(data)) {
+    const id = stringValue(tweet.id_str)
+    const text = stringValue(tweet.full_text)
+    const createdAt = Date.parse(stringValue(tweet.created_at))
+    if (!id || !text || seen.has(id)) continue
+    if (!Number.isFinite(createdAt) || createdAt < since) continue
+    if (keywords.length && !keywords.some((word) => text.includes(word))) continue
+    seen.add(id)
+    // リンク短縮の t.co は本文の意味を持たないので落とす
+    const body = text.replace(/https:\/\/t\.co\/\w+/g, '').trim()
+    drafts.push({
+      externalKey: id,
+      occurredAt: new Date(createdAt).toISOString(),
+      title: `${source.label}：${body.slice(0, 40)}${body.length > 40 ? '…' : ''}`,
+      body: truncate(body),
+      url: `https://x.com/${screenName}/status/${id}`,
+      areaTag: body.includes('印西') ? '印西市' : '千葉県',
+      priority: body.includes('印西') ? 2 : 1,
+      raw: { screenName, id },
+    })
+  }
+  return drafts.sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt))).slice(0, 30)
+}
+
+// ---------------------------------------------------------------------------
 // manual: 自動取得なし（管理画面から直接登録）
 // ---------------------------------------------------------------------------
 
@@ -675,6 +739,7 @@ export const PARSERS: Record<string, SourceParser> = {
   'jma-quake': jmaQuake,
   'sns-priority': snsPriority,
   'chiba-bousai-portal': chibaBousaiPortal,
+  'x-timeline': xTimeline,
   manual,
 }
 
@@ -686,6 +751,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'jma-quake', label: '気象庁 地震情報', help: 'config: cityCode, detailBase' },
   { id: 'sns-priority', label: '市長・市公式SNS（巡回結果から）', help: 'URL・config なし。SNS巡回の priority_label 付き投稿を取り込む' },
   { id: 'chiba-bousai-portal', label: '千葉県防災ポータル（緊急情報・被害情報PDF）', help: 'URL は https://www.bousai.pref.chiba.lg.jp/ 。config: emergencyDateId, emergencyTextId, docsUrl（通常は空でよい）' },
+  { id: 'x-timeline', label: 'X（旧Twitter）公開アカウント', help: 'URLは空でよい。config: screenName（例 chibaken_saigai）、days（既定3）、keywords（カンマ区切り・指定時は該当語を含む投稿だけ）' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
