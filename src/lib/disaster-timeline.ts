@@ -734,7 +734,7 @@ function collectTweets(value: unknown, out: XTweet[] = []): XTweet[] {
   return out
 }
 
-const xTimeline: SourceParser = async (source) => {
+const xTimeline: SourceParser = async (source, context) => {
   const screenName = configString(source, 'screenName').replace(/^@/, '')
   if (!screenName) throw new Error('config に screenName（例: chibaken_saigai）が必要です')
   const days = Math.min(Math.max(Number(configString(source, 'days', '3')) || 3, 1), 14)
@@ -742,6 +742,18 @@ const xTimeline: SourceParser = async (source) => {
     .split(',')
     .map((word) => word.trim())
     .filter(Boolean)
+
+  // X の埋め込みエンドポイントは短時間に叩くと 429 を返す（実測）。
+  // 10分ごとの巡回でそのまま呼ぶと弾かれるため、この情報源だけ自前で間隔を空ける。
+  // 直前の取得時刻は app_settings に置く（巡回の last_fetched_at は成否に関わらず毎回更新されるため使えない）
+  const throttleKey = `x_timeline_last_fetch:${screenName}`
+  const minIntervalMs = Math.max(Number(configString(source, 'minIntervalMinutes', '30')) || 30, 5) * 60 * 1000
+  if (context.supabase) {
+    const { data } = await context.supabase.from('app_settings').select('value').eq('key', throttleKey).maybeSingle()
+    const last = Date.parse(String((data?.value as { at?: string } | undefined)?.at ?? ''))
+    if (Number.isFinite(last) && Date.now() - last < minIntervalMs) return []
+    await context.supabase.from('app_settings').upsert({ key: throttleKey, value: { at: new Date().toISOString() } })
+  }
 
   const url = source.url || `https://syndication.twitter.com/srv/timeline-profile/screen-name/${encodeURIComponent(screenName)}`
   const html = await fetchText(url, 'text/html')
