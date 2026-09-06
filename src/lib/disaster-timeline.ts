@@ -599,6 +599,14 @@ function parseChibaDateTime(text: string): string {
   return toIsoAsJst(`${m[1]}-${pad(m[2])}-${pad(m[3])}T${pad(m[4] ?? '0')}:${m[5] ?? '00'}:00`)
 }
 
+function decodeEntitiesLite(text: string): string {
+  return String(text)
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .trim()
+}
+
 function stripTags(html: string): string {
   return html
     .replace(/<[^>]+>/g, ' ')
@@ -653,6 +661,53 @@ const chibaBousaiPortal: SourceParser = async (source) => {
       priority: 1,
       raw: { fileId, date },
     })
+  }
+  return drafts
+}
+
+// ---------------------------------------------------------------------------
+// chiba-hinan-list: 千葉県防災ポータルの「避難情報」一覧（市町村ごとの開設・閉鎖）
+// 市の防災行政無線より先に、県側で開設・閉鎖の変化が出ることがある
+// （2026-09-06 の大雨では 19:47・19:50 の変化が県側にしか出ていなかった）。
+// トップページの表は 市町村名リンク → 発表時刻 → class="hinanjyoWarning kaisetsu|heisa" の順。
+// 施設名まで載る詳細ページは JavaScript が必要で取得できないため、
+// 「いつ・どちらに変わったか」だけを記録し、施設名は市の放送側で補う。
+// config: municipality（既定 印西市）
+// ---------------------------------------------------------------------------
+
+const chibaHinanList: SourceParser = async (source) => {
+  const municipality = configString(source, 'municipality', '印西市')
+  const html = await fetchText(source.url || 'https://www.bousai.pref.chiba.lg.jp/')
+  const drafts: TimelineItemDraft[] = []
+
+  // 市町村リンクごとに、その直後の時刻と状態（開設/閉鎖）を拾う
+  for (const match of html.matchAll(/<a href="(\/PUB_VF_Detail_Hinan\?pid=[^"]+)"[^>]*>([^<]+)<\/a>([\s\S]{0,600})/g)) {
+    const [, href, rawName, rest] = match
+    const name = decodeEntitiesLite(rawName).trim()
+    if (name !== municipality) continue
+    const when = rest.match(/<div class="hinanjyoWarning">([^<]+)<\/div>/)
+    const state = rest.match(/<div class="hinanjyoWarning (kaisetsu|heisa)">/)
+    if (!when || !state) continue
+    const whenText = decodeEntitiesLite(when[1]).replace(/発表/, '').trim() // 例 09/06 19:50
+    const opened = state[1] === 'kaisetsu'
+    const md = whenText.match(/^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})$/)
+    if (!md) continue
+    const now = new Date()
+    const year = Number(md[1]) > now.getMonth() + 1 ? now.getFullYear() - 1 : now.getFullYear()
+    const pad = (v: string) => v.padStart(2, '0')
+    const occurredAt = toIsoAsJst(`${year}-${pad(md[1])}-${pad(md[2])}T${pad(md[3])}:${md[4]}:00`)
+    drafts.push({
+      externalKey: `${municipality}:${whenText}:${opened ? 'open' : 'close'}`,
+      occurredAt,
+      title: `${municipality}の避難所 ${opened ? '開設' : '閉鎖'}（千葉県まとめ）`,
+      body: `千葉県防災ポータルの避難情報で、${municipality}が「${opened ? '開設' : '閉鎖'}」として ${whenText} に発表されました。対象の施設名は市の発表・防災行政無線でご確認ください。`,
+      url: `https://www.bousai.pref.chiba.lg.jp${href}`,
+      areaTag: municipality,
+      changeType: opened ? undefined : 'cancel',
+      priority: 2,
+      raw: { municipality, whenText, opened },
+    })
+    break // 一覧には市町村ごとに最新の1行だけが載る
   }
   return drafts
 }
@@ -740,6 +795,7 @@ export const PARSERS: Record<string, SourceParser> = {
   'sns-priority': snsPriority,
   'chiba-bousai-portal': chibaBousaiPortal,
   'x-timeline': xTimeline,
+  'chiba-hinan-list': chibaHinanList,
   manual,
 }
 
@@ -752,6 +808,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'sns-priority', label: '市長・市公式SNS（巡回結果から）', help: 'URL・config なし。SNS巡回の priority_label 付き投稿を取り込む' },
   { id: 'chiba-bousai-portal', label: '千葉県防災ポータル（緊急情報・被害情報PDF）', help: 'URL は https://www.bousai.pref.chiba.lg.jp/ 。config: emergencyDateId, emergencyTextId, docsUrl（通常は空でよい）' },
   { id: 'x-timeline', label: 'X（旧Twitter）公開アカウント', help: 'URLは空でよい。config: screenName（例 chibaken_saigai）、days（既定3）、keywords（カンマ区切り・指定時は該当語を含む投稿だけ）' },
+  { id: 'chiba-hinan-list', label: '千葉県 避難情報一覧（市町村の開設・閉鎖）', help: 'URLは空でよい（https://www.bousai.pref.chiba.lg.jp/）。config: municipality（既定 印西市）' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
