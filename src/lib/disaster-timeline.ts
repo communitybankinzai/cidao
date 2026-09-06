@@ -408,7 +408,14 @@ const jmaWarning: SourceParser = async (source) => {
   const sorted = [...reports]
     .filter((report) => findWarningArea(report, areaCode))
     .sort((a, b) => stringValue(b.reportDatetime).localeCompare(stringValue(a.reportDatetime)))
-  for (const report of sorted) {
+  // 気象警報と竜巻注意情報などは別々の報として同居する。直近48時間の報を
+  // すべてイベントとして取り込む（external_key が reportDatetime 単位なので重複しない）
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000
+  const recent = sorted.filter((r) => {
+    const t = Date.parse(stringValue(r.reportDatetime))
+    return Number.isFinite(t) && t >= cutoff
+  }).slice(0, 6)
+  for (const report of recent.length ? recent : sorted.slice(0, 1)) {
     const area = findWarningArea(report, areaCode)
     if (!area) continue
     const kinds = area.kinds ?? area.warnings ?? []
@@ -431,8 +438,6 @@ const jmaWarning: SourceParser = async (source) => {
       priority: active.length ? 2 : 0,
       raw: { publishingOffice: report.publishingOffice, infoType: report.infoType, kinds },
     })
-    // 履歴が複数あっても最新（reportDatetime 最大）の 1 件だけ採る
-    break
   }
   return drafts
 }
