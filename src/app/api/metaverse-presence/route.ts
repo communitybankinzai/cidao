@@ -130,7 +130,8 @@ export async function POST(request: Request) {
       .from('metaverse_presence')
       .delete()
       .lt('last_seen', new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString())
-    return json(request, await countActive(supabase))
+    const [now, today] = await Promise.all([countActive(supabase), countToday(supabase)])
+    return json(request, { ...now, today })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[metaverse-presence POST]', message)
