@@ -46,6 +46,20 @@ function stringValue(value: unknown) {
   return ''
 }
 
+// 実際のXMLは <datetime> <title> <message> と小文字（2026-09-06 実測）。
+// 仕様書の表記に合わせて DateTime / Title / Message で読んでいたため、
+// 放送があっても常に空文字になり0件として捨てられていた。大小を区別せず読む
+function fieldValue(node: Record<string, unknown>, name: string) {
+  const target = name.toLowerCase()
+  for (const [key, value] of Object.entries(node)) {
+    if (key.toLowerCase() === target) {
+      const text = stringValue(value)
+      if (text) return text
+    }
+  }
+  return ''
+}
+
 function normalizeAlertFilename(value: unknown) {
   const filename = stringValue(value)
   return /^[a-zA-Z0-9_.-]+\.xml$/.test(filename) ? filename : ''
@@ -82,11 +96,11 @@ export async function fetchOfficialUpdates(options: {
 
   return xmlDocuments.flatMap((document) => {
     const publishedAt = collectNodes(document, 'control')
-      .map((node) => stringValue(node.DateTime))
+      .map((node) => fieldValue(node, 'DateTime'))
       .find(Boolean) ?? ''
     return collectNodes(document, 'homepage').map((node) => ({
-      title: stringValue(node.Title),
-      message: stringValue(node.Message),
+      title: fieldValue(node, 'Title'),
+      message: fieldValue(node, 'Message'),
       publishedAt,
       sourceUrl,
     })).filter((item) => item.title || item.message)
