@@ -112,6 +112,7 @@ async function countVisitorsByDay(fromDay: string): Promise<Map<string, { event:
     for (const row of data ?? []) {
       const day = String(row.day)
       const cur = map.get(day) ?? { event: 0, bousai: 0 }
+      if (row.mode === 'disaster-map') continue
       if (row.mode === 'bousai') cur.bousai += 1
       else cur.event += 1
       map.set(day, cur)
@@ -156,6 +157,9 @@ async function countVisitorsToday(): Promise<number | null> {
       .from('metaverse_presence_daily')
       .select('session_id', { count: 'exact', head: true })
       .eq('day', jstToday())
+      // 災害MAP（2D）はタイル課金と無関係なので、この画面の利用者数からは除く。
+      // 災害MAPの人数は /api/metaverse-presence の today.disasterMap で見る
+      .neq('mode', 'disaster-map')
     if (error) return null
     return count ?? 0
   } catch {
