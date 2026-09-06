@@ -666,6 +666,65 @@ const chibaBousaiPortal: SourceParser = async (source) => {
 }
 
 // ---------------------------------------------------------------------------
+// jma-xml-feed: 気象庁防災情報XML（Atomフィード）
+// bosai の JSON では取れない種類の情報を拾うために使う。特に重要なのは
+// 「記録的短時間大雨情報」（1時間100mm級の局地豪雨。線状降水帯のときに真っ先に出る）と
+// 「指定河川洪水予報」（利根川・印旛沼水系）、「土砂災害警戒情報」「竜巻注意情報」。
+// entry は title / updated / content（要約文）/ link[href] を持つ。
+// config: feeds（カンマ区切り。既定 extra）, titles（拾う種類。カンマ区切り）,
+//         keywords（本文にこのいずれかを含むものだけ。既定 千葉）
+// ---------------------------------------------------------------------------
+
+const JMA_FEED_BASE = 'https://www.data.jma.go.jp/developer/xml/feed/'
+// 気象警報・注意報そのものは jma-warning（印西市単位）で既に取っているので、既定では拾わない。
+// ここで拾うのは「JSONでは取れない種類」に限る
+const JMA_DEFAULT_TITLES = ['記録的短時間大雨情報', '指定河川洪水予報', '土砂災害警戒情報', '竜巻注意情報', '全般気象情報', '地方気象情報', '府県気象情報']
+
+const jmaXmlFeed: SourceParser = async (source) => {
+  const feeds = configString(source, 'feeds', 'extra').split(',').map((v) => v.trim()).filter(Boolean)
+  const titles = configString(source, 'titles')
+    ? configString(source, 'titles').split(',').map((v) => v.trim()).filter(Boolean)
+    : JMA_DEFAULT_TITLES
+  const keywords = configString(source, 'keywords', '千葉').split(',').map((v) => v.trim()).filter(Boolean)
+  const hours = Math.min(Math.max(Number(configString(source, 'hours', '24')) || 24, 1), 72)
+  const since = Date.now() - hours * 60 * 60 * 1000
+
+  const drafts: TimelineItemDraft[] = []
+  const seen = new Set<string>()
+  for (const feed of feeds) {
+    const xml = await fetchText(`${JMA_FEED_BASE}${encodeURIComponent(feed)}.xml`, 'application/atom+xml,application/xml')
+    for (const match of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
+      const entry = match[1]
+      const title = decodeEntitiesLite((entry.match(/<title>([^<]*)<\/title>/) || [])[1] ?? '')
+      const updated = ((entry.match(/<updated>([^<]*)<\/updated>/) || [])[1] ?? '').trim()
+      const content = decodeEntitiesLite((entry.match(/<content[^>]*>([\s\S]*?)<\/content>/) || [])[1] ?? '')
+      const href = ((entry.match(/<link[^>]*href="([^"]+)"/) || [])[1] ?? '').trim()
+      if (!title || !updated || !content) continue
+      // 種類で絞る（前方一致。「気象警報・注意報（Ｒ０６）（大雨）」のような版番号付きに対応）
+      if (!titles.some((want) => title.startsWith(want) || title.includes(want))) continue
+      if (keywords.length && !keywords.some((word) => content.includes(word))) continue
+      const at = Date.parse(updated)
+      if (!Number.isFinite(at) || at < since) continue
+      const key = href || `${title}:${updated}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      drafts.push({
+        externalKey: key,
+        occurredAt: new Date(at).toISOString(),
+        title: `気象庁 ${title}`,
+        body: truncate(content),
+        url: href || 'https://www.jma.go.jp/bosai/',
+        areaTag: content.includes('印西') ? '印西市' : '千葉県',
+        // 記録的短時間大雨情報と指定河川洪水予報は、出た時点で行動が要る種類の情報
+        priority: /記録的短時間大雨情報|指定河川洪水予報|土砂災害警戒情報/.test(title) ? 3 : 1,
+        raw: { feed, title, updated },
+      })
+    }
+  }
+  return drafts.sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt))).slice(0, 40)
+}
+
+// ---------------------------------------------------------------------------
 // chiba-hinan-list: 千葉県防災ポータルの「避難情報」一覧（市町村ごとの開設・閉鎖）
 // 市の防災行政無線より先に、県側で開設・閉鎖の変化が出ることがある
 // （2026-09-06 の大雨では 19:47・19:50 の変化が県側にしか出ていなかった）。
@@ -808,6 +867,7 @@ export const PARSERS: Record<string, SourceParser> = {
   'chiba-bousai-portal': chibaBousaiPortal,
   'x-timeline': xTimeline,
   'chiba-hinan-list': chibaHinanList,
+  'jma-xml-feed': jmaXmlFeed,
   manual,
 }
 
@@ -821,6 +881,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'chiba-bousai-portal', label: '千葉県防災ポータル（緊急情報・被害情報PDF）', help: 'URL は https://www.bousai.pref.chiba.lg.jp/ 。config: emergencyDateId, emergencyTextId, docsUrl（通常は空でよい）' },
   { id: 'x-timeline', label: 'X（旧Twitter）公開アカウント', help: 'URLは空でよい。config: screenName（例 chibaken_saigai）、days（既定3）、keywords（カンマ区切り・指定時は該当語を含む投稿だけ）' },
   { id: 'chiba-hinan-list', label: '千葉県 避難情報一覧（市町村の開設・閉鎖）', help: 'URLは空でよい（https://www.bousai.pref.chiba.lg.jp/）。config: municipality（既定 印西市）' },
+  { id: 'jma-xml-feed', label: '気象庁防災情報XML（記録的短時間大雨・洪水予報など）', help: 'URLは空でよい。config: feeds（既定 extra）、titles（拾う種類）、keywords（既定 千葉）、hours（既定 24）' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
