@@ -66,12 +66,30 @@ async function countActive(supabase: NonNullable<ReturnType<typeof adminClient>>
   }
 }
 
-// 参加中の人数を返すだけ（管理画面・表示専用）
+// 本日（JST）のユニーク訪問者数。metaverse_presence_daily から mode 別に数える
+async function countToday(supabase: NonNullable<ReturnType<typeof adminClient>>): Promise<Counts> {
+  const jstDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date())
+  const { data, error } = await supabase
+    .from('metaverse_presence_daily')
+    .select('mode')
+    .eq('day', jstDay)
+  if (error) throw new Error(error.message)
+  const rows = data ?? []
+  return {
+    total: rows.length,
+    event: rows.filter((r) => r.mode !== 'bousai' && r.mode !== 'disaster-map').length,
+    bousai: rows.filter((r) => r.mode === 'bousai').length,
+    disasterMap: rows.filter((r) => r.mode === 'disaster-map').length,
+  }
+}
+
+// 参加中の人数と本日のユニーク訪問者数を返す（管理画面・表示専用）
 export async function GET(request: Request) {
   const supabase = adminClient()
   if (!supabase) return json(request, { error: 'server not configured' }, 503)
   try {
-    return json(request, await countActive(supabase))
+    const [now, today] = await Promise.all([countActive(supabase), countToday(supabase)])
+    return json(request, { ...now, today })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[metaverse-presence GET]', message)

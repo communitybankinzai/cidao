@@ -403,7 +403,12 @@ const jmaWarning: SourceParser = async (source) => {
   const payload = await fetchJson<JmaWarningReport[] | JmaWarningReport>(source.url)
   const reports = Array.isArray(payload) ? payload : [payload]
   const drafts: TimelineItemDraft[] = []
-  for (const report of reports) {
+  // 配列は最新順とは限らない（竜巻注意情報など種別の異なる報が混在し、2026-09-06 に
+  // 先頭が 9/3 の解除報だった実例あり）。reportDatetime が最大の報を採用する
+  const sorted = [...reports]
+    .filter((report) => findWarningArea(report, areaCode))
+    .sort((a, b) => stringValue(b.reportDatetime).localeCompare(stringValue(a.reportDatetime)))
+  for (const report of sorted) {
     const area = findWarningArea(report, areaCode)
     if (!area) continue
     const kinds = area.kinds ?? area.warnings ?? []
@@ -426,7 +431,7 @@ const jmaWarning: SourceParser = async (source) => {
       priority: active.length ? 2 : 0,
       raw: { publishingOffice: report.publishingOffice, infoType: report.infoType, kinds },
     })
-    // 仕様: 配列の先頭が最新。履歴が複数あっても先頭の 1 件だけ採る
+    // 履歴が複数あっても最新（reportDatetime 最大）の 1 件だけ採る
     break
   }
   return drafts
