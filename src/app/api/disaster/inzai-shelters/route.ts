@@ -160,7 +160,26 @@ function normalizeMatchText(value: string) {
     .toLowerCase()
 }
 
-function classifyOpeningStatus(shelterName: string, updates: OfficialUpdate[]) {
+// 「１６時、すべての避難所を閉鎖します。」のように施設名を挙げずに全所を閉じる放送がある。
+// 施設名の照合だけでは一致せず開設中の表示が残るため（2026-09-07 16:00 の放送で実際に発生）、
+// この形の放送を別に拾って全施設へ適用する。開設の放送より新しいときだけ有効にする。
+const BLANKET_CLOSURE = /(すべて|全て|全)の?避難所を?(閉鎖|閉所)|避難所を(すべて|全て|全)(閉鎖|閉所)/
+
+function findBlanketClosure(updates: OfficialUpdate[]) {
+  const hits = updates.filter((update) =>
+    BLANKET_CLOSURE.test(normalizeMatchText(`${update.title}\n${update.message}`)),
+  )
+  if (!hits.length) return null
+  return hits.reduce((latest, update) =>
+    String(update.publishedAt) > String(latest.publishedAt) ? update : latest,
+  )
+}
+
+function classifyOpeningStatus(
+  shelterName: string,
+  updates: OfficialUpdate[],
+  blanketClosure: OfficialUpdate | null,
+) {
   const normalizedName = normalizeMatchText(shelterName)
   const relevant = updates.filter((update) => {
     const text = normalizeMatchText(`${update.title}\n${update.message}`)
@@ -172,12 +191,17 @@ function classifyOpeningStatus(shelterName: string, updates: OfficialUpdate[]) {
       return { openingStatus: 'closed' as const, openingEvidence: update }
     }
   }
-  for (const update of relevant) {
-    const text = `${update.title}\n${update.message}`
-    if (/開設|開放|受け入れ|受入れ|受入開始/.test(text)) {
-      return { openingStatus: 'open' as const, openingEvidence: update }
-    }
+  const opened = relevant.find((update) =>
+    /開設|開放|受け入れ|受入れ|受入開始/.test(`${update.title}\n${update.message}`),
+  )
+  // 施設名を挙げない一斉閉鎖は、その施設の開設放送より新しいときだけ閉鎖として扱う。
+  if (
+    blanketClosure &&
+    (!opened || String(blanketClosure.publishedAt) > String(opened.publishedAt))
+  ) {
+    return { openingStatus: 'closed' as const, openingEvidence: blanketClosure }
   }
+  if (opened) return { openingStatus: 'open' as const, openingEvidence: opened }
   return { openingStatus: 'not-announced' as const, openingEvidence: null }
 }
 
@@ -191,17 +215,21 @@ export async function GET(request: Request) {
     const supplemental = SUPPLEMENTAL_SHELTERS.filter(
       (extra) => !base.some((shelter) => shelter.name === extra.name),
     )
+    const blanketClosure = findBlanketClosure(officialUpdates)
     const shelters = [...base, ...supplemental].map((shelter) => ({
       ...shelter,
-      ...classifyOpeningStatus(shelter.name, officialUpdates),
+      ...classifyOpeningStatus(shelter.name, officialUpdates, blanketClosure),
     }))
     return json(request, {
       fetchedAt: new Date().toISOString(),
       shelters,
       officialUpdates,
-      openingInformation: officialUpdates.length
-        ? '印西市防災速報の施設名と開設・閉鎖表現を照合しました。'
-        : '現在、印西市防災速報に避難所開設情報は掲載されていません。',
+      blanketClosure,
+      openingInformation: blanketClosure
+        ? '印西市防災速報で全避難所の閉鎖が放送されました。施設名の記載がないため全施設に適用しています。'
+        : officialUpdates.length
+          ? '印西市防災速報の施設名と開設・閉鎖表現を照合しました。'
+          : '現在、印西市防災速報に避難所開設情報は掲載されていません。',
       sources: {
         organization: '印西市 総務部防災課',
         openDataPageUrl: OPEN_DATA_PAGE_URL,
