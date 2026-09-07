@@ -245,3 +245,35 @@ export async function createManualItem(input: ManualItemInput): Promise<ActionRe
     return { ok: false, error: errorMessage(error) }
   }
 }
+
+// 自動SNS投稿の設定を保存する。誤発報の影響が大きいので、値は必ず範囲で丸める。
+export async function saveAutoPostConfig(input: {
+  enabled: boolean
+  autoLevel: number
+  approvalLevel: number
+  minIntervalMinutes: number
+  media: string[]
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+    const admin = adminClient()
+    const clamp = (v: number, lo: number, hi: number, def: number) =>
+      Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : def
+    const media = input.media.filter((m) => m === 'threads' || m === 'instagram')
+    const autoLevel = clamp(input.autoLevel, 3, 5, 4)
+    const value = {
+      enabled: Boolean(input.enabled) && media.length > 0,
+      autoLevel,
+      // 承認待ちのしきい値が自動投稿より高いと、承認の出番が無くなって分かりにくい
+      approvalLevel: Math.min(clamp(input.approvalLevel, 3, 5, 3), autoLevel),
+      minIntervalMinutes: clamp(input.minIntervalMinutes, 5, 360, 30),
+      media,
+    }
+    const { error } = await admin.from('app_settings').upsert({ key: 'disaster_auto_post', value })
+    if (error) throw error
+    revalidatePath(PATH)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) }
+  }
+}

@@ -6,6 +6,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { runDisasterTimeline } from '@/lib/disaster-timeline'
+import { runAutoPost } from '@/lib/disaster-auto-post'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -142,7 +143,19 @@ export async function POST(request: Request) {
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   try {
     const result = await runDisasterTimeline(supabase, { claim: true, minIntervalSeconds: 240 })
-    return json(request, result)
+    // 取り込みのあとに警戒レベルを見て、上がっていれば自動投稿または承認待ちを作る。
+    // ここで失敗しても巡回そのものは成立させる（速報が止まる方が困るため）。
+    let autoPost: unknown = null
+    if (!result.skipped) {
+      try {
+        autoPost = await runAutoPost(supabase)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error('[disaster/auto-post]', message)
+        autoPost = { ran: false, error: message }
+      }
+    }
+    return json(request, { ...result, autoPost })
   } catch (error) {
     const err = error as { code?: string; message?: string }
     if (isMissingTable(err)) return json(request, { error: MIGRATION_HINT }, 503)

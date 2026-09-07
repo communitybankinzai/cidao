@@ -4,6 +4,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { SOURCE_KINDS } from '@/lib/disaster-timeline'
 import DisasterSourcesManager, { type SourceRow } from './_components/DisasterSourcesManager'
+import AutoPostPanel, { type AutoPostView } from './_components/AutoPostPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,9 @@ export default async function AdminDisasterSourcesPage() {
   let sources: SourceRow[] = []
   let loadError = ''
   let lastRun: { started_at: string; finished_at: string | null; status: string; error_message: string | null } | null = null
+  let autoPost: AutoPostView = {
+    enabled: false, autoLevel: 4, approvalLevel: 3, minIntervalMinutes: 30, media: ['threads'], state: null,
+  }
 
   if (!admin) {
     loadError = 'サーバー接続が未設定です（NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY）'
@@ -66,6 +70,20 @@ export default async function AdminDisasterSourcesPage() {
       }))
       lastRun = run ?? null
     }
+    const { data: settings } = await admin
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['disaster_auto_post', 'disaster_auto_post_state'])
+    const byKey = new Map((settings ?? []).map((r) => [r.key, r.value as Record<string, unknown>]))
+    const cfg = byKey.get('disaster_auto_post') ?? {}
+    autoPost = {
+      enabled: cfg.enabled === true,
+      autoLevel: typeof cfg.autoLevel === 'number' ? cfg.autoLevel : 4,
+      approvalLevel: typeof cfg.approvalLevel === 'number' ? cfg.approvalLevel : 3,
+      minIntervalMinutes: typeof cfg.minIntervalMinutes === 'number' ? cfg.minIntervalMinutes : 30,
+      media: Array.isArray(cfg.media) ? (cfg.media as string[]) : ['threads'],
+      state: (byKey.get('disaster_auto_post_state') as AutoPostView['state']) ?? null,
+    }
   }
 
   return (
@@ -88,6 +106,8 @@ export default async function AdminDisasterSourcesPage() {
             {loadError}
           </div>
         )}
+
+        <AutoPostPanel initial={autoPost} />
 
         <DisasterSourcesManager
           initialSources={sources}
