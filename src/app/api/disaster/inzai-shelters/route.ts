@@ -194,10 +194,13 @@ function classifyOpeningStatus(
   const opened = relevant.find((update) =>
     /開設|開放|受け入れ|受入れ|受入開始/.test(`${update.title}\n${update.message}`),
   )
-  // 施設名を挙げない一斉閉鎖は、その施設の開設放送より新しいときだけ閉鎖として扱う。
+  // 施設名を挙げない一斉閉鎖は、開設が発表されていた施設にだけ、
+  // その開設放送より新しいときに限って適用する。
+  // 一度も開設されていない施設まで「閉鎖」にすると、開いていたかのように誤解させる。
   if (
     blanketClosure &&
-    (!opened || String(blanketClosure.publishedAt) > String(opened.publishedAt))
+    opened &&
+    String(blanketClosure.publishedAt) > String(opened.publishedAt)
   ) {
     return { openingStatus: 'closed' as const, openingEvidence: blanketClosure }
   }
