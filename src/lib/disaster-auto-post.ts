@@ -44,9 +44,12 @@ export type AutoPostState = {
 export type TimelineItemLite = {
   title: string
   body: string | null
-  source_label?: string | null
+  source_id?: string | null
   occurred_at: string
   change_type?: string | null
+  /** 呼び出し側が disaster_info_sources から引いて詰める */
+  kind?: string
+  sourceLabel?: string
 }
 
 const DEFAULT_CONFIG: AutoPostConfig = {
@@ -84,26 +87,32 @@ const CANCEL_RE = /解除|発表中の警報・注意報なし|発表なし|避�
 //
 // 対策：レベルの根拠にしてよいのは「印西市に出ていることが確実な情報源」だけに限る。
 //   県単位・全国単位の情報は、参考として地図には出すがレベル判定には使わない。
-// 印西市に出ていることが確実な情報源だけを、レベルの根拠にする。
+//
+// ⚠ ラベル（表示名）ではなく kind（パーサの種類）で判定する。
+//   ラベルは管理画面から自由に変えられるので、ラベルで判定すると
+//   名前を変えただけで安全装置が外れる。実際、初版は「印西市 災害情報」で
+//   照合していたが、本番のラベルは「印西市 防災情報（市公式）」で一致しなかった。
+//
 // useBody: 本文までレベルの根拠にしてよいか。
 //   気象庁の警報はタイトルに「レベル2大雨注意報」と入るので本文は不要で、
 //   むしろ本文の解説文（「南部では…」等）を拾うと誤判定になる。
 //   一方、防災行政無線はタイトルが「防災行政無線の内容」で固定なので、
 //   本文（「避難所を開設します」等）を見ないと判定できない。
-const CITY_SOURCES: Array<{ prefix: string; useBody: boolean }> = [
-  { prefix: '気象庁 印西市の警報・注意報', useBody: false }, // areaCode 1223100 で絞り込み済み
-  { prefix: '印西市 防災行政無線', useBody: true },
-  { prefix: '印西市 災害情報', useBody: true },
-  { prefix: '印西市 避難情報', useBody: true },
-  { prefix: '印西市 避難所', useBody: true },
-  { prefix: '千葉県 避難情報', useBody: true },  // パーサが印西市の行だけを抜いている
-]
+const CITY_KINDS: Record<string, { useBody: boolean }> = {
+  'jma-warning': { useBody: false },      // 気象庁 印西市の警報・注意報（areaCode 1223100 で絞り込み済み）
+  'city-alert-xml': { useBody: true },    // 印西市 防災行政無線
+  'city-category-html': { useBody: true },// 印西市の公式ページ（防災情報・避難情報・避難所）
+  'chiba-hinan-list': { useBody: true },  // 千葉県の避難情報（パーサが印西市の行だけを抜いている）
+}
+// 使わない kind（参考のため明記）:
+//   jma-overview（県の概況）／jma-quake（地震）／sns-priority（市長SNS・準公式）／
+//   chiba-bousai-portal（県全体）／jma-xml-feed（県単位）／x-timeline（県防災X）
 
 // 「〜が発表されたときにとるべき行動」のような、実際には起きていない仮定の文
 const HYPOTHETICAL_RE = /とるべき行動|発表されたとき|発令されたとき|場合には|ときは|とは何か|について$|備え/
 
-export function citySourceOf(label: string) {
-  return CITY_SOURCES.find((s) => label.startsWith(s.prefix)) ?? null
+export function cityKindOf(kind: string) {
+  return CITY_KINDS[kind] ?? null
 }
 
 export function levelOf(text: string): number {
@@ -133,9 +142,9 @@ export function extractSignals(items: TimelineItemLite[], withinMinutes = 180): 
     if (!Number.isFinite(at) || at < limit) continue
     const title = String(item.title ?? '')
     const body = String(item.body ?? '')
-    const source = String(item.source_label ?? '')
+    const source = String(item.sourceLabel ?? '')
     if (CANCEL_RE.test(title)) continue          // 解除の報はレベルの根拠にしない
-    const city = citySourceOf(source)
+    const city = cityKindOf(String(item.kind ?? ''))
     if (!city) continue                          // 県・全国の情報は根拠にしない（上の注記を参照）
     const judged = city.useBody ? `${title}\n${body}` : title
     if (HYPOTHETICAL_RE.test(judged)) continue   // 「〜が発表されたときにとるべき行動」等の啓発文
@@ -169,18 +178,46 @@ const FOOTER = [
   '#印西市 #防災',
 ].join('\n')
 
+// 防災行政無線は毎回この決まり文句で始まり・終わるので、見出しには使わない
+const BROADCAST_BOILERPLATE = /^こちらは、?\s*防災いんざいです。?$/
+// タイトルが中身を表していない情報源。この場合は本文から見出しを作る
+const GENERIC_TITLE = /^(防災行政無線の内容|お知らせ|新着情報)$/
+
+/** 見出しに使う一文を選ぶ。決まり文句と空行を落として、最初の意味のある行を取る。 */
+export function headlineOf(signal: Signal): string {
+  const title = signal.title.replace(/^印西市：/, '').trim()
+  if (title && !GENERIC_TITLE.test(title)) return title
+  const line = signal.body
+    .split(/\n+/)
+    .map((x) => x.trim())
+    .find((x) => x && !BROADCAST_BOILERPLATE.test(x))
+  return (line ?? title ?? '').slice(0, 60)
+}
+
+/** 引用する本文。決まり文句を落として読みやすくする。 */
+function quoteOf(signal: Signal): string {
+  return signal.body
+    .split(/\n+/)
+    .map((x) => x.trim())
+    .filter((x) => x && !BROADCAST_BOILERPLATE.test(x))
+    .join('\n')
+    .slice(0, 300)
+}
+
 /** 投稿本文を作る。公式の文章をそのまま引用し、当団体の解釈は加えない。 */
 export function buildText(signals: Signal[], level: number): string {
   const top = signals.filter((s) => s.level === level)
-  const names = [...new Set(top.map((s) => s.title.replace(/^印西市：/, '')))].slice(0, 4)
-  const head = `【印西市に${names[0] ?? `警戒レベル${level}相当の情報`}が発表されました】`
-  const lines = [head, '']
+  const heads = [...new Set(top.map(headlineOf).filter(Boolean))]
   const when = top[0] ? jstLabel(top[0].occurredAt) : ''
-  lines.push(`${when ? when + '、' : ''}印西市に警戒レベル${level}相当の情報が出ています。`)
-  if (names.length > 1) lines.push(`発表中：${names.join('／')}`)
+  const lines = [
+    `【印西市：${heads[0] ?? `警戒レベル${level}相当の情報`}】`,
+    '',
+    `${when ? when + '、' : ''}印西市に警戒レベル${level}相当の情報が出ています。`,
+  ]
+  if (heads.length > 1) lines.push(`ほかに：${heads.slice(1, 3).join('／')}`)
   lines.push('')
   for (const s of top.slice(0, 2)) {
-    const quoted = s.body.trim().replace(/\n{3,}/g, '\n\n').slice(0, 300)
+    const quoted = quoteOf(s)
     if (quoted) {
       lines.push(`■ ${s.source || '公式発表'}より`)
       lines.push(quoted)
@@ -190,6 +227,8 @@ export function buildText(signals: Signal[], level: number): string {
   if (level >= 4) {
     lines.push('■ 警戒レベル4相当は「危険な場所から全員避難」の段階です。')
     lines.push('土砂災害警戒区域や低い土地にお住まいの方は、市の避難情報を確認してください。')
+  } else if (level === 3) {
+    lines.push('■ 警戒レベル3相当は「高齢の方や避難に時間がかかる方は避難」の段階です。')
   }
   return (lines.join('\n') + FOOTER).slice(0, 480)
 }
@@ -232,15 +271,26 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   if (!config.enabled) return { ran: false, level: 0, previousLevel: 0, action: 'none', reason: 'disabled' }
 
   const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
-  const { data: rows, error } = await supabase
-    .from('disaster_timeline_items')
-    .select('title, body, source_label, occurred_at, change_type')
-    .gte('occurred_at', since)
-    .order('occurred_at', { ascending: false })
-    .limit(200)
+  // disaster_timeline_items にラベルは無い（source_id で情報源テーブルを引く）
+  const [{ data: rows, error }, { data: sources }] = await Promise.all([
+    supabase
+      .from('disaster_timeline_items')
+      .select('title, body, source_id, occurred_at, change_type')
+      .gte('occurred_at', since)
+      .order('occurred_at', { ascending: false })
+      .limit(200),
+    supabase.from('disaster_info_sources').select('id, label, kind'),
+  ])
   if (error) return { ran: false, level: 0, previousLevel: 0, action: 'none', reason: error.message }
+  const byId = new Map(
+    (sources ?? []).map((r) => [String(r.id), { kind: String(r.kind), label: String(r.label) }]),
+  )
+  const items: TimelineItemLite[] = (rows ?? []).map((r) => {
+    const src = byId.get(String(r.source_id))
+    return { ...r, kind: src?.kind, sourceLabel: src?.label } as TimelineItemLite
+  })
 
-  const signals = extractSignals((rows ?? []) as TimelineItemLite[])
+  const signals = extractSignals(items)
   const level = signals.length ? signals[0].level : 0
   const state = await readSetting<AutoPostState>(supabase, 'disaster_auto_post_state', {
     level: 0, hash: '', updatedAt: new Date(0).toISOString(),
