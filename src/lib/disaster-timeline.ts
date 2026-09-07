@@ -857,7 +857,96 @@ const manual: SourceParser = async () => []
 // パーサ表
 // ---------------------------------------------------------------------------
 
-export const PARSERS: Record<string, SourceParser> = {
+export // ============================================================
+// city-mail: 印西市の防災メール（CBI公式Gmailに届いたもの）
+//
+// 市の防災メールは、防災行政無線と並ぶ最速の公式情報。
+// 屋内では無線が聞き取れないことも多く、メールの方が確実に届く。
+// 2026-09-08 に中司さんが配信を申し込んだ。
+//
+// 受信は communitybankinzai@gmail.com。GAS の Web アプリ経由で読む
+// （gas-mail-share/コード.gs の list / detail）。
+// 接続先とパスワードは Vercel の環境変数に置く：
+//   GAS_MAIL_WEBAPP_URL / GAS_MAIL_PASSWORD
+// 未設定なら何もせず空を返す（巡回自体は止めない）。
+//
+// config:
+//   query   Gmail の検索式（既定は差出人未確定のため件名で広めに拾う）
+//   hours   何時間前まで拾うか（既定 48）
+// ⚠ 最初のメールが届いたら、差出人アドレスで絞る query に必ず直すこと。
+//   広い検索式のままだと、防災と無関係なメールを取り込んでしまう。
+// ============================================================
+const cityMail: SourceParser = async (source) => {
+  const endpoint = (process.env.GAS_MAIL_WEBAPP_URL ?? '').trim()
+  const password = (process.env.GAS_MAIL_PASSWORD ?? '').trim()
+  if (!endpoint || !password) return []
+
+  const hours = Number(configString(source, 'hours', '48')) || 48
+  const query = configString(source, 'query', 'subject:(印西 OR 防災 OR 避難 OR 気象) newer_than:2d')
+
+  const call = async (payload: Record<string, unknown>) => {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, password }),
+      // GAS はリダイレクトを返すが、-L 相当で追うと 411 になることがあるので追わない
+      redirect: 'follow',
+    })
+    if (!response.ok) throw new Error(`GAS HTTP ${response.status}`)
+    return (await response.json()) as Record<string, unknown>
+  }
+
+  const listed = await call({ action: 'list', q: query })
+  if (listed.ok !== true) throw new Error(String(listed.error ?? 'GAS list failed'))
+  const threads = Array.isArray(listed.threads) ? (listed.threads as Array<Record<string, unknown>>) : []
+
+  const limit = Date.now() - hours * 3600 * 1000
+  const drafts: TimelineItemDraft[] = []
+  for (const thread of threads.slice(0, 20)) {
+    const id = stringValue(thread.id)
+    const subject = stringValue(thread.subject)
+    const dateText = stringValue(thread.date)
+    const at = Date.parse(dateText)
+    if (!id || !Number.isFinite(at) || at < limit) continue
+
+    // 本文は詳細取得でしか取れない。取れなければ抜粋で代用する。
+    let body = stringValue(thread.snippet)
+    try {
+      const detail = await call({ action: 'detail', id })
+      const messages = Array.isArray(detail.messages)
+        ? (detail.messages as Array<Record<string, unknown>>)
+        : []
+      const last = messages[messages.length - 1]
+      const full = last ? stringValue(last.body) : ''
+      if (full) body = full
+    } catch {
+      // 抜粋のままにする
+    }
+
+    // 配信解除の案内やフッターは載せない
+    body = body
+      .split(/\r?\n/)
+      .filter((line) => !/配信.{0,4}(停止|解除|登録)|このメールは送信専用|https?:\/\/\S*unsubscribe/i.test(line))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+
+    drafts.push({
+      externalKey: `mail:${id}`,
+      occurredAt: new Date(at).toISOString(),
+      title: subject || '印西市 防災メール',
+      body: truncate(body),
+      url: null,
+      areaTag: '印西市',
+      changeType: 'new',
+      priority: 1,
+      raw: { from: stringValue(thread.from), labels: thread.labels },
+    })
+  }
+  return drafts
+}
+
+const PARSERS: Record<string, SourceParser> = {
   'city-category-html': cityCategoryHtml,
   'city-alert-xml': cityAlertXml,
   'jma-warning': jmaWarning,
@@ -868,6 +957,7 @@ export const PARSERS: Record<string, SourceParser> = {
   'x-timeline': xTimeline,
   'chiba-hinan-list': chibaHinanList,
   'jma-xml-feed': jmaXmlFeed,
+  'city-mail': cityMail,
   manual,
 }
 
@@ -882,6 +972,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'x-timeline', label: 'X（旧Twitter）公開アカウント', help: 'URLは空でよい。config: screenName（例 chibaken_saigai）、days（既定3）、keywords（カンマ区切り・指定時は該当語を含む投稿だけ）' },
   { id: 'chiba-hinan-list', label: '千葉県 避難情報一覧（市町村の開設・閉鎖）', help: 'URLは空でよい（https://www.bousai.pref.chiba.lg.jp/）。config: municipality（既定 印西市）' },
   { id: 'jma-xml-feed', label: '気象庁防災情報XML（記録的短時間大雨・洪水予報など）', help: 'URLは空でよい。config: feeds（既定 extra）、titles（拾う種類）、keywords（既定 千葉）、hours（既定 24）' },
+  { id: 'city-mail', label: '印西市 防災メール（CBI公式Gmail）', help: 'URLは空でよい。config: query（Gmail検索式・既定は件名で広めに拾う。**最初のメールが届いたら差出人で絞ること**）、hours（既定48）。Vercel の GAS_MAIL_WEBAPP_URL / GAS_MAIL_PASSWORD が未設定だと何も取り込まない' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 

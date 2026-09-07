@@ -103,6 +103,7 @@ const CITY_KINDS: Record<string, { useBody: boolean }> = {
   'city-alert-xml': { useBody: true },    // 印西市 防災行政無線
   'city-category-html': { useBody: true },// 印西市の公式ページ（防災情報・避難情報・避難所）
   'chiba-hinan-list': { useBody: true },  // 千葉県の避難情報（パーサが印西市の行だけを抜いている）
+  'city-mail': { useBody: true },         // 印西市 防災メール（市が配信するもの。件名だけでは分からないので本文も見る）
 }
 // 使わない kind（参考のため明記）:
 //   jma-overview（県の概況）／jma-quake（地震）／sns-priority（市長SNS・準公式）／
