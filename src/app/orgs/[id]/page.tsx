@@ -185,7 +185,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
               </details>
             )}
 
-            {(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url) && (
+            {(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url || org.inzaici_url) && (
               <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2 text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                 {org.website_url && (
                   <div>
@@ -219,6 +219,17 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
                   <div>
                     <dt className="text-xs text-slate-500">問い合わせ</dt>
                     <dd><a className="text-blue-600 hover:underline break-all" href={org.contact_url} target="_blank" rel="noopener noreferrer">{org.contact_url}</a></dd>
+                  </div>
+                )}
+                {org.inzaici_url && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs text-slate-500">いんざい市民情報サイト</dt>
+                    <dd>
+                      <a className="text-blue-600 hover:underline" href={org.inzaici_url} target="_blank" rel="noopener noreferrer">
+                        この団体のページを見る →
+                      </a>
+                      <span className="block text-xs text-slate-500 mt-0.5">印西市市民活動支援センターのサイトに団体が登録した情報です</span>
+                    </dd>
                   </div>
                 )}
               </dl>
