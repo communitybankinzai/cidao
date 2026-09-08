@@ -332,12 +332,14 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   const now = new Date().toISOString()
 
   if (level >= config.autoLevel) {
+    // まずテキストで速報を出す（速さを優先）。画像は撮影を待って後から Instagram へ。
     const result = await dispatch(supabase, config.media, text)
+    const shot = await requestShot(supabase, text, signals)
     await writeSetting(supabase, 'disaster_auto_post_state', {
       ...state, level, hash, updatedAt: now, lastPostedAt: now,
     })
-    await appendHistory(supabase, state, level, 'posted', result)
-    return { ...out, action: 'posted', result }
+    await appendHistory(supabase, state, level, 'posted', { ...result, shot })
+    return { ...out, action: 'posted', result: { ...result, shot } }
   }
 
   // レベル3相当：人が見てから出す
@@ -356,6 +358,61 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   const approveUrl = `${APPROVE_BASE}?token=${token}`
   await appendHistory(supabase, state, level, 'approval', { approveUrl })
   return { ...out, action: 'approval', approveUrl }
+}
+
+// 撮影で出すレイヤーを決めるため、いま何の災害かを言葉から推定する。
+// 判定に迷ったら rain（大雨）にする。印西市で最も多く、道路冠水目安も出せるため。
+export function disasterKindOf(signals: Signal[]): 'rain' | 'landslide' | 'flood' | 'quake' | 'default' {
+  const text = signals.map((s) => `${s.title}\n${s.body}`).join('\n')
+  if (/土砂災害/.test(text)) return 'landslide'
+  if (/洪水|氾濫/.test(text)) return 'flood'
+  if (/地震|震度/.test(text)) return 'quake'
+  if (/大雨|浸水|冠水|雨/.test(text)) return 'rain'
+  return 'default'
+}
+
+/**
+ * 防災MAPのスクリーンショットを撮って Instagram へ投稿する流れを起動する。
+ * 撮影は GitHub Actions が行う（Vercel ではヘッドレスブラウザを安定して動かせない）。
+ * ここが失敗しても Threads への速報は既に出ているので、例外は投げない。
+ */
+async function requestShot(
+  supabase: SupabaseClient,
+  text: string,
+  signals: Signal[],
+): Promise<{ requested: boolean; reason?: string }> {
+  const token = process.env.GITHUB_DISPATCH_TOKEN
+  const repo = process.env.GITHUB_DISPATCH_REPO ?? 'communitybankinzai/cbi-site'
+  if (!token) return { requested: false, reason: 'GITHUB_DISPATCH_TOKEN not configured' }
+
+  const requestId = randomBytes(12).toString('base64url')
+  const kind = disasterKindOf(signals)
+  try {
+    // 本文を先に保存しておく。Actions からは文面を渡させない（投稿の抜け道にしないため）
+    await writeSetting(supabase, `disaster_shot_request:${requestId}`, {
+      text,
+      media: ['instagram'],
+      kind,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+    const response = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ event_type: 'disaster-shot', client_payload: { kind, requestId } }),
+    })
+    if (!response.ok) {
+      return { requested: false, reason: `GitHub ${response.status} ${(await response.text()).slice(0, 120)}` }
+    }
+    return { requested: true }
+  } catch (error) {
+    return { requested: false, reason: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 async function dispatch(supabase: SupabaseClient, media: SnsMedium[], text: string) {
