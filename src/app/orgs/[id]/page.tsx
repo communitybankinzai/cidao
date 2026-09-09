@@ -116,6 +116,8 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
     : []
   const isEnriched = !!org.enriched_at
   const isUnverified = isEnriched && !org.info_verified
+  // 説明文が空でも、連絡先や外部リンクがあるならこのカードは出す（旧実装では説明文がない団体でブロックごと消えていた）
+  const hasContactDetails = !!(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url || org.inzaici_url)
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -165,7 +167,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           </div>
         )}
 
-        {(org.description || org.activity_detail) && (
+        {(org.description || org.activity_detail || hasContactDetails) && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
             {isUnverified && (
               <div className="text-xs px-2 py-1 inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 rounded">
@@ -185,7 +187,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
               </details>
             )}
 
-            {(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url || org.inzaici_url) && (
+            {hasContactDetails && (
               <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2 text-sm pt-2 border-t border-slate-100 dark:border-slate-800">
                 {org.website_url && (
                   <div>
