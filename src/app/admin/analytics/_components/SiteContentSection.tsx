@@ -17,7 +17,7 @@
 // 管理画面「メタバース」タブのグラフには防災MAPが出てこない。ここで補う。
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { DailyLineChart, DailyLineChartLegend } from './DailyLineChart'
+import { CHART_BLUE, CHART_ORANGE, DailyLineChart } from './DailyLineChart'
 
 type DayCount = { day: string; threeD: number; bousai: number }
 
@@ -84,6 +84,19 @@ export async function SiteContentSection() {
     })
   const chartRows = fill(DAYS)
   const recent = fill(TABLE_DAYS).reverse()
+  const days = chartRows.map((r) => r.day)
+  const charts = [
+    {
+      title: '🌏 3Dワールド',
+      series: [{ label: '3Dワールド', values: chartRows.map((r) => r.threeD), color: CHART_BLUE }],
+    },
+    {
+      title: '🗺 防災MAP',
+      series: [
+        { label: '防災MAP', values: chartRows.map((r) => r.bousai), color: CHART_ORANGE, dashed: true },
+      ],
+    },
+  ]
 
   const inRange = (r: DayCount, from: string, to: string) => r.day > from && r.day <= to
   const last7 = (daily ?? []).filter((r) => inRange(r, shiftDate(today, -7), today))
@@ -131,19 +144,18 @@ export async function SiteContentSection() {
             ))}
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between flex-wrap gap-2">
+          {/*
+            3Dワールド（最大24件）と防災MAP（最大197件）は桁が違うため、同じ縦軸に載せると
+            3D側がほぼ平坦に潰れて読めない。1系列ずつ別グラフにする。
+          */}
+          {charts.map((c) => (
+            <div key={c.title} className="space-y-2">
               <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                日別推移（直近{DAYS}日）
+                {c.title} 日別セッション数（直近{DAYS}日）
               </h3>
-              <DailyLineChartLegend labels={{ a: '🌏 3Dワールド', b: '🗺 防災MAP' }} />
+              <DailyLineChart days={days} series={c.series} ariaLabel={`${c.title}の日別セッション数の推移`} />
             </div>
-            <DailyLineChart
-              rows={chartRows.map((r) => ({ day: r.day, a: r.threeD, b: r.bousai }))}
-              labels={{ a: '3Dワールド', b: '防災MAP' }}
-              ariaLabel="3Dワールド・防災MAPの日別セッション数の推移"
-            />
-          </div>
+          ))}
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

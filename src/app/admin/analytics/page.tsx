@@ -16,7 +16,12 @@ import { createClient } from '@/lib/supabase/server'
 import { AnalyzeButton } from './_components/AnalyzeButton'
 import { MapTilesUsageSection } from './_components/MapTilesUsageSection'
 import { SiteContentSection } from './_components/SiteContentSection'
-import { DailyLineChart, DailyLineChartLegend } from './_components/DailyLineChart'
+import {
+  CHART_BLUE,
+  CHART_ORANGE,
+  DailyLineChart,
+  DailyLineChartLegend,
+} from './_components/DailyLineChart'
 
 type DailyRow = { day: string; pv: number; vv: number }
 type PathRow = { path: string; pv: number; vv: number; prev_pv: number; prev_vv: number }
@@ -105,6 +110,12 @@ export default async function AdminAnalyticsPage() {
     { label: '直近7日VV', value: sum(last7, 'vv'), compare: `前週比 ${pct(sum(last7, 'vv'), sum(prev7, 'vv'))}` },
   ]
 
+  // PV と VV は同じ桁で並べて比較したいので1枚に2系列で描く
+  const pvSeries = [
+    { label: 'PV（閲覧回数）', values: daily.map((r) => r.pv), color: CHART_BLUE },
+    { label: 'VV（訪問端末数）', values: daily.map((r) => r.vv), color: CHART_ORANGE, dashed: true },
+  ]
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -138,11 +149,11 @@ export default async function AdminAnalyticsPage() {
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-semibold">日別推移（直近30日）</h2>
-            <DailyLineChartLegend labels={{ a: 'PV（閲覧回数）', b: 'VV（訪問端末数）' }} />
+            <DailyLineChartLegend series={pvSeries} />
           </div>
           <DailyLineChart
-            rows={daily.map((r) => ({ day: r.day, a: r.pv, b: r.vv }))}
-            labels={{ a: 'PV', b: 'VV' }}
+            days={daily.map((r) => r.day)}
+            series={pvSeries}
             ariaLabel="日別PV/VV推移"
           />
         </section>
