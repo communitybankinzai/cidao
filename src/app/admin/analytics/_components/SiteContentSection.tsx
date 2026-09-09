@@ -17,6 +17,7 @@
 // 管理画面「メタバース」タブのグラフには防災MAPが出てこない。ここで補う。
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { DailyLineChart, DailyLineChartLegend } from './DailyLineChart'
 
 type DayCount = { day: string; threeD: number; bousai: number }
 
@@ -72,12 +73,17 @@ export async function SiteContentSection() {
   const daily = await fetchDaily()
   const today = jstToday()
 
-  // 記録のない日も行として出す（0だったのか計測が止まっていたのかを読み手が判断できるように）
+  // 記録のない日も 0 で埋める。
+  // 表は「0だったのか計測が止まっていたのか」を読み手が判断できるように、
+  // グラフは日付が飛んだ配列だと間隔が均等に描かれて推移を読み間違えるため。
   const byDay = new Map((daily ?? []).map((r) => [r.day, r]))
-  const recent: DayCount[] = Array.from({ length: TABLE_DAYS }, (_, i) => {
-    const day = shiftDate(today, -(TABLE_DAYS - 1 - i))
-    return byDay.get(day) ?? { day, threeD: 0, bousai: 0 }
-  }).reverse()
+  const fill = (days: number): DayCount[] =>
+    Array.from({ length: days }, (_, i) => {
+      const day = shiftDate(today, -(days - 1 - i))
+      return byDay.get(day) ?? { day, threeD: 0, bousai: 0 }
+    })
+  const chartRows = fill(DAYS)
+  const recent = fill(TABLE_DAYS).reverse()
 
   const inRange = (r: DayCount, from: string, to: string) => r.day > from && r.day <= to
   const last7 = (daily ?? []).filter((r) => inRange(r, shiftDate(today, -7), today))
@@ -123,6 +129,20 @@ export async function SiteContentSection() {
                 <p className="text-xs text-slate-500 text-right">{c.compare}</p>
               </div>
             ))}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                日別推移（直近{DAYS}日）
+              </h3>
+              <DailyLineChartLegend labels={{ a: '🌏 3Dワールド', b: '🗺 防災MAP' }} />
+            </div>
+            <DailyLineChart
+              rows={chartRows.map((r) => ({ day: r.day, a: r.threeD, b: r.bousai }))}
+              labels={{ a: '3Dワールド', b: '防災MAP' }}
+              ariaLabel="3Dワールド・防災MAPの日別セッション数の推移"
+            />
           </div>
 
           <div className="overflow-x-auto">
