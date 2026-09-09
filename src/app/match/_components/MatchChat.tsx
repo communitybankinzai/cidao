@@ -40,6 +40,26 @@ const CONFIG: Record<MatchMode, {
   },
 }
 
+// AI の回答は Markdown の **強調** を含むが、この画面は素のテキストとして描いていたため
+// 画面に ** がそのまま見えていた（2026-09-09 修正）。太字だけを反映する。
+// ストリーミング途中で ** の片側しか来ていないあいだは、閉じるまでそのまま表示される。
+function emphasize(text: string, keyBase: string): React.ReactNode[] {
+  const out: React.ReactNode[] = []
+  const re = /\*\*([^*\n]+)\*\*/g
+  let last = 0
+  let m: RegExpExecArray | null
+  let i = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index))
+    out.push(
+      <strong key={keyBase + '-b' + i++} className="font-semibold">{m[1]}</strong>,
+    )
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return out
+}
+
 function linkify(text: string, re: RegExp): React.ReactNode[] {
   const parts: React.ReactNode[] = []
   let last = 0
@@ -48,7 +68,7 @@ function linkify(text: string, re: RegExp): React.ReactNode[] {
   // 各 send 毎に新規 regex を使うため lastIndex を 0 に
   re.lastIndex = 0
   while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index))
+    if (m.index > last) parts.push(...emphasize(text.slice(last, m.index), 'e' + i))
     parts.push(
       <a key={i++} href={m[0]} target="_blank" rel="noreferrer noopener" className="underline text-sky-700 dark:text-sky-300">
         {m[0]}
@@ -56,7 +76,7 @@ function linkify(text: string, re: RegExp): React.ReactNode[] {
     )
     last = m.index + m[0].length
   }
-  if (last < text.length) parts.push(text.slice(last))
+  if (last < text.length) parts.push(...emphasize(text.slice(last), 'e' + i))
   return parts
 }
 
