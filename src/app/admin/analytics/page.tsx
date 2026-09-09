@@ -5,6 +5,8 @@
 //   - 直近30日の日別 PV / VV 推移（折れ線）
 //   - ページ別の直近7日 PV / VV と前週比
 //   - AI 分析ボタン（増減要因の仮説と推奨アクションを Claude が生成）
+//   - CBIサイト側コンテンツ（3Dワールド・防災MAP）の閲覧セッション数（SiteContentSection）
+//     こちらは別サイト・別テーブル（metaverse_presence_daily）のため PV/VV には含まれない
 //
 // イベント個別の内訳は各イベント詳細ページ（event_view_stats）が担当。
 
@@ -13,6 +15,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { AnalyzeButton } from './_components/AnalyzeButton'
 import { MapTilesUsageSection } from './_components/MapTilesUsageSection'
+import { SiteContentSection } from './_components/SiteContentSection'
 
 type DailyRow = { day: string; pv: number; vv: number }
 type PathRow = { path: string; pv: number; vv: number; prev_pv: number; prev_vv: number }
@@ -75,36 +78,69 @@ function DailyChart({ rows }: { rows: DailyRow[] }) {
   const W = 640
   const H = 200
   const PAD = { top: 10, right: 10, bottom: 24, left: 40 }
-  const max = Math.max(...rows.map((r) => r.pv), 1)
+
+  // 外れ値で縦軸が固定されるのを防ぐ。
+  // 2026-08-26 にボット由来で /events だけが 6,043PV 記録され（6,034端末が1PVのみ・12時間ほぼ一定レート）、
+  // 縦軸が 6,103 に張り付いて通常の40〜80PVが底に潰れて読めなくなった。
+  // 中央値の4倍を上限に切り、切った日は上端の▲とグラフ下の注記で実数を示す（値は隠さない）。
+  // 外れ値が全体の2割を超えるならそれは「外れ値」ではないのでクリップしない。
+  const values = rows.flatMap((r) => [r.pv, r.vv])
+  const sorted = [...values].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)] || 1
+  const cap = Math.max(median * 4, 10)
+  const clipped = rows.filter((r) => r.pv > cap || r.vv > cap)
+  const useCap = clipped.length > 0 && clipped.length <= rows.length * 0.2
+  const max = useCap ? cap : Math.max(...values, 1)
+
   const x = (i: number) => PAD.left + (i * (W - PAD.left - PAD.right)) / (rows.length - 1)
-  const y = (v: number) => H - PAD.bottom - (v * (H - PAD.top - PAD.bottom)) / max
+  const y = (v: number) => H - PAD.bottom - (Math.min(v, max) * (H - PAD.top - PAD.bottom)) / max
   const line = (key: 'pv' | 'vv') => rows.map((r, i) => `${x(i)},${y(r[key])}`).join(' ')
   const gridValues = [0, Math.round(max / 2), max]
   const fmtDay = (d: string) => d.slice(5).replace('-', '/')
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="日別PV/VV推移">
-      {gridValues.map((v) => (
-        <g key={v}>
-          <line
-            x1={PAD.left} x2={W - PAD.right} y1={y(v)} y2={y(v)}
-            className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="1"
-          />
-          <text
-            x={PAD.left - 6} y={y(v) + 4} textAnchor="end"
-            className="fill-slate-500 text-[11px]"
-          >
-            {v.toLocaleString()}
-          </text>
-        </g>
-      ))}
-      <text x={PAD.left} y={H - 6} className="fill-slate-500 text-[11px]">{fmtDay(rows[0].day)}</text>
-      <text x={W - PAD.right} y={H - 6} textAnchor="end" className="fill-slate-500 text-[11px]">
-        {fmtDay(rows[rows.length - 1].day)}
-      </text>
-      <polyline points={line('pv')} fill="none" stroke="#2563eb" strokeWidth="2" />
-      <polyline points={line('vv')} fill="none" stroke="#ea580c" strokeWidth="2" strokeDasharray="5 3" />
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="日別PV/VV推移">
+        {gridValues.map((v) => (
+          <g key={v}>
+            <line
+              x1={PAD.left} x2={W - PAD.right} y1={y(v)} y2={y(v)}
+              className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="1"
+            />
+            <text
+              x={PAD.left - 6} y={y(v) + 4} textAnchor="end"
+              className="fill-slate-500 text-[11px]"
+            >
+              {v.toLocaleString()}
+            </text>
+          </g>
+        ))}
+        <text x={PAD.left} y={H - 6} className="fill-slate-500 text-[11px]">{fmtDay(rows[0].day)}</text>
+        <text x={W - PAD.right} y={H - 6} textAnchor="end" className="fill-slate-500 text-[11px]">
+          {fmtDay(rows[rows.length - 1].day)}
+        </text>
+        <polyline points={line('pv')} fill="none" stroke="#2563eb" strokeWidth="2" />
+        <polyline points={line('vv')} fill="none" stroke="#ea580c" strokeWidth="2" strokeDasharray="5 3" />
+        {useCap && clipped.map((r) => {
+          const i = rows.indexOf(r)
+          const cx = x(i)
+          const top = PAD.top
+          return (
+            <polygon
+              key={r.day}
+              points={`${cx},${top} ${cx - 4},${top + 7} ${cx + 4},${top + 7}`}
+              fill="#dc2626"
+            />
+          )
+        })}
+      </svg>
+      {useCap && (
+        <p className="text-xs text-amber-700 dark:text-amber-500">
+          ▲ 縦軸を {cap.toLocaleString()} で切っています（外れ値で他の日が読めなくなるため）。
+          実数：{clipped.map((r) => `${fmtDay(r.day)} PV ${r.pv.toLocaleString()}／VV ${r.vv.toLocaleString()}`).join('、')}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -250,6 +286,8 @@ export default async function AdminAnalyticsPage() {
             </div>
           )}
         </section>
+
+        <SiteContentSection />
 
         <MapTilesUsageSection />
 
