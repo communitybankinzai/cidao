@@ -7,10 +7,48 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { nameWithSan } from '@/lib/honorific'
-import { notifyAllMembers } from '@/lib/notify'
+import { notifyAllMembers, insertNotification } from '@/lib/notify'
 import { announceOrgToSns } from '@/lib/sns-announce'
 import { TYPE_LABEL } from '@/lib/org-labels'
 import { recordWrite } from '@/lib/audit'
+import { isAwaitingRepresentative } from '@/lib/org-placeholder'
+
+/**
+ * 団体への所属申告・参加申請が入ったことを CiDAO 管理者へ知らせる。
+ * これが無かったため /admin/claims に7件の申請が42〜46日たまっていた（2026-09-09 発覚）。
+ * 申請は本人の生活時間で起きるので、管理画面を見に行く運用に依存させない。
+ */
+async function notifyAdminsOfClaim(orgIds: string[], actorId: string) {
+  if (orgIds.length === 0) return
+  let admin: ReturnType<typeof createAdminClient>
+  try {
+    admin = createAdminClient()
+  } catch {
+    return  // service role 未設定の環境では通知を諦める（申請そのものは成立させる）
+  }
+  const [{ data: admins }, { data: orgs }, { data: me }] = await Promise.all([
+    admin.from('members').select('id').not('admin_role', 'is', null),
+    admin.from('organizations').select('id, name').in('id', orgIds),
+    admin.from('members').select('display_name').eq('id', actorId).maybeSingle(),
+  ])
+  if (!admins?.length) return
+  const names = (orgs ?? []).map((o) => o.name).join('、') || '団体'
+  const who = me?.display_name ? nameWithSan(me.display_name) : '会員'
+  await Promise.all(
+    admins
+      .filter((a) => a.id !== actorId)
+      .map((a) =>
+        insertNotification({
+          recipientId: a.id,
+          actorId,
+          kind: 'system',
+          title: `${who}から団体「${names}」への所属申告が届きました`,
+          body: '管理画面の「所属申告」から承認・却下できます',
+          linkUrl: '/admin/claims',
+        }),
+      ),
+  )
+}
 
 type OrgInput = {
   name: string
@@ -313,7 +351,9 @@ export async function requestJoinOrg(orgId: string) {
     status: 'claimed',
   })
   if (error) throw new Error(`参加申請失敗: ${error.message}`)
+  after(async () => { await notifyAdminsOfClaim([orgId], user.id) })
   revalidatePath(`/orgs/${orgId}`)
+  revalidatePath('/admin/claims')
   return { alreadyExists: false, status: 'claimed' as const, role: 'member' as const }
 }
 
@@ -350,6 +390,7 @@ export async function claimMemberships(claims: OrgClaim[]) {
   const { error } = await supabase.from('memberships').insert(toInsert)
   if (error) throw new Error(`所属申告失敗: ${error.message}`)
 
+  after(async () => { await notifyAdminsOfClaim(toInsert.map((t) => t.org_id), user.id) })
   revalidatePath('/me')
   revalidatePath('/admin/claims')
   return { inserted: toInsert.length, skipped: claims.length - toInsert.length }
@@ -387,7 +428,9 @@ export async function approveClaim(orgId: string, memberId: string) {
       .single()
     if (org) {
       const updates: { representative_id?: string; public_flag?: boolean } = {}
-      if (!org.representative_id) updates.representative_id = memberId
+      // 代理登録された団体には placeholder の代表者IDが入っている。空のときだけ更新していると
+      // 承認しても「代表者の更新をお待ちしています」の表示が残るため、placeholder も置き換える。
+      if (isAwaitingRepresentative(org.representative_id)) updates.representative_id = memberId
       if (!org.public_flag) updates.public_flag = true
       if (Object.keys(updates).length > 0) {
         await supabase.from('organizations').update(updates).eq('id', orgId)
@@ -408,6 +451,21 @@ export async function approveClaim(orgId: string, memberId: string) {
       }
     }
   }
+
+  // 申請者本人へ承認を知らせる。これが無いと、承認されたことに本人が気づけない
+  after(async () => {
+    const { data: o } = await supabase.from('organizations').select('name').eq('id', orgId).maybeSingle()
+    await insertNotification({
+      recipientId: memberId,
+      actorId: user.id,
+      kind: 'system',
+      title: `団体「${o?.name ?? ''}」への所属申告が承認されました`,
+      body: row?.role === 'representative'
+        ? '団体ページの情報をご自身で編集できるようになりました'
+        : undefined,
+      linkUrl: `/orgs/${orgId}`,
+    })
+  })
 
   revalidatePath('/admin/claims')
   revalidatePath('/orgs')
