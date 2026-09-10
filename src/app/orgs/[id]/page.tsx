@@ -315,6 +315,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           myTier={myMemberForInterest?.tier ?? null}
           isLoggedIn={!!user}
           hasOrgEmail={!!org.contact_email}
+          recruitmentStatus={org.recruitment_status ?? null}
         />
 
         {(myActiveMembership?.status === 'confirmed' || canEdit) && (

@@ -551,7 +551,12 @@ export type OrgEditInput = {
   legal_form?: string | null
   inzai_registration_number?: string | null
   logo_url?: string | null
+  recruitment_status?: string | null
 }
+
+// organizations.recruitment_status は enum + not null default 'unknown'。
+// 想定外の値が来たら 'unknown' に倒す（DB エラーで保存全体を落とさないため）
+const RECRUITMENT_STATUS_VALUES = ['open', 'closed', 'invitation_only', 'unknown'] as const
 
 export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   const supabase = await createClient()
@@ -585,6 +590,11 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   if (input.legal_form !== undefined) updates.legal_form = clean(input.legal_form)
   if (input.inzai_registration_number !== undefined) updates.inzai_registration_number = clean(input.inzai_registration_number)
   if (input.logo_url !== undefined) updates.logo_url = clean(input.logo_url)
+  if (input.recruitment_status !== undefined) {
+    const v = clean(input.recruitment_status)
+    updates.recruitment_status =
+      v && (RECRUITMENT_STATUS_VALUES as readonly string[]).includes(v) ? v : 'unknown'
+  }
   if (input.sns_links !== undefined) {
     if (!input.sns_links) {
       updates.sns_links = {}

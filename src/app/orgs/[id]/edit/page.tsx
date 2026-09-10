@@ -23,6 +23,15 @@ const SNS_FIELDS = [
   { key: 'blog', label: 'ブログ', placeholder: 'https://...' },
 ]
 
+// メンバー募集状況。団体ページの応募動線（InterestForm）と
+// マイページの団体マッチングの出し分けに使う
+const RECRUITMENT_OPTIONS: { value: string; label: string; hint: string }[] = [
+  { value: 'unknown', label: '⚪ 未設定（募集状況を明示しない）', hint: '団体ページに応募ボタンを表示します' },
+  { value: 'open', label: '🟢 募集中', hint: '団体ページに応募ボタンを表示します' },
+  { value: 'invitation_only', label: '🔵 紹介・招待のみ', hint: '応募ボタンを表示しません' },
+  { value: 'closed', label: '⛔ 募集していない', hint: '応募ボタンを表示しません' },
+]
+
 export default async function EditOrgPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -96,6 +105,7 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
       contact_url: formData.get('contact_url') as string,
       legal_form: formData.get('legal_form') as string,
       inzai_registration_number: formData.get('inzai_registration_number') as string,
+      recruitment_status: formData.get('recruitment_status') as string,
       sns_links: snsOut,
       ...(newLogoUrl !== undefined && { logo_url: newLogoUrl }),
     })
@@ -163,6 +173,23 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
               className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-slate-800"
               placeholder="団体一覧などで表示される短い紹介文"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="recruitment_status">メンバー募集状況</label>
+            <select
+              id="recruitment_status"
+              name="recruitment_status"
+              defaultValue={org.recruitment_status ?? 'unknown'}
+              className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-slate-800"
+            >
+              {RECRUITMENT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              「紹介・招待のみ」「募集していない」を選ぶと、団体ページの「この団体で活動したい」応募ボタンが表示されなくなります。
+            </p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">

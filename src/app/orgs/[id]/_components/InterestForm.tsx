@@ -11,6 +11,7 @@ export function InterestForm({
   myTier,
   isLoggedIn,
   hasOrgEmail,
+  recruitmentStatus,
 }: {
   orgId: string
   orgName: string
@@ -18,6 +19,7 @@ export function InterestForm({
   myTier: string | null
   isLoggedIn: boolean
   hasOrgEmail: boolean
+  recruitmentStatus: string | null
 }) {
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
@@ -25,6 +27,10 @@ export function InterestForm({
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<{ ok: boolean; emailSent: boolean; emailError: string | null; hasOrgEmail: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // 団体が「募集していない」「紹介・招待のみ」を選んでいるときは応募動線ごと出さない
+  // （設定は /orgs/[id]/edit の「メンバー募集状況」。既定の unknown / open では表示する）
+  if (recruitmentStatus === 'closed' || recruitmentStatus === 'invitation_only') return null
 
   if (!isLoggedIn) {
     return (
