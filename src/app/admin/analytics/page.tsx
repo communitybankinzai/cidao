@@ -5,8 +5,7 @@
 //   - 直近30日の日別 PV / VV 推移（折れ線）
 //   - ページ別の直近7日 PV / VV と前週比
 //   - AI 分析ボタン（増減要因の仮説と推奨アクションを Claude が生成）
-//   - CBIサイト側コンテンツ（3Dワールド・防災MAP）の閲覧セッション数（SiteContentSection）
-//     こちらは別サイト・別テーブル（metaverse_presence_daily）のため PV/VV には含まれない
+//   - CBIコンテンツのPV/VVはCBI管理画面へ分離（別テーブル・この集計には含めない）
 //
 // イベント個別の内訳は各イベント詳細ページ（event_view_stats）が担当。
 
@@ -15,7 +14,6 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { AnalyzeButton } from './_components/AnalyzeButton'
 import { MapTilesUsageSection } from './_components/MapTilesUsageSection'
-import { SiteContentSection } from './_components/SiteContentSection'
 import {
   CHART_BLUE,
   CHART_ORANGE,
@@ -226,7 +224,7 @@ export default async function AdminAnalyticsPage() {
           )}
         </section>
 
-        <SiteContentSection />
+        <p className="text-sm"><a href="https://communitybankinzai.github.io/cbi-site/admin/#metaverse" className="underline">CBIサイトの3Dワールド・防災MAPのPV/VVはCBI管理画面へ</a></p>
 
         <MapTilesUsageSection />
 
