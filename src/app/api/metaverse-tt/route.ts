@@ -37,7 +37,9 @@ const COURSES: Record<string, { checkpoints: number; minSecondsPerLeg: number; n
 const MSY_START = { lat: 35.813423, lon: 140.20665 } // 本埜の白鳥の郷
 const MSY_STATION = { lat: 35.799983, lon: 140.116119 } // 千葉ニュータウン中央駅
 const MSY_HOME = { lat: 35.840096, lon: 140.146774 } // 岩井家住宅主屋（旧武蔵屋店舗）
-const MSY_MAX_SPEED_MPS = 130 // 加速×4 の最高速（約120m/s）＋余裕。平均がこれより速ければ flag
+// 1人用の最高速＝飛行30m/s × 加速（RB/Shift）4 × ⚡速度切替4 ＝ 480m/s。これに余裕を足した値を超える平均は flag
+// （2026-09-13 当初 130 にしていて、⚡×4 で飛んだ正当な記録（160m/s）を誤って除外した）
+const MSY_MAX_SPEED_MPS = 520
 type LatLon = { lat: number; lon: number }
 function distM(a: LatLon, b: LatLon): number {
   const R = 6371000
