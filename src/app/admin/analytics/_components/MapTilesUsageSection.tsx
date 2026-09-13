@@ -232,9 +232,16 @@ function formatDateTime(value: string): string {
   }).format(new Date(value))
 }
 
-// 本日の消費を1日クォータ（既定30,000・自動調整で変動あり）と対比して表示する。
-// 2026-08-21に30,000/日へ到達し3D表示が止まった実績があるため、80%で警告色にする
-const DAILY_QUOTA_BASELINE = 30000
+// 本日の消費を1日の上限と対比して表示する。80%で警告色にする。
+// 上限は「3D Tiles renderer requests（1日）」の実効値。2026-08-21 に当時の 30,000/日へ到達して
+// 3D表示が止まったため、2026-08-23 に Cloud Console で 500,000/日へ引き上げた（即時承認）。
+// 2026-09-13 に scripts/gcp-maptiles-audit.ps1 で実効値 500,000（利用者上書き）を確認済み。
+// Console 側を変えたら、ここと /api/metaverse-usage の RENDERER_LIMIT_PER_DAY を必ず揃えること
+// （片方だけ 30,000 のまま残り、94,655件で「316%・上限到達」と誤表示した実績あり）。
+//
+// 比べている件数（request_count）は root＋renderer の合計。root の上限は1日30回なので
+// renderer の上限と比べても誤差は最大30件で、判定には影響しない。
+const DAILY_QUOTA_BASELINE = 500000
 
 function TodayQuota({ daily }: { daily: DailyRequestCount[] }) {
   const today = daily.length ? daily[daily.length - 1] : null
@@ -251,7 +258,7 @@ function TodayQuota({ daily }: { daily: DailyRequestCount[] }) {
       ) : pct >= 80 ? (
         <p className="text-xs text-amber-600">上限が近づいています</p>
       ) : (
-        <p className="text-xs text-slate-500">既定30,000/日・自動調整で変動あり</p>
+        <p className="text-xs text-slate-500">上限500,000/日（2026-08-23に引き上げ）</p>
       )}
     </div>
   )
