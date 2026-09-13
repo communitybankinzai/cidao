@@ -35,6 +35,7 @@ const COURSE_LABEL: Record<string, string> = {
   full: '🏁 完走（50か所）',
   night: '🌃 夜景 いんザイ君ゲート（10か所）',
   night5: '🌃 夜景 短縮（5か所）',
+  musashiya: '🏠 武蔵屋めぐり（平均の速さで順位）',
 }
 const AGE_LABEL: Record<string, string> = {
   kids: '小学生以下',
