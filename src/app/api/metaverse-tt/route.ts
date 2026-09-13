@@ -449,9 +449,13 @@ export async function POST(request: Request) {
         .from('metaverse_tt_trials')
         .select('id, status, checkpoints_total, checkpoints_passed, started_at, last_checkpoint_at, flags, course_key')
         .eq('id', trialId)
-        .single()
-      if (error || !trial) return json(request, { error: 'trial not found' }, 404)
+        .maybeSingle()
+      // DB の一時的なエラーは 502（クライアントがやり直す）。本当に無いときだけ 404
+      if (error) throw new Error(error.message)
+      if (!trial) return json(request, { error: 'trial not found' }, 404)
       if (trial.status !== 'running') return json(request, { error: 'trial not running' }, 409)
+      // 同じ地点の再送（通信の失敗でクライアントがやり直した）は受け流す。順番違いの flag を付けない
+      if (pos > 0 && pos === trial.checkpoints_passed) return json(request, { ok: true, passed: pos, duplicate: true })
       const flags: string[] = Array.isArray(trial.flags) ? trial.flags : []
       if (pos !== trial.checkpoints_passed + 1 || pos > trial.checkpoints_total) {
         flags.push(`order:${trial.checkpoints_passed}->${pos}`)
@@ -476,10 +480,20 @@ export async function POST(request: Request) {
       if (!trialId) return json(request, { error: 'invalid finish' }, 400)
       const { data: trial, error } = await supabase
         .from('metaverse_tt_trials')
-        .select('id, status, checkpoints_total, checkpoints_passed, started_at, flags, course_key, name, route_m')
+        .select('id, status, checkpoints_total, checkpoints_passed, started_at, flags, course_key, name, route_m, elapsed_ms, record_code')
         .eq('id', trialId)
-        .single()
-      if (error || !trial) return json(request, { error: 'trial not found' }, 404)
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!trial) return json(request, { error: 'trial not found' }, 404)
+      // ゴールの再送（前回の応答が届かなかった）は、確定済みの結果をそのまま返す
+      if ((trial.status === 'finished' || trial.status === 'flagged') && trial.elapsed_ms != null) {
+        const rm = Number(trial.route_m)
+        const em = Number(trial.elapsed_ms)
+        return json(request, {
+          elapsedMs: em, recordCode: trial.record_code, flagged: trial.status === 'flagged', rank: null,
+          routeM: rm > 0 ? rm : null, speedKmh: rm > 0 && em > 0 ? kmh(rm / (em / 1000)) : null, duplicate: true,
+        })
+      }
       if (trial.status !== 'running') return json(request, { error: 'trial not running' }, 409)
       if (trial.checkpoints_passed !== trial.checkpoints_total) {
         return json(request, { error: 'not all checkpoints passed' }, 409)
