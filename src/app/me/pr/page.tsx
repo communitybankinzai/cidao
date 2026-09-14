@@ -47,7 +47,7 @@ export default async function MyPrPage() {
 
     // 公開PRを初めて作った＝「登録メンバー」一覧に載った瞬間に、全メンバーへ知らせる。
     // message_acceptance='closed' は一覧に出ない（/talent が除外している）ので通知しない
-    if (!existing && payload.message_acceptance !== 'closed') {
+    if (!existing && payload.message_acceptance !== 'closed' && payload.public_scope !== 'consent_only') {
       const { data: me } = await sb
         .from('members')
         .select('display_name')

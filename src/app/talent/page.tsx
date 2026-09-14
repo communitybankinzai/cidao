@@ -25,7 +25,7 @@ export default async function TalentPage() {
             <p className="text-sm text-slate-500 mt-2">スキル・経験を活かしたい人と募集する人をつなぐ。AI と会話で探したい場合は <Link href="/match?mode=members" className="underline hover:text-slate-700 dark:hover:text-slate-300">マッチング相談</Link> をご利用ください。</p>
           </div>
           {user && (
-            <Link href="/me/pr"><Button variant="outline">自分のPRを編集</Button></Link>
+            <div className="flex flex-wrap gap-2"><Link href="/me/pr"><Button variant="outline">自分のPRを編集</Button></Link><Link href="/talent/interview" className="text-sm underline">AIインタビューで登録（試行版）</Link></div>
           )}
         </header>
 
