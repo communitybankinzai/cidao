@@ -1,6 +1,6 @@
 # CiDAO
 
-地域の会員・団体、提案・投票、イベントなどを扱う Next.js / Supabase アプリです。AIインタビュー型人材バンクは段階開発で追加します。Phase 1 はサーバーライブラリと DB 基盤のみで、登録画面や公開フローはまだありません。
+地域の会員・団体、提案・投票、イベントなどを扱う Next.js / Supabase アプリです。AIインタビュー型人材バンクは段階開発で追加します。Phase 1 の共通基盤に、Phase 2 の受付・同意・AIインタビュー・まとめ表示を追加しました。プロフィール生成・編集・公開は後続フェーズです。
 
 ## 前提とセットアップ
 
@@ -86,6 +86,48 @@ VOICEVOX は DB 初期単価で 0 円です。usage の取れない失敗や未�
 **Phase 4 で追記予定**。Phase 1 にはレンダラー、FFmpeg 処理、GitHub Actions ジョブ、画像生成 API はありません。将来の動画終了カードと SNS 文には `VOICEVOX:ずんだもん` のクレジットを入れ、本人承認＋運営承認を経て公開します。
 
 ## 人材バンクのフェーズ
+
+### インタビューの動かし方（Phase 2）
+
+Phase 1 の適用後、`supabase/migrations/20260915120000_talent_bank_phase2.sql` を適用した環境で利用します。今回の作業ではDB接続・マイグレーション適用・実API呼び出しをしていません。
+
+1. ログインして `/talent/interview` を開きます。`/talent` の「AIインタビューで登録（試行版）」からも進めます。
+2. 18歳以上の本人であることを確認し、個人／店舗／団体と表示名を入力します。店舗・団体は代表者本人のチェックも必須です。
+3. `interview` と `external_ai` の同意文を読み、「同意して始める」で対象subjectに現行版の同意を記録します。現行のPhase 1同意文は仮文面です。
+4. 質問に文字で回答します。Web Speech API対応ブラウザでは「マイクで入力」も利用できます。音声認識の結果は送信前に確認できます。質問の読み上げ・サーバー文字起こし・VOICEVOX呼び出しはありません。
+5. 必須の進捗は8項目で表示します。「後で続ける」で中断し、同じページの「インタビューを再開する」で続けます。端末上の未送信文は保存しません。
+6. AI判定とサーバーの必須チェックが両方そろうと完了し、項目ごとのまとめを表示します。編集はPhase 3です。完了後に開き直しても新規インタビューを自動作成しません。
+
+`POST /api/talent-bank/interview` は `{action:'start'|'turn'|'pause', text?:string}` を受け取り、ログインセッションから本人とインタビューを特定します。未ログインは401、他の失敗は200＋`{ok:false,reason}`。回答は1〜4000文字、AI呼び出し枠は1インタビュー40回まで（失敗も消費）、操作は1人あたり1分10回の簡易制限です。40回目までは受け付け、41回目を拒否します。
+
+AI失敗時も回答は保存します。保存結果が不明な通信エラーでは自動再送せず、「保存内容を読み直す」で確認してください。DBの処理中リースは5分で失効するため、サーバーが異常終了した直後は再開を待つ場合があります。入力内容の途中変更は自動保存ではなく「送信」で確定します。
+
+### `interviews` / `interview_messages` の読み方
+
+| テーブル・列 | 意味 |
+|---|---|
+| `interviews.member_id` / `subject_id` | 操作した会員／紹介対象。店舗・団体では本人person行を残し、代表者所有のshop/org行を対象にする |
+| `kind` / `status` | Phase 2は`talent`のみ。`active`・`paused`・`done`・`abandoned`。同じ会員・kindのactiveは最大1件 |
+| `collected_json` | field_keyごとに`state`、`value`、`evidence`（根拠のユーザー発話ID）、`updated_at`を保存 |
+| `state` | `answered`=回答あり、`none`=該当なし、`declined`=答えたくない、`unknown`=未回答・不明。必須は前3種がそろう必要がある |
+| `sufficiency_json` | AIとサーバーの充足判定・未回答必須キー。処理中だけ`in_flight`と`lease_until`、AI失敗時は分類コードを保持 |
+| `turn_count` | 消費済みAI呼び出し枠。失敗・途中終了も含む。挨拶は0回 |
+| `started_at` / `last_activity_at` / `completed_at` | 開始／最終操作／完了時刻 |
+| `interview_messages.seq` | 表示順。挨拶0、ターンnのuserは2n−1、assistantは2n。失敗や期限削除による欠番は正常 |
+| `role` / `content` | user・assistant・system／会話原文。画面にはuserとassistantを表示 |
+| `run_id` | AIのassistant発話と`api_usage.run_id`を対応させる。固定挨拶はNULL。`api_usage.case_id`はインタビューID |
+
+本人と`is_admin()`を満たす運営だけが原文を閲覧でき、会話の挿入は本人のみです。本人にも原文のupdate/delete権限はありません。運営へのwrite権限は付与していません。`claim_interview_turn` / `finish_interview_turn` は本人のRLS下で回答・回数確保と応答・完了保存をそれぞれ原子的に行う内部RPCです。
+
+必須キーは `display_name` / `activities` / `can_do` / `accepts_requests` / `paid_or_free` / `areas` / `available_times` / `passion`。任意は12項目です。`reason_started`は任意、`motivation`キーは使用しません。住所・電話・メールを質問項目に含めません。
+
+### 会話原文の1年削除cron
+
+`cidao_purge_interview_messages` を `15 3 * * *`（既存cronと同じUTC 03:15、JST 12:15）で登録します。再適用では同名ジョブだけをunscheduleして再登録します。実行内容は `delete from public.interview_messages where created_at < now() - interval '365 days'` です。
+
+削除対象は会話原文です。`collected_json`と費用記録は残り、`evidence`のIDに対応する原文が期限削除済みの場合があります。evidenceはJSON内のID配列で外部キーではありません。適用担当者はDB上でRLS・RPC・cronの実行と保存期間を確認してください（今回の検証はモックのみ）。
+
+Phase 2の検証・制約は [Phase 2 報告](docs/talent-bank/phase2-report.md) に記録しています。Windowsの制限環境で通常のVitest起動が`spawn EPERM`となる場合は、既存のNode 24で `npx vitest run --configLoader native --pool=threads` を利用できます。依存追加やテスト設定の変更は不要です。
 
 | Phase | 内容 |
 |---|---|

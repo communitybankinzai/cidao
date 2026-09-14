@@ -37,10 +37,28 @@ export type WorkLog = {
   started_at: string; ended_at: string | null; minutes: number | null; edit_count: number
   note: string | null; created_at: string
 }
+export type CollectedField = {
+  state: 'answered' | 'none' | 'declined' | 'unknown'
+  value: string | null; evidence: string[]; updated_at: string
+}
+export type CollectedFields = Record<string, CollectedField>
+export type Interview = {
+  id: string; subject_id: string; member_id: string; kind: 'talent' | 'request'
+  status: 'active' | 'paused' | 'done' | 'abandoned'
+  collected_json: CollectedFields; sufficiency_json: Json | null; turn_count: number
+  started_at: string; last_activity_at: string; completed_at: string | null
+  created_at: string; updated_at: string
+}
+export type InterviewMessage = {
+  id: string; interview_id: string; seq: number; role: 'user' | 'assistant' | 'system'
+  content: string; run_id: string | null; created_at: string
+}
 type Table<Row, Required extends keyof Row, Update = Partial<Row>> = {
   Row: Row; Insert: Pick<Row, Required> & Partial<Omit<Row, Required>>; Update: Update; Relationships: []
 }
 type Phase1Tables = {
+  interviews: Table<Interview, 'subject_id' | 'member_id'>
+  interview_messages: Table<InterviewMessage, 'interview_id' | 'seq' | 'role' | 'content', never>
   talent_subjects: Table<TalentSubject, 'owner_member_id' | 'subject_type' | 'display_name'>
   consents: Table<Consent, 'member_id' | 'kind' | 'text_version' | 'text_hash', { revoked_at?: string }>
   api_usage: Table<ApiUsage, 'run_id' | 'provider' | 'model' | 'purpose' | 'status'>
@@ -51,6 +69,18 @@ type Phase1Tables = {
   app_settings: Table<{ key: string; value: Json; updated_at: string; updated_by: string | null }, 'key' | 'value'>
 }
 export type TalentBankDatabase = Omit<Database, 'public'> & {
-  public: Omit<Database['public'], 'Tables'> & { Tables: Database['public']['Tables'] & Phase1Tables }
+  public: Omit<Database['public'], 'Tables' | 'Functions'> & {
+    Tables: Database['public']['Tables'] & Phase1Tables
+    Functions: Database['public']['Functions'] & {
+      claim_interview_turn: {
+        Args: { p_id: string; p_expected_count: number; p_token: string; p_message_id: string; p_content: string }
+        Returns: boolean
+      }
+      finish_interview_turn: {
+        Args: { p_id: string; p_token: string; p_content: string; p_run_id: string; p_collected: Json; p_sufficiency: Json; p_done: boolean }
+        Returns: boolean
+      }
+    }
+  }
 }
 export type ApiUsageInsert = Phase1Tables['api_usage']['Insert']
