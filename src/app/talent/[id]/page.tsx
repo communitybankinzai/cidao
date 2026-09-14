@@ -4,11 +4,16 @@ import { createClient } from '@/lib/supabase/server'
 import { Avatar } from '@/components/ui/avatar'
 import { nameWithSan } from '@/lib/honorific'
 import { ContactForm } from './_components/ContactForm'
+import { getPublicProfile } from '@/lib/talent-bank/profile/read'
+import ProfileContent from '@/app/me/talent/_components/ProfileContent'
 
-export default async function TalentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TalentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ subject?: string }> }) {
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  const { subject } = await searchParams
+  const candidate = await getPublicProfile(subject ? { subjectId: subject } : { memberId: id })
+  const published = candidate?.profile.member_id === id ? candidate : null
 
   const { data: member } = await supabase
     .from('members')
@@ -40,17 +45,18 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
             objectPosition={member.avatar_position ?? undefined}
             zoom={member.avatar_zoom ?? undefined}
           />
-          <h1 className="text-3xl font-serif font-bold">{member.display_name}</h1>
+          <h1 className="text-3xl font-serif font-bold">{published?.version.fields_json.display_name?.value ?? member.display_name}</h1>
         </header>
 
-        {member.skills_text && (
+        {published && <ProfileContent fields={published.version.fields_json} short={published.version.summary_short} long={published.version.summary_long} tags={published.tags} />}
+        {!published && member.skills_text && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
             <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">スキル</h2>
             <p className="text-sm">{member.skills_text}</p>
           </div>
         )}
 
-        {pr && (
+        {!published && pr && (
           <>
             {pr.qualifications && (
               <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
@@ -100,7 +106,7 @@ export default async function TalentDetailPage({ params }: { params: Promise<{ i
           </>
         )}
 
-        {member.self_introduction && (
+        {!published && member.self_introduction && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
             <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">自己紹介</h2>
             <p className="text-sm whitespace-pre-wrap">{member.self_introduction}</p>

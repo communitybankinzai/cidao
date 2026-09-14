@@ -2,17 +2,29 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { searchPublicProfiles, withoutPublishedLegacy } from '@/lib/talent-bank/profile/read'
 
-export default async function TalentPage() {
+export default async function TalentPage({ searchParams }: { searchParams: Promise<{ q?: string; tag?: string; area?: string }> }) {
+  const filters = await searchParams
+  const published = await searchPublicProfiles()
+  const matching = filters.q || filters.tag || filters.area ? await searchPublicProfiles(filters) : published
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   // RLS により公開範囲に応じてフィルタされる
-  const { data: profiles } = await supabase
+  const { data: legacy } = await supabase
     .from('member_profiles_pr')
     .select('member_id, qualifications, contributions, available_times, message_acceptance, members(display_name, skills_text, avatar_url, avatar_position, avatar_zoom)')
     .neq('message_acceptance', 'closed')
     .limit(50)
+
+  const profiles = withoutPublishedLegacy(legacy ?? [], published).filter(p => {
+    if (filters.tag || filters.area) return false // Legacy profiles have no structured tags or activity areas.
+    if (!filters.q?.trim()) return true
+    const member = Array.isArray(p.members) ? p.members[0] : p.members
+    return [member?.display_name, member?.skills_text, p.contributions, p.qualifications].some(value =>
+      value?.normalize('NFKC').toLocaleLowerCase().includes(filters.q!.normalize('NFKC').trim().toLocaleLowerCase()))
+  })
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -29,10 +41,23 @@ export default async function TalentPage() {
           )}
         </header>
 
-        {!profiles || profiles.length === 0 ? (
+        <form action="/talent" className="grid gap-3 rounded-lg border bg-white dark:bg-slate-900 p-4 sm:grid-cols-2">
+          <label className="text-sm">キーワード<input name="q" defaultValue={filters.q} placeholder="表示名・紹介・タグ" maxLength={100} className="mt-1 w-full rounded border bg-background p-2" /></label>
+          <label className="text-sm">活動地域<input name="area" defaultValue={filters.area} placeholder="印西市・オンラインなど" maxLength={100} className="mt-1 w-full rounded border bg-background p-2" /></label>
+          <label className="text-sm">タグ<select name="tag" defaultValue={filters.tag ?? ''} className="mt-1 w-full rounded border bg-background p-2"><option value="">すべて</option>{Array.from(new Map(published.flatMap(p => p.tags).map(t => [t.slug, t])).values()).map(t => <option key={t.slug} value={t.slug}>{t.label}</option>)}</select></label>
+          <div className="flex items-end gap-3"><Button type="submit">検索</Button><Link href="/talent" className="text-sm underline">条件を解除</Link></div>
+          {user && <Link href="/me/talent" className="text-sm underline">プロフィールの確認・編集</Link>}
+        </form>
+
+        {profiles.length === 0 && matching.length === 0 ? (
           <p className="text-slate-400 text-center py-12">公開中の人材プロフィールはまだありません</p>
         ) : (
           <ul className="grid md:grid-cols-2 gap-3">
+            {matching.map(p => <li key={p.profile_id}><Link href={`/talent/${p.member_id}?subject=${p.subject_id}`} className="block h-full bg-white dark:bg-slate-900 border rounded-lg p-4 hover:border-slate-400">
+              <h2 className="font-semibold">{p.display_name}</h2><p className="mt-2 text-sm line-clamp-3">{p.summary_short}</p>
+              <ul className="mt-3 flex flex-wrap gap-2" aria-label="タグ">{p.tags.slice(0, 3).map(t => <li key={t.id} className="rounded-full bg-muted px-2 py-1 text-xs">{t.label}</li>)}</ul>
+              <p className="mt-2 text-xs text-sky-600">詳細を見て声をかける →</p>
+            </Link></li>)}
             {profiles.map((p) => {
               const mem = (Array.isArray(p.members) ? p.members[0] : p.members) as
                 | { display_name: string; skills_text: string | null; avatar_url: string | null; avatar_position: string | null; avatar_zoom: number | null }
