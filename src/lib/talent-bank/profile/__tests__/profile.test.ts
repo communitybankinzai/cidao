@@ -68,9 +68,11 @@ describe('generation', () => {
     mocks.ai.mockRejectedValue(new Error('private service details'))
     await expect(generate()).rejects.toThrow(); expect(db.tables.talent_profile_versions).toHaveLength(1)
   })
-  it('refuses an oversized summary', async () => {
+  it('clips an oversized summary instead of failing (schema cannot enforce maxLength)', async () => {
     mocks.ai.mockResolvedValueOnce({ structured: { summary_short: '長'.repeat(81), summary_long: '', fields: {} } })
-    await expect(generate()).rejects.toThrow('invalid_text'); expect(db.tables.talent_profile_versions).toHaveLength(1)
+    await generate()
+    const saved = db.tables.talent_profile_versions.at(-1) as { summary_short: string }
+    expect([...saved.summary_short]).toHaveLength(80)
   })
   it('reports transaction failure', async () => {
     db.fail(); await expect(generate()).rejects.toThrow('storage_unavailable')
