@@ -105,10 +105,17 @@ export async function postToMedium(
     const token = creds?.threads?.access_token ?? process.env.THREADS_ACCESS_TOKEN
     if (!userId || !token) return { status: 'pending', message: 'credentials missing: 管理画面のSNS接続設定（またはTHREADS_USER_ID / THREADS_ACCESS_TOKEN）' }
     // Threads API は 2 ステップ：コンテナ作成 → publish（テキスト投稿は 500 字まで）
+    const createParams: Record<string, string> = { media_type: 'TEXT', text: content.slice(0, 500), access_token: token }
+    // 本文中の最初のURLを link_attachment としても明示添付する。
+    // テキスト内に書いただけのURLは Threads 上で確実にはリンク化されず
+    // 「リンクがつながらない」状態になるため（2026-09-14 提案告知で発生）。
+    // 添付するとタップ可能なリンクカードが投稿に付く。本文（承認済み文面）は変えない
+    const firstUrl = content.match(/https?:\/\/[^\s）」]+/)
+    if (firstUrl) createParams.link_attachment = firstUrl[0]
     const create = await fetch(`https://graph.threads.net/v1.0/${userId}/threads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ media_type: 'TEXT', text: content.slice(0, 500), access_token: token }),
+      body: new URLSearchParams(createParams),
     })
     const cj = await create.json().catch(() => ({}))
     if (!create.ok || !cj.id) return { status: 'failed', message: `Threads create ${create.status}: ${JSON.stringify(cj).slice(0, 200)}` }
