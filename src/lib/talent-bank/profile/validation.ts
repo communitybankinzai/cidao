@@ -13,6 +13,12 @@ export function shortText(value: unknown, max: number) {
   if (typeof value !== 'string' || [...value].length > max) throw new ProfileError('invalid_text')
   return value.trim()
 }
+// AI 出力は schema で長さを縛れないため、例外にせず切り詰める（本人が後で編集できる）。
+export function clipText(value: unknown, max: number) {
+  if (typeof value !== 'string') throw new ProfileError('invalid_response')
+  const chars = [...value.trim()]
+  return chars.length > max ? chars.slice(0, max).join('') : chars.join('')
+}
 export function scope(value: unknown): PublicScope {
   if (value !== 'public' && value !== 'registered_only' && value !== 'private') throw new ProfileError('invalid_scope')
   return value
@@ -61,8 +67,10 @@ export function applyFieldPatch(fields: ProfileFields, patch: unknown): ProfileF
 export const profileSchema = {
   type: 'object', additionalProperties: false, required: ['summary_short', 'summary_long', 'fields'],
   properties: {
-    summary_short: { type: 'string', maxLength: 80 }, summary_long: { type: 'string', maxLength: 400 },
+    // Anthropic の構造化出力は maxLength / maxItems / type 配列を受け付けない（400）。
+    // 文字数は prompt で指示し、clipText でサーバー側が切り詰める。null 許容は anyOf で表す。
+    summary_short: { type: 'string' }, summary_long: { type: 'string' },
     fields: { type: 'object', additionalProperties: false, required: INTERVIEW_FIELDS.map(f => f.field_key),
-      properties: Object.fromEntries(INTERVIEW_FIELDS.map(f => [f.field_key, { type: ['string', 'null'] }])) },
+      properties: Object.fromEntries(INTERVIEW_FIELDS.map(f => [f.field_key, { anyOf: [{ type: 'string' }, { type: 'null' }] }])) },
   },
 }
