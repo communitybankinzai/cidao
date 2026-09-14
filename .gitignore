@@ -48,3 +48,6 @@ next-env.d.ts
 
 # 単発のデバッグ調査スクリプト（infra スクリプトは scripts/setup-*.mjs に分離）
 scripts/check-*.mjs
+
+# Public template only; real environment files remain ignored.
+!.env.example

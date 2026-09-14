@@ -179,7 +179,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     action: 'message.send',
     targetType: 'member',
     targetId: targetMemberId,
-    detail: { kind: 'talent_inquiry', body: message.trim().slice(0, 200) },
+    detail: { kind: 'talent_inquiry' },
   })
 
   revalidatePath(`/talent/${targetMemberId}`)
@@ -501,7 +501,7 @@ export async function replyTalentInquiry(rootInquiryId: string, message: string)
     action: 'message.send',
     targetType: 'talent_inquiry',
     targetId: rootInquiryId,
-    detail: { kind: 'reply', body: message.trim().slice(0, 200) },
+    detail: { kind: 'reply' },
   })
 
   revalidatePath('/me/inbox')
