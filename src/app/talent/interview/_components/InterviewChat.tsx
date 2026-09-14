@@ -113,7 +113,16 @@ export default function InterviewChat({ initial }: { initial: InterviewSnapshot 
     {snapshot && !paused && <Button variant="outline" disabled={busy} onClick={() => void act('start')}>保存内容を読み直す</Button>}
     {(done || limited) && snapshot && <section className="space-y-4 rounded-xl border p-5" aria-label="まとめ">
       <h2 className="text-xl font-semibold">{done ? 'インタビューのまとめ' : 'ここまでのまとめ'}</h2>
-      <p className="text-sm text-muted-foreground">編集機能はPhase 3で提供予定です。この内容はまだ公開されません。</p>
+      {done ? <div className="space-y-2 rounded-lg border border-sky-600 bg-sky-50 p-4 text-sm dark:bg-sky-950">
+        <p className="font-medium">インタビューは完了しました。ありがとうございます。この内容はまだ公開されません。</p>
+        <p>次の流れ：</p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>この下の「プロフィール案を作る」を押す（AIが回答から紹介文の案を作ります・数十秒）</li>
+          <li>できた案を確認して、直したいところを修正する</li>
+          <li>公開範囲を選んで「公開を申請」する</li>
+          <li>運営（CBI）が確認して公開します。結果はベル通知でお知らせします</li>
+        </ol>
+      </div> : <p className="text-sm text-muted-foreground">この内容はまだ公開されません。</p>}
       <dl className="space-y-4">{snapshot.summary.map(item => <div key={item.key}><dt className="font-medium">{item.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">{item.text}</dd></div>)}</dl>
     </section>}
     <div ref={end} />

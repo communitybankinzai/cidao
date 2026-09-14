@@ -20,6 +20,7 @@ export default async function AdminHomePage() {
         </header>
 
         <ul className="grid gap-3 sm:grid-cols-2">
+          <li><Link href="/admin/talent-bank" className="block bg-white dark:bg-slate-900 border rounded-lg p-5 hover:border-slate-400"><h2 className="text-lg font-semibold mb-1">人材バンク・公開承認</h2><p className="text-sm text-slate-500">本人確認済みプロフィールの確認・承認・差し戻し</p></Link></li>
           <li>
             <Link
               href="/admin/analytics"

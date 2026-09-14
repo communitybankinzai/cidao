@@ -57,6 +57,12 @@ type Table<Row, Required extends keyof Row, Update = Partial<Row>> = {
   Row: Row; Insert: Pick<Row, Required> & Partial<Omit<Row, Required>>; Update: Update; Relationships: []
 }
 type Phase1Tables = {
+  talent_profiles: Table<TalentProfile, 'subject_id' | 'member_id'>
+  talent_profile_versions: Table<ProfileVersion, 'profile_id' | 'version' | 'fields_json'>
+  talent_tags: Table<TalentTag, 'slug' | 'label' | 'kind'>
+  tag_synonyms: Table<{ id: string; tag_id: string; synonym: string }, 'tag_id' | 'synonym'>
+  talent_profile_version_tags: Table<VersionTag, 'version_id' | 'tag_id' | 'source'>
+  publications: Table<Publication, 'profile_id' | 'version_id' | 'scope' | 'owner_approved_at' | 'admin_approved_by' | 'admin_approved_at' | 'published_at'>
   interviews: Table<Interview, 'subject_id' | 'member_id'>
   interview_messages: Table<InterviewMessage, 'interview_id' | 'seq' | 'role' | 'content', never>
   talent_subjects: Table<TalentSubject, 'owner_member_id' | 'subject_type' | 'display_name'>
@@ -72,6 +78,13 @@ export type TalentBankDatabase = Omit<Database, 'public'> & {
   public: Omit<Database['public'], 'Tables' | 'Functions'> & {
     Tables: Database['public']['Tables'] & Phase1Tables
     Functions: Database['public']['Functions'] & {
+      save_talent_draft: { Args: { p_subject: string; p_fields: Json; p_short: string; p_long: string; p_run: string | null; p_tags: string[]; p_suggested: string[]; p_scope: string }; Returns: string }
+      edit_talent_draft: { Args: { p_version: string; p_expected: string; p_fields: Json; p_short: string; p_long: string; p_tags: string[]; p_scope: string; p_approve: boolean }; Returns: boolean }
+      approve_talent_owner: { Args: { p_version: string; p_expected: string }; Returns: boolean }
+      publish_talent_version: { Args: { p_actor: string; p_version: string; p_minutes: number; p_edits: number; p_note: string | null }; Returns: string }
+      reject_talent_version: { Args: { p_actor: string; p_version: string; p_reason: string }; Returns: string }
+      unpublish_talent_profile: { Args: { p_actor: string; p_profile: string; p_reason: string }; Returns: string }
+      search_talent_profiles: { Args: { p_q: string; p_tag: string; p_area: string }; Returns: ProfileSearchRow[] }
       claim_interview_turn: {
         Args: { p_id: string; p_expected_count: number; p_token: string; p_message_id: string; p_content: string }
         Returns: boolean
@@ -84,3 +97,13 @@ export type TalentBankDatabase = Omit<Database, 'public'> & {
   }
 }
 export type ApiUsageInsert = Phase1Tables['api_usage']['Insert']
+
+export type PublicScope = 'public' | 'registered_only' | 'private'
+export type ProfileField = { state: CollectedField['state']; value: string | null; evidence: string[]; source: 'interview' | 'owner' }
+export type ProfileFields = Record<string, ProfileField>
+export type TalentProfile = { id: string; subject_id: string; member_id: string; current_version_id: string | null; draft_version_id: string | null; public_scope: PublicScope; created_at: string; updated_at: string }
+export type ProfileVersion = { id: string; profile_id: string; version: number; status: 'draft' | 'owner_reviewed' | 'approved' | 'published' | 'retired'; fields_json: ProfileFields; summary_short: string | null; summary_long: string | null; generated_run_id: string | null; edited_by_owner_at: string | null; owner_approved_at: string | null; admin_approved_by: string | null; admin_approved_at: string | null; rejected_reason: string | null; created_at: string; updated_at: string; public_scope: PublicScope; suggested_tags: string[] }
+export type TalentTag = { id: string; slug: string; label: string; kind: 'skill' | 'field' | 'target' | 'area' | 'style'; created_at: string }
+export type VersionTag = { version_id: string; tag_id: string; source: 'ai' | 'owner' }
+export type Publication = { id: string; profile_id: string; version_id: string; scope: PublicScope; owner_approved_at: string; admin_approved_by: string; admin_approved_at: string; published_at: string; unpublished_at: string | null; reason: string | null; created_at: string }
+export type ProfileSearchRow = { profile_id: string; subject_id: string; member_id: string; version_id: string; display_name: string; summary_short: string | null; summary_long: string | null; fields_json: ProfileFields; tags: TalentTag[] }
