@@ -2,7 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { AnthropicProvider } from './anthropic'
 import type { AIProvider, AIRequest, AIResponse, AIUsage } from './types'
-import { AIResponseError, classifyAIError } from './errors'
+import { AIResponseError, classifyAIError, describeAIError } from './errors'
 import { estimateCost, unavailableCost } from './pricing'
 import { recordApiUsage } from '@/lib/talent-bank/usage'
 
@@ -24,6 +24,12 @@ export async function callAI(input: AIRequest, provider: AIProvider = new Anthro
     return { ...response, runId }
   } catch (error) {
     errorKind = classifyAIError(error)
+    if (errorKind === 'unknown') {
+      // 分類外の失敗は原因が追えないので、status/種別/例外名（＋400系ならメッセージ先頭）を残す。
+      const detail = describeAIError(error)
+      errorKind = `unknown:${detail}`.slice(0, 300)
+      console.error(`[talent-bank] AI call failed purpose=${input.purpose} model=${model} detail=${detail}`)
+    }
     if (error instanceof AIResponseError) usage = error.usage
     throw error
   } finally {
