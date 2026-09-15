@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 import { canUserEditOrg } from '@/lib/org-permissions'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER } from '@/lib/org-labels'
 import { updateOrgInfo } from '../../actions'
@@ -134,12 +135,12 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
             <OrgLogo src={org.logo_url} name={org.name} size="xl" />
             <div className="flex-1 space-y-2">
               <label className="block text-sm font-medium" htmlFor="logo">団体ロゴ（5MB以下、png/jpg/webp/gif/svg）</label>
-              <input
+              <FilePickButton
                 id="logo"
                 name="logo"
-                type="file"
+                label="🖼 ロゴ画像を選ぶ"
+                showFileName
                 accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-slate-100 dark:file:bg-slate-700 file:text-sm hover:file:bg-slate-200 dark:hover:file:bg-slate-600"
               />
               {org.logo_url && (
                 <label className="flex items-center gap-2 text-xs text-slate-500">

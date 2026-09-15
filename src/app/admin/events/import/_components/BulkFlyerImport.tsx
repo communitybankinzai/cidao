@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 import { importScannedEvents, type ImportItem, type ImportResult } from '../actions'
 
 type Row = ImportItem & {
@@ -200,8 +201,8 @@ export function BulkFlyerImport() {
     <div className="space-y-5">
       <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-4 space-y-2">
         <label className="block text-sm font-medium">チラシ画像を選ぶ（複数選択できます）</label>
-        <input
-          type="file"
+        <FilePickButton
+          label="📷 チラシ画像を選ぶ"
           multiple
           accept="image/jpeg,image/png,image/webp,image/gif"
           disabled={scanning}
@@ -210,7 +211,6 @@ export function BulkFlyerImport() {
             if (f && f.length > 0) void handleFiles(f)
             e.target.value = ''
           }}
-          className="text-xs"
         />
         <p className="text-[11px] text-slate-500">
           1枚ずつAIが日時・場所・主催者を読み取ります。読み取り結果はそのまま登録されず、下の一覧で確認・修正してから登録します。

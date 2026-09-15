@@ -1,6 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 
 // 紹介動画用の写真（2026-09-15）。ブラウザで長辺 2000px の JPEG に縮めてから1枚ずつ送る（通信量と本文の上限のため）。
 // 縮めるときに向きを直し、位置情報などの EXIF は落ちる。サーバー側でもう一度縮めて EXIF を落とす。
@@ -45,9 +46,10 @@ export default function PhotoUploader({ photos }: { photos: Photo[] }) {
         <button type="button" onClick={() => remove(p.id)} disabled={!!busy} aria-label="この写真を消す" className="absolute right-1 top-1 rounded-full bg-black/60 px-2 text-xs text-white">×</button>
       </div>)}
     </div>
-    <label className="block text-sm">写真を追加（複数可・12枚まで）
-      <input type="file" accept="image/*" multiple disabled={!!busy} onChange={e => { onFiles(e.target.files); e.target.value = '' }} className="mt-2 block w-full text-sm" />
-    </label>
+    <div className="space-y-2 text-sm">
+      <p>写真を追加（複数可・12枚まで）</p>
+      <FilePickButton label="📷 写真を追加" accept="image/*" multiple disabled={!!busy} onChange={e => { onFiles(e.target.files); e.target.value = '' }} />
+    </div>
     {busy && <p role="status" className="text-sm">{busy}</p>}
     {error && <p role="alert" className="rounded border border-red-500 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950">{error}</p>}
   </div>

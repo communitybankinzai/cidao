@@ -7,6 +7,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 import { ATTACHMENT_BUCKET } from '@/lib/approval'
 import { createRequest, type AttachmentInput } from '../actions'
 
@@ -200,11 +201,11 @@ export function RequestForm({
 
       <div>
         <label className={labelCls}>添付ファイル（任意）</label>
-        <input
-          type="file" multiple
+        <FilePickButton
+          label="📎 ファイルを選ぶ"
+          multiple
           accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.doc,.docx,.xls,.xlsx"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          className="text-sm"
         />
         <p className={hintCls}>
           Word・PDF・Excel・画像（1件{MAX_FILE_MB}MBまで・{MAX_FILES}件まで）。
