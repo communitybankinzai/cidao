@@ -82,11 +82,24 @@ def process(job):
     tmp = tempfile.mkdtemp(prefix='talent-video-')
     try:
         script = job['script_json']
-        scenes = []
-        for i, s in enumerate(script['scenes']):
-            local = os.path.join(tmp, f'photo{i}.jpg')
-            download(MEDIA, s['photo'], local)
-            scenes.append(dict(s, photo=local))
+        # 写真は、積まれた後に本人が消していることがある。取れない写真は取れた写真で代用し、1枚も無いときだけ失敗にする
+        local_by_path, missing = {}, []
+        for s in script['scenes']:
+            p = s['photo']
+            if p in local_by_path or p in missing:
+                continue
+            local = os.path.join(tmp, f'photo{len(local_by_path)}.jpg')
+            try:
+                download(MEDIA, p, local)
+                local_by_path[p] = local
+            except RuntimeError:
+                missing.append(p)
+        if not local_by_path:
+            raise RuntimeError('写真が1枚もありません（登録し直してください）')
+        if missing:
+            print(f'  {len(missing)} 枚の写真が見つからないので、ほかの写真で代用します', flush=True)
+        available = list(local_by_path.values())
+        scenes = [dict(s, photo=local_by_path.get(s['photo'], available[i % len(available)])) for i, s in enumerate(script['scenes'])]
         bgm_local = os.path.join(tmp, 'bgm.mp3')
         download(BGM, job['bgm_file'], bgm_local)
         out = os.path.join(tmp, 'out.mp4')

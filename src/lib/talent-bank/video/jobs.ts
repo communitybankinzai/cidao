@@ -6,7 +6,7 @@ import { memberClient } from '../interview/access'
 import { adminClient } from '../profile/access'
 import { ProfileError, shortText } from '../profile/validation'
 import type { TalentVideo } from '../types'
-import { planVideoScript } from './script'
+import { planVideoScript, type VideoScript } from './script'
 
 // 紹介動画の仕事（2026-09-15）。作るのは GitHub Actions（scripts/talent-video/run_job.py）。
 // ここでは、仕事を積む／本人の確認／運営の掲載／再生の権限を扱う。書き込みは service_role、本人・運営の確認はここで行う。
@@ -78,12 +78,23 @@ export async function queueVideo({ memberId, trigger }: { memberId: string; trig
   const [version, photos, active, recent] = await Promise.all([
     db.from('talent_profile_versions').select('id, fields_json').eq('id', profile.data.current_version_id).single(),
     db.from('talent_photos').select('path').eq('member_id', memberId).order('sort'),
-    db.from('talent_videos').select('id').eq('member_id', memberId).in('status', ['queued', 'rendering']).limit(1),
+    db.from('talent_videos').select('id, status, script_json').eq('member_id', memberId).in('status', ['queued', 'rendering']).limit(1),
     db.from('talent_videos').select('created_at').eq('member_id', memberId).order('created_at', { ascending: false }).limit(MANUAL_PER_DAY),
   ])
   if (version.error || photos.error || active.error || recent.error) throw new ProfileError('storage_unavailable')
   if (!photos.data?.length) { if (manual) throw new ProfileError('photos_required'); return null }
-  if (active.data?.length) { if (manual) throw new ProfileError('video_in_progress'); return active.data[0].id }
+  if (active.data?.length) {
+    const job = active.data[0]
+    // まだ作り始めていない仕事があれば、写真だけ今のものに差し替える（消した写真を指したまま作りに行かないため。AI は呼び直さない）
+    if (job.status === 'queued' && !manual) {
+      const script = job.script_json as VideoScript
+      const scenes = script.scenes.map((s, i) => ({ ...s, photo: photos.data[i % photos.data.length].path }))
+      await db.from('talent_videos').update({ script_json: { ...script, scenes } }).eq('id', job.id).eq('status', 'queued')
+      return job.id
+    }
+    if (manual) throw new ProfileError('video_in_progress')
+    return job.id
+  }
   const times = (recent.data ?? []).map(r => Date.parse(r.created_at))
   if (!manual && times[0] && Date.now() - times[0] < AUTO_DEBOUNCE_MS) return null
   if (manual && times.length >= MANUAL_PER_DAY && Date.now() - times[MANUAL_PER_DAY - 1] < 86_400_000) throw new ProfileError('daily_limit')
