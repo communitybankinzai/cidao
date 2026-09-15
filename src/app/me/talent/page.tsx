@@ -74,7 +74,7 @@ export default async function MyTalentPage() {
           <Link href={`/talent/${profile.member_id}?subject=${profile.subject_id}`} className="underline">他の人から見た表示を開く</Link>
           <ActionForm key={`unpublish:${profile.updated_at}`} action={reviewAction} successText="公開を停止しました。">
             <input type="hidden" name="profileId" value={profile.id} />
-            <Button name="intent" value="unpublish" variant="outline">公開を停止</Button>
+            <Button type="submit" name="intent" value="unpublish" variant="outline">公開を停止</Button>
           </ActionForm>
         </div>}
 
@@ -90,11 +90,12 @@ export default async function MyTalentPage() {
             <input type="hidden" name="versionId" value={version.id} />
             <label className="block font-medium">公開する範囲
               <select name="public_scope" defaultValue={version.public_scope === 'private' ? 'registered_only' : version.public_scope} className="mt-2 block w-full rounded border bg-background p-3 font-normal">
-                {Object.entries(SCOPE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {/* 原則公開（2026-09-15 中司さん決定）：非公開は選べない。公開停止は別のボタンで行う */}
+                {(['registered_only', 'public'] as const).map(value => <option key={value} value={value}>{SCOPE_LABEL[value]}</option>)}
               </select>
             </label>
             <p className="text-sm text-muted-foreground">申請すると、運営（CBI）が内容を確認してから公開します。結果はベル通知でお知らせします。</p>
-            <Button name="intent" value="approve" className="w-full">{version.status === 'owner_reviewed' ? 'この内容で申請し直す' : 'この内容で公開を申請'}</Button>
+            <Button type="submit" name="intent" value="approve" className="w-full">{version.status === 'owner_reviewed' ? 'この内容で申請し直す' : 'この内容で公開を申請'}</Button>
           </ActionForm>
 
           <details className="rounded-xl border p-4">
@@ -121,7 +122,7 @@ export default async function MyTalentPage() {
                 <fieldset className="rounded border p-3"><legend className="px-1 text-sm font-medium">タグ</legend>
                   <div className="flex flex-wrap gap-3">{tags.data?.map(tag => <label key={tag.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name="tag" value={tag.id} defaultChecked={selected.has(tag.id)} />{tag.label}</label>)}</div>
                 </fieldset>
-                <Button name="intent" value="save" variant="outline">入力した内容を保存</Button>
+                <Button type="submit" name="intent" value="save" variant="outline">入力した内容を保存</Button>
               </ActionForm>
             </div>
           </details>
@@ -129,7 +130,7 @@ export default async function MyTalentPage() {
           <ProfileContent fields={version.fields_json} short={version.summary_short} long={version.summary_long} tags={chosenTags} />
           <ActionForm key={`revision:${version.updated_at}`} action={reviewAction} successText="新しい版を作りました。">
             <input type="hidden" name="versionId" value={version.id} />
-            <Button name="intent" value="revision">新しい版を作って直す</Button>
+            <Button type="submit" name="intent" value="revision">新しい版を作って直す</Button>
           </ActionForm>
         </>}
       </section>
