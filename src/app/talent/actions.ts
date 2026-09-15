@@ -159,7 +159,7 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
       ``,
       `※ このメールは CiDAO の登録メンバー機能による自動通知です。`,
       `※ 返信は、このメールに直接 Reply すると ${nameWithSan(senderMember.display_name)}に直接届きます。`,
-      `※ メッセージを今後受け取りたくない場合は CiDAO の /me/pr で『メッセージ受付』を『受け付けない』に変更してください。`,
+      `※ メッセージを今後受け取りたくない場合は CiDAO の人材バンク（/me/talent）の「公開の設定」で声がけの受付を『受け付けない』に変更してください。`,
       ``,
       `Community Bank INZAI (CBI) / CiDAO`,
     ].join('\n'),

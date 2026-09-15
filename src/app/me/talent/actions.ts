@@ -5,7 +5,9 @@ import { CONSENT_TEXTS, hasConsent, recordConsent } from '@/lib/consents'
 import { currentInterview } from '@/lib/talent-bank/interview/access'
 import { INTERVIEW_FIELDS } from '@/lib/talent-bank/interview/fields'
 import { sessionMember } from '@/lib/talent-bank/profile/access'
-import { generateProfileDraft } from '@/lib/talent-bank/profile/generate'
+import { generateProfileDraft, generateProfileFromText } from '@/lib/talent-bank/profile/generate'
+import { registrationSubject } from '@/lib/talent-bank/interview/access'
+import { createTalentBankServiceClient } from '@/lib/talent-bank/db'
 import { createRevision, updateDraft } from '@/lib/talent-bank/profile/review'
 import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
@@ -63,6 +65,56 @@ export async function reviewAction(_previous: { error: string }, form: FormData)
       // 申請が成立したら運営全員へ知らせる（失敗しても申請は成立したまま）。
       if (intent === 'approve') await notifyAdminsOfApplication(versionId)
     }
+  } catch (error) { refresh(); return failure(error) }
+  refresh(); return { error: '' }
+}
+// 「自分で書く」入口（2026-09-15 一本化）：自己紹介の文章から AI が紹介文の案を作る。18歳以上の本人確認と同意はここで記録する
+export async function writeAction(_previous: { error: string }, form: FormData) {
+  try {
+    const { memberId } = await sessionMember()
+    if (form.get('adult') !== 'yes') return { error: '18歳以上の本人（店舗・団体は代表者本人）であることを確認してください。' }
+    const subject = await registrationSubject(memberId)
+    if (!subject.is_adult_confirmed) {
+      const r = await createTalentBankServiceClient().from('talent_subjects').update({ is_adult_confirmed: true }).eq('id', subject.id).eq('owner_member_id', memberId)
+      if (r.error) throw new ProfileError('storage_unavailable')
+    }
+    for (const kind of ['profile', 'external_ai'] as const) {
+      if (!await hasConsent({ memberId, subjectId: subject.id, kind, version: CONSENT_TEXTS[kind].version })) {
+        if (form.get('consent') !== 'yes') throw new ProfileError('consent_required')
+        await recordConsent({ memberId, subjectId: subject.id, kind })
+      }
+    }
+    await generateProfileFromText({ memberId, subjectId: subject.id, text: String(form.get('text') ?? '') })
+  } catch (error) {
+    if (error instanceof ProfileError && error.reason === 'invalid_text') return { error: '自己紹介は20〜4000字で書いてください。' }
+    return failure(error)
+  }
+  refresh(); return { error: '' }
+}
+// 公開の設定（2026-09-15 一本化）：公開範囲・声がけ受付。公開範囲は公開中のプロフィールにそのまま効く（承認のやり直しは不要）
+export async function settingsAction(_previous: { error: string }, form: FormData) {
+  try {
+    const { memberId, db } = await sessionMember()
+    const intent = String(form.get('intent') ?? '')
+    if (intent === 'scope') {
+      const value = String(form.get('public_scope') ?? '')
+      if (value !== 'public' && value !== 'registered_only') throw new ProfileError('invalid_scope')
+      const service = createTalentBankServiceClient()
+      const profile = await service.from('talent_profiles').select('id, current_version_id').eq('member_id', memberId).maybeSingle()
+      if (profile.error || !profile.data?.current_version_id) throw new ProfileError('profile_not_published')
+      const results = await Promise.all([
+        service.from('talent_profiles').update({ public_scope: value }).eq('id', profile.data.id),
+        service.from('talent_profile_versions').update({ public_scope: value }).eq('id', profile.data.current_version_id),
+        service.from('publications').update({ scope: value }).eq('profile_id', profile.data.id).is('unpublished_at', null),
+      ])
+      if (results.some(r => r.error)) throw new ProfileError('storage_unavailable')
+    } else if (intent === 'acceptance') {
+      const value = String(form.get('message_acceptance') ?? '')
+      if (!['open', 'recommended_only', 'closed'].includes(value)) throw new ProfileError('invalid_scope')
+      // 声がけ受付は従来どおり member_profiles_pr に置く（声がけの送信可否がこの表を見ているため）。本人の権限で自分の行だけ
+      const r = await db.from('member_profiles_pr').upsert({ member_id: memberId, message_acceptance: value as 'open' | 'recommended_only' | 'closed' }, { onConflict: 'member_id' })
+      if (r.error) throw new ProfileError('storage_unavailable')
+    } else throw new ProfileError('invalid_intent')
   } catch (error) { refresh(); return failure(error) }
   refresh(); return { error: '' }
 }

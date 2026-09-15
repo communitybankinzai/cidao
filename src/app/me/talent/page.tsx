@@ -6,122 +6,104 @@ import { createClient } from '@/lib/supabase/server'
 import { createTalentBankClient } from '@/lib/talent-bank/db'
 import { currentInterview } from '@/lib/talent-bank/interview/access'
 import { INTERVIEW_FIELDS } from '@/lib/talent-bank/interview/fields'
-import { footprintsAction, reviewAction } from './actions'
+import { ownIntro } from '@/lib/talent-bank/cbi-intro'
+import { listOwnVideos, listPhotos, photoUrl } from '@/lib/talent-bank/video/jobs'
+import { footprintsAction, reviewAction, settingsAction, writeAction } from './actions'
 import ActionForm from './_components/ActionForm'
 import EditChat from './_components/EditChat'
 import GenerateForm from './_components/GenerateForm'
+import IntroSection from './_components/IntroSection'
 import ProfileContent from './_components/ProfileContent'
 import VideoSection from './_components/VideoSection'
-import IntroSection from './_components/IntroSection'
-import { ownIntro } from '@/lib/talent-bank/cbi-intro'
-import { listOwnVideos, listPhotos, photoUrl } from '@/lib/talent-bank/video/jobs'
 
-const SCOPE_LABEL = {
-  registered_only: 'CiDAOにログインした会員だけ',
-  public: '一般公開（だれでも見られる）',
-  private: '非公開（自分と運営だけ）',
-} as const
-const STATUS_LABEL = { draft: '確認中', owner_reviewed: '公開申請中（運営の確認待ち）', approved: '運営承認済み', published: '公開中', retired: '公開停止・旧版' } as const
+const SCOPE_LABEL = { registered_only: 'CiDAO にログインした会員だけ', public: '一般公開（だれでも見られる）', private: '非公開（自分と運営だけ）' } as const
+const STATUS_LABEL = { draft: '確認中（まだ公開されていません）', owner_reviewed: '公開申請中（運営の確認待ち）', approved: '運営承認済み', published: '公開中', retired: '公開停止・旧版' } as const
+const ACCEPT_LABEL = { open: '誰からでも受け付ける', recommended_only: 'AI のマッチング経由だけ受け付ける', closed: '受け付けない' } as const
+const box = 'space-y-4 rounded-xl border p-4'
 
 export const maxDuration = 60
-// 2026-09-15 作り替え：20項目のフォームをやめ、「完成カードを見る → 話しかけて直す → 申請」の流れにした。
-// 項目ごとの入力欄は「細かく直す」に畳んで残す。
+// 2026-09-15 一本化（中司さん決定・案A）：従来の「公開PR」とAIインタビュー版を1画面にまとめ、箱を4つに絞った。
+// ①紹介文 ②写真と動画 ③公開の設定 ④CBIからの他己紹介。進み具合の箱・版番号・20項目の入力欄は畳んだ。
 export default async function MyTalentPage() {
   const db = await createTalentBankClient()
   const { data } = await db.auth.getUser()
   if (!data.user) redirect('/login?next=/me/talent')
   const memberId = data.user.id
-  const [profiles, tags, interview, me] = await Promise.all([
-    db.from('talent_profiles').select('*').eq('member_id', memberId).order('updated_at', { ascending: false }),
+  const plain = await createClient()
+  const [profiles, tags, interview, me, pr, photoRows, videos, intro] = await Promise.all([
+    db.from('talent_profiles').select('*').eq('member_id', memberId).order('updated_at', { ascending: false }).limit(1),
     db.from('talent_tags').select('*').order('label'), currentInterview(memberId),
-    // show_footprints は人材バンク用の型定義に無い列なので、型なしの通常クライアントで読む
-    (await createClient()).from('members').select('show_footprints').eq('id', memberId).maybeSingle(),
+    plain.from('members').select('show_footprints').eq('id', memberId).maybeSingle(),
+    plain.from('member_profiles_pr').select('message_acceptance').eq('member_id', memberId).maybeSingle(),
+    listPhotos(memberId), listOwnVideos(memberId), ownIntro(memberId),
   ])
-  const showFootprints = me.data?.show_footprints !== false
-  const [photoRows, videos, intro] = await Promise.all([listPhotos(memberId), listOwnVideos(memberId), ownIntro(memberId)])
-  const photos = await Promise.all(photoRows.map(async p => ({ id: p.id, url: await photoUrl(p.path) })))
   if (profiles.error || tags.error) throw new Error('Profile unavailable')
-  const cards = await Promise.all((profiles.data ?? []).map(async profile => {
-    const versions = await db.from('talent_profile_versions').select('*').eq('profile_id', profile.id).order('version', { ascending: false })
-    if (versions.error) throw new Error('Profile unavailable')
-    const version = versions.data?.find(v => v.id === profile.draft_version_id) ?? versions.data?.find(v => v.id === profile.current_version_id) ?? versions.data?.[0]
-    const links = version ? await db.from('talent_profile_version_tags').select('tag_id').eq('version_id', version.id) : { data: [], error: null }
-    if (links.error) throw new Error('Profile unavailable')
-    return { profile, version, selected: new Set((links.data ?? []).map(t => t.tag_id)), versions: versions.data ?? [] }
-  }))
+  const profile = profiles.data?.[0] ?? null
+  const versions = profile ? await db.from('talent_profile_versions').select('*').eq('profile_id', profile.id).order('version', { ascending: false }) : { data: [], error: null }
+  if (versions.error) throw new Error('Profile unavailable')
+  const version = versions.data?.find(v => v.id === profile?.draft_version_id) ?? versions.data?.find(v => v.id === profile?.current_version_id) ?? versions.data?.[0] ?? null
+  const links = version ? await db.from('talent_profile_version_tags').select('tag_id').eq('version_id', version.id) : { data: [], error: null }
+  if (links.error) throw new Error('Profile unavailable')
+  const selected = new Set((links.data ?? []).map(t => t.tag_id))
+  const chosenTags = (tags.data ?? []).filter(t => selected.has(t.id))
   const consented = interview ? await hasConsent({ memberId, subjectId: interview.subject_id, kind: 'profile', version: CONSENT_TEXTS.profile.version }) : false
-  const first = cards[0]?.version
-  const step = !first ? 0 : first.status === 'published' ? 4 : first.status === 'owner_reviewed' ? 3 : 2
-  const steps = ['インタビュー', 'プロフィール案の作成', '確認して「公開を申請」', '運営（CBI）の確認', '公開']
-  const guide = step === 2 ? '下のカードが、他の人から見える姿です。直したいところがあれば、その下の欄に話しかけてください。よければ公開範囲を選んで「この内容で公開を申請」を押します。'
-    : step === 3 ? '申請を受け付けました。運営が確認して公開します。結果はベル通知でお知らせします。申請中でも、話しかけて直せます（直すと申請し直しになります）。'
-    : step === 4 ? '公開中です。直したいときは「新しい版を作って直す」から。' : ''
+  const photos = await Promise.all(photoRows.map(async p => ({ id: p.id, url: await photoUrl(p.path) })))
+  const showFootprints = me.data?.show_footprints !== false
+  const published = !!profile?.current_version_id
+  const editable = version?.status === 'draft' || version?.status === 'owner_reviewed'
 
   return <main className="mx-auto min-h-dvh max-w-2xl space-y-6 px-4 py-6">
-    <nav className="flex gap-4 text-sm"><Link href="/me" className="underline">← マイページ</Link><Link href="/talent" className="underline">登録メンバー一覧</Link></nav>
-    <h1 className="text-2xl font-semibold">人材バンクのプロフィールと紹介動画</h1>
-    <p className="text-sm text-muted-foreground">AI インタビューで作ったプロフィールの確認・公開申請と、紹介動画・他己紹介の確認をする画面です。マイページの「公開PRの編集」とは別です。</p>
-    {!cards.length && <p>インタビューが終わると、ここにプロフィール案ができます。<Link href="/talent/interview" className="underline">インタビューへ</Link></p>}
-    {cards.length > 0 && <section aria-label="進み具合" className="space-y-2 rounded-xl border border-sky-600 bg-sky-50 p-4 text-sm dark:bg-sky-950">
-      <ol className="space-y-1">{steps.map((label, i) => <li key={label} className={i === step ? 'font-semibold' : i < step ? 'text-muted-foreground line-through' : 'text-muted-foreground'}>
-        {i < step ? '✓' : i === step ? '▶' : '・'} {label}</li>)}</ol>
-      <p>{guide}</p>
-    </section>}
+    <nav className="flex gap-4 text-sm"><Link href="/me" className="underline">← マイページ</Link><Link href="/talent" className="underline">登録メンバー一覧</Link>{published && <Link href={`/talent/${memberId}`} className="underline">自分の紹介ページ</Link>}</nav>
+    <h1 className="text-2xl font-semibold">人材バンク</h1>
 
-    {cards.map(({ profile, version, selected, versions }) => {
-      if (!version) return null
-      const editable = version.status === 'draft' || version.status === 'owner_reviewed'
-      const chosenTags = (tags.data ?? []).filter(t => selected.has(t.id))
-      const missing = INTERVIEW_FIELDS.filter(f => !f.required && (version.fields_json[f.field_key]?.state ?? 'unknown') === 'unknown').map(f => f.label)
-      const name = version.fields_json.display_name?.value ?? 'プロフィール'
-      return <section key={profile.id} className="space-y-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-xl font-medium">{name}<span className="ml-2 text-sm text-muted-foreground">第{version.version}版</span></h2>
+    {/* ① 紹介文 */}
+    <section aria-label="紹介文" className={box}>
+      <h2 className="text-lg font-semibold">1. 紹介文</h2>
+      {!version && <>
+        <p className="text-sm text-muted-foreground">自己紹介を書くと、AI が人材バンク向けの紹介文に整えます。できた案はあなたが確認し、公開を申請すると運営が確認して掲載します。</p>
+        {interview?.status === 'done' ? <GenerateForm consented={consented} /> : <>
+          <ActionForm action={writeAction} successText="紹介文の案ができました。画面を読み直して確認してください。">
+            <label className="block text-sm">自己紹介（活動していること・できること・相談を受けられること・大切にしていること など、自由に）
+              <textarea name="text" required minLength={20} maxLength={4000} rows={8} className="mt-2 w-full rounded border bg-background p-3 font-normal" placeholder="例：印西市で革小物をつくって販売しています。平日の昼間なら、ものづくり体験の相談に乗れます。" />
+            </label>
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="adult" value="yes" required className="mt-1" />18歳以上の本人（店舗・団体は代表者本人）です</label>
+            <details className="text-sm"><summary className="cursor-pointer">同意の内容を読む</summary><p className="mt-2 text-muted-foreground">{CONSENT_TEXTS.profile.text}</p><p className="mt-2 text-muted-foreground">{CONSENT_TEXTS.external_ai.text}</p></details>
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="consent" value="yes" required className="mt-1" />上の内容に同意します</label>
+            <Button type="submit" className="w-full">AI に紹介文の案を作ってもらう</Button>
+          </ActionForm>
+          <p className="text-sm text-muted-foreground">文章を書くより質問に答える方が楽な人は <Link href="/talent/interview" className="underline">AI インタビュー</Link> からでも作れます。</p>
+        </>}
+      </>}
+      {version && profile && <>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <span role="status" className="rounded-full border px-3 py-1 text-xs">{STATUS_LABEL[version.status]}</span>
+          {version.status === 'owner_reviewed' && <span className="text-muted-foreground">運営が確認すると公開され、ベルでお知らせします。</span>}
         </div>
         {version.rejected_reason && <p className="rounded border border-amber-500 p-3 text-sm">運営からの修正のお願い：{version.rejected_reason}</p>}
-        {profile.current_version_id && <div className="space-y-3 rounded-xl border p-4 text-sm">
-          <p>公開中：第{versions.find(v => v.id === profile.current_version_id)?.version}版（{SCOPE_LABEL[profile.public_scope]}）</p>
-          <Link href={`/talent/${profile.member_id}?subject=${profile.subject_id}`} className="underline">他の人から見た表示を開く</Link>
-          <ActionForm key={`unpublish:${profile.updated_at}`} action={reviewAction} successText="公開を停止しました。">
-            <input type="hidden" name="profileId" value={profile.id} />
-            <Button type="submit" name="intent" value="unpublish" variant="outline">公開を停止</Button>
-          </ActionForm>
-        </div>}
-
+        <ProfileContent key={version.updated_at} fields={version.fields_json} short={version.summary_short} long={version.summary_long} tags={chosenTags} />
         {editable ? <>
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">他の人からはこう見えます</h3>
-            <ProfileContent key={version.updated_at} fields={version.fields_json} short={version.summary_short} long={version.summary_long} tags={chosenTags} />
-          </div>
-
-          <EditChat key={version.id} versionId={version.id} missing={missing} />
-
-          <ActionForm key={`apply:${version.updated_at}`} action={reviewAction} successText="申請しました。">
+          <EditChat key={version.id} versionId={version.id} missing={INTERVIEW_FIELDS.filter(f => !f.required && (version.fields_json[f.field_key]?.state ?? 'unknown') === 'unknown').map(f => f.label)} />
+          <ActionForm key={`apply:${version.updated_at}`} action={reviewAction} successText="申請しました。運営が確認して公開します。">
             <input type="hidden" name="versionId" value={version.id} />
-            <label className="block font-medium">公開する範囲
+            <label className="block text-sm font-medium">公開する範囲
               <select name="public_scope" defaultValue={version.public_scope === 'private' ? 'registered_only' : version.public_scope} className="mt-2 block w-full rounded border bg-background p-3 font-normal">
-                {/* 原則公開（2026-09-15 中司さん決定）：非公開は選べない。公開停止は別のボタンで行う */}
                 {(['registered_only', 'public'] as const).map(value => <option key={value} value={value}>{SCOPE_LABEL[value]}</option>)}
               </select>
             </label>
-            <p className="text-sm text-muted-foreground">申請すると、運営（CBI）が内容を確認してから公開します。結果はベル通知でお知らせします。</p>
             <Button type="submit" name="intent" value="approve" className="w-full">{version.status === 'owner_reviewed' ? 'この内容で申請し直す' : 'この内容で公開を申請'}</Button>
           </ActionForm>
-
-          <details className="rounded-xl border p-4">
-            <summary className="cursor-pointer text-sm font-medium">項目ごとに細かく直す（入力欄を開く）</summary>
-            <div className="mt-4">
+          <details className="rounded-lg border p-3 text-sm">
+            <summary className="cursor-pointer">項目ごとに自分で直す</summary>
+            <div className="mt-3">
               <ActionForm key={`detail:${version.updated_at}`} action={reviewAction}>
-                <input type="hidden" name="versionId" value={version.id} />
-                <input type="hidden" name="tags_present" value="1" />
-                <p className="text-sm text-muted-foreground">文章を書いた項目は「回答あり」として保存します。空にした項目は「未回答」になり、公開されません。</p>
+                <input type="hidden" name="versionId" value={version.id} /><input type="hidden" name="tags_present" value="1" />
+                <p className="text-muted-foreground">空にした項目は「未回答」になり、公開されません。</p>
                 <label className="block space-y-2"><span>短い紹介（80字以内）</span><textarea name="summary_short" maxLength={80} defaultValue={version.summary_short ?? ''} rows={2} className="w-full rounded border bg-background p-3" /></label>
                 <label className="block space-y-2"><span>詳しい紹介（400字以内）</span><textarea name="summary_long" maxLength={400} defaultValue={version.summary_long ?? ''} rows={6} className="w-full rounded border bg-background p-3" /></label>
                 {INTERVIEW_FIELDS.map(f => {
                   const item = version.fields_json[f.field_key]
                   return <fieldset key={f.field_key} className="space-y-2 rounded border p-3">
-                    <legend className="px-1 text-sm font-medium">{f.label}{f.required && '（必須）'}</legend>
+                    <legend className="px-1 font-medium">{f.label}{f.required && '（必須）'}</legend>
                     <textarea name={`${f.field_key}:value`} maxLength={2000} defaultValue={item?.value ?? ''} rows={2} className="w-full rounded border bg-background p-2" />
                     <label className="block text-xs text-muted-foreground">空欄のときの扱い
                       <select name={`${f.field_key}:state`} defaultValue={item?.state === 'none' || item?.state === 'declined' ? item.state : 'unknown'} className="ml-2 rounded border bg-background p-1">
@@ -130,35 +112,59 @@ export default async function MyTalentPage() {
                     </label>
                   </fieldset>
                 })}
-                <fieldset className="rounded border p-3"><legend className="px-1 text-sm font-medium">タグ</legend>
-                  <div className="flex flex-wrap gap-3">{tags.data?.map(tag => <label key={tag.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name="tag" value={tag.id} defaultChecked={selected.has(tag.id)} />{tag.label}</label>)}</div>
+                <fieldset className="rounded border p-3"><legend className="px-1 font-medium">タグ</legend>
+                  <div className="flex flex-wrap gap-3">{tags.data?.map(tag => <label key={tag.id} className="flex items-center gap-2"><input type="checkbox" name="tag" value={tag.id} defaultChecked={selected.has(tag.id)} />{tag.label}</label>)}</div>
                 </fieldset>
                 <Button type="submit" name="intent" value="save" variant="outline">入力した内容を保存</Button>
               </ActionForm>
             </div>
           </details>
-        </> : <>
-          <ProfileContent fields={version.fields_json} short={version.summary_short} long={version.summary_long} tags={chosenTags} />
-          <ActionForm key={`revision:${version.updated_at}`} action={reviewAction} successText="新しい版を作りました。">
-            <input type="hidden" name="versionId" value={version.id} />
-            <Button type="submit" name="intent" value="revision">新しい版を作って直す</Button>
-          </ActionForm>
-        </>}
-      </section>
-    })}
-    {interview?.status === 'done' && <GenerateForm consented={consented} again={cards.length > 0} />}
+        </> : <ActionForm key={`revision:${version.updated_at}`} action={reviewAction} successText="新しい版を作りました。画面を読み直してください。">
+          <input type="hidden" name="versionId" value={version.id} />
+          <p className="text-sm text-muted-foreground">直したいときは新しい版を作ります。公開中の内容は、直した版が承認されるまでそのまま見えます。</p>
+          <Button type="submit" name="intent" value="revision" variant="outline">紹介文を直す</Button>
+        </ActionForm>}
+      </>}
+    </section>
 
-    <IntroSection intro={intro} />
-    {cards.length > 0 && <VideoSection photos={photos} faceMode={cards[0].profile.face_mode} videos={videos} published={!!cards[0].profile.current_version_id} />}
+    {/* ② 写真と動画 */}
+    {profile && <VideoSection photos={photos} faceMode={profile.face_mode} videos={videos} published={published} />}
 
-    <section aria-label="活動の足あと" className="space-y-3 rounded-xl border p-4 text-sm">
-      <h2 className="font-medium">紹介ページの「活動の足あと」</h2>
-      <p className="text-muted-foreground">所属している団体・出した提案・提案への意見の数・主催したイベントを、紹介ページに自動で並べます。CiDAO ですでに公開されている記録だけで、投票や参加したイベントの記録は出しません。</p>
+    {/* ③ 公開の設定 */}
+    {profile && <section aria-label="公開の設定" className={box}>
+      <h2 className="text-lg font-semibold">3. 公開の設定</h2>
+      {published && <ActionForm key={`scope:${profile.updated_at}`} action={settingsAction} successText="公開範囲を変えました。">
+        <input type="hidden" name="intent" value="scope" />
+        <label className="block text-sm font-medium">紹介ページを見られる人
+          <select name="public_scope" defaultValue={profile.public_scope === 'private' ? 'registered_only' : profile.public_scope} className="mt-2 block w-full rounded border bg-background p-3 font-normal">
+            {(['registered_only', 'public'] as const).map(value => <option key={value} value={value}>{SCOPE_LABEL[value]}</option>)}
+          </select>
+        </label>
+        <Button type="submit" variant="outline" size="sm">保存</Button>
+      </ActionForm>}
+      <ActionForm key={`accept:${pr.data?.message_acceptance ?? 'none'}`} action={settingsAction} successText="声がけの受付を変えました。">
+        <input type="hidden" name="intent" value="acceptance" />
+        <label className="block text-sm font-medium">声がけ（相談のメッセージ）の受付
+          <select name="message_acceptance" defaultValue={pr.data?.message_acceptance ?? 'recommended_only'} className="mt-2 block w-full rounded border bg-background p-3 font-normal">
+            {(['open', 'recommended_only', 'closed'] as const).map(value => <option key={value} value={value}>{ACCEPT_LABEL[value]}</option>)}
+          </select>
+        </label>
+        <Button type="submit" variant="outline" size="sm">保存</Button>
+      </ActionForm>
       <ActionForm key={`footprints:${showFootprints}`} action={footprintsAction} successText="設定を保存しました。">
         <input type="hidden" name="show" value={showFootprints ? 'no' : 'yes'} />
-        <p>いまの設定：{showFootprints ? '表示する' : '表示しない'}</p>
-        <Button type="submit" variant="outline">{showFootprints ? '足あとを隠す' : '足あとを表示する'}</Button>
+        <p className="text-sm font-medium">活動の足あと：{showFootprints ? '表示する' : '表示しない'}</p>
+        <p className="text-sm text-muted-foreground">所属団体・出した提案・意見の数・主催したイベントを紹介ページに自動で並べます（CiDAO で公開されている記録だけ）。</p>
+        <Button type="submit" variant="outline" size="sm">{showFootprints ? '足あとを隠す' : '足あとを表示する'}</Button>
       </ActionForm>
-    </section>
+      {published && <ActionForm key={`unpublish:${profile.updated_at}`} action={reviewAction} successText="公開を停止しました。">
+        <input type="hidden" name="profileId" value={profile.id} />
+        <p className="text-sm text-muted-foreground">公開をやめたいときは、いつでも止められます（動画も紹介ページから消えます）。</p>
+        <Button type="submit" name="intent" value="unpublish" variant="outline" size="sm">公開を停止</Button>
+      </ActionForm>}
+    </section>}
+
+    {/* ④ CBI からの他己紹介 */}
+    <IntroSection intro={intro} />
   </main>
 }

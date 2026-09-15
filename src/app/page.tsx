@@ -112,7 +112,7 @@ export default async function Home() {
         {!userId && (
           <section aria-label="はじめての方へ" className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Link
-              href="/login?next=/me/pr"
+              href="/login?next=/me/talent"
               className="block bg-white dark:bg-slate-900 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg p-4 hover:border-emerald-500 transition space-y-1.5"
             >
               <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ export default async function Home() {
                 ? 'プロフィールで興味分野を選んで保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。'
                 : 'PR（自己紹介）を公開すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
             </p>
-            <Link href={isLight ? '/me/edit' : '/me/pr'}>
+            <Link href={isLight ? '/me/edit' : '/me/talent'}>
               <Button size="sm">{isLight ? 'プロフィールを登録する' : 'PR（自己紹介）を作る'}</Button>
             </Link>
           </section>

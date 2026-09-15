@@ -153,10 +153,10 @@ export default async function MyPage({
             </p>
             <p className="text-xs text-sky-700 dark:text-sky-300">
               プロフィールの保存だけでは <Link href="/talent" className="underline">登録メンバー一覧</Link> には表示されません。
-              できそうな貢献・資格などを公開PRとして登録すると一覧に載り、団体から声がかかるようになります。
+              人材バンクで紹介文を作って公開すると一覧に載り、団体から声がかかるようになります。
             </p>
-            <Link href="/me/pr">
-              <Button size="sm">公開PRを作成する</Button>
+            <Link href="/me/talent">
+              <Button size="sm">人材バンクに紹介文を作る</Button>
             </Link>
           </div>
         )}
@@ -270,30 +270,17 @@ export default async function MyPage({
               表示名・興味分野・本登録（提案・投票への参加）の設定
             </p>
           </Link>
+          {/* 人材バンク（2026-09-15 一本化）：従来の「公開PRの編集」と AI インタビュー版を1画面にまとめた */}
           <Link
-            href="/me/pr"
+            href="/me/talent"
             className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition"
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg" aria-hidden>📣</span>
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">公開PRの編集</span>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1">
-              「登録メンバー」一覧に載せて、団体から声がかかるための公開情報
-            </p>
-          </Link>
-          {/* 人材バンク（AI インタビュー版）：プロフィール案・紹介動画・他己紹介の確認画面。マイページからの入口が無く
-              「導線がわかりにくい」と指摘されたため追加（2026-09-15） */}
-          <Link
-            href="/me/talent"
-            className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition md:col-span-2"
-          >
-            <div className="flex items-center gap-2">
               <span className="text-lg" aria-hidden>🎬</span>
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">人材バンクのプロフィールと紹介動画</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">人材バンク</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              AI インタビューで作ったプロフィールの確認・公開申請、写真の登録と紹介動画の確認、CBI からの他己紹介の確認
+              「登録メンバー」一覧に載る紹介文・写真と紹介動画・公開の設定
             </p>
           </Link>
           <Link
@@ -454,8 +441,8 @@ export default async function MyPage({
                 印西市内の市民活動団体や主催者があなたを見つけて、活動への声がけが届く仕組みです
               </p>
             </div>
-            <Link href="/me/pr">
-              <Button size="sm" variant="outline">{myPr ? 'PRを編集' : 'PRを公開'}</Button>
+            <Link href="/me/talent">
+              <Button size="sm" variant="outline">人材バンクを開く</Button>
             </Link>
           </div>
 
@@ -465,7 +452,7 @@ export default async function MyPage({
                 まだ登録メンバーとして掲載されていません
               </p>
               <p className="text-xs text-slate-500">
-                資格・できそうな貢献・対応可能時間などを公開すると <Link href="/talent" className="underline">登録メンバー一覧</Link> に載り、団体から声がかかる可能性があります。
+                人材バンクで紹介文を公開すると <Link href="/talent" className="underline">登録メンバー一覧</Link> に載り、団体から声がかかる可能性があります。
               </p>
             </div>
           ) : (

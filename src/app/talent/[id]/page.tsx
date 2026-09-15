@@ -68,61 +68,18 @@ export default async function TalentDetailPage({ params, searchParams }: { param
           </section>
         )}
         {published && <ProfileContent fields={published.version.fields_json} short={published.version.summary_short} long={published.version.summary_long} tags={published.tags} />}
-        {!published && member.skills_text && (
+        {/* 2026-09-15 一本化：従来PRの項目（資格・貢献・対応時間）は talent_profiles へ移し替えたので、ここでは新しい紹介文だけを出す。
+            SNS リンクは移し替えの対象外（紹介文に無い外部リンクを勝手に載せないため）。未公開の人は自己紹介だけ */}
+        {published && pr?.sns_links && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-            <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">スキル</h2>
-            <p className="text-sm">{member.skills_text}</p>
+            <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">SNS・ウェブサイト</h2>
+            <ul className="text-sm space-y-1">
+              {pr.sns_links.split(/\r?\n/).map((line: string) => line.trim()).filter((line: string) => line.length > 0).map((line: string, i: number) =>
+                /^https?:\/\//.test(line)
+                  ? <li key={i}><a href={line} target="_blank" rel="noopener noreferrer" className="text-sky-700 dark:text-sky-300 hover:underline break-all">{line} ↗</a></li>
+                  : <li key={i} className="break-all">{line}</li>)}
+            </ul>
           </div>
-        )}
-
-        {!published && pr && (
-          <>
-            {pr.qualifications && (
-              <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-                <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">資格・経歴</h2>
-                <p className="text-sm whitespace-pre-wrap">{pr.qualifications}</p>
-              </div>
-            )}
-            {pr.contributions && (
-              <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-                <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">できそうな貢献</h2>
-                <p className="text-sm whitespace-pre-wrap">{pr.contributions}</p>
-              </div>
-            )}
-            {pr.available_times && pr.available_times.length > 0 && (
-              <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-                <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">対応可能時間</h2>
-                <p className="text-sm">{pr.available_times.join(' / ')}</p>
-              </div>
-            )}
-            {pr.sns_links && (
-              <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">
-                <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">SNS・ウェブサイト</h2>
-                <ul className="text-sm space-y-1">
-                  {pr.sns_links
-                    .split(/\r?\n/)
-                    .map((line: string) => line.trim())
-                    .filter((line: string) => line.length > 0)
-                    .map((line: string, i: number) =>
-                      /^https?:\/\//.test(line) ? (
-                        <li key={i}>
-                          <a
-                            href={line}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sky-700 dark:text-sky-300 hover:underline break-all"
-                          >
-                            {line} ↗
-                          </a>
-                        </li>
-                      ) : (
-                        <li key={i} className="break-all">{line}</li>
-                      )
-                    )}
-                </ul>
-              </div>
-            )}
-          </>
         )}
 
         {!published && member.self_introduction && (
@@ -209,7 +166,7 @@ export default async function TalentDetailPage({ params, searchParams }: { param
                   {pr?.message_acceptance === 'closed' && (
                     <span className="block mt-1">
                       現在「受け付けない」設定中のため、他のメンバーには『現在メッセージを受け付けていません』とのみ表示されます。
-                      <Link href="/me/pr" className="underline ml-1">設定を変更</Link>
+                      <Link href="/me/talent" className="underline ml-1">設定を変更</Link>
                     </span>
                   )}
                 </p>
@@ -233,7 +190,7 @@ export default async function TalentDetailPage({ params, searchParams }: { param
               </div>
             )}
             <p className="text-[10px] text-amber-600 dark:text-amber-400">
-              受け取り設定の変更は <Link href="/me/pr" className="underline">マイページPR編集</Link> から。
+              受け取り設定の変更は <Link href="/me/talent" className="underline">人材バンクの「公開の設定」</Link> から。
             </p>
           </div>
         )}

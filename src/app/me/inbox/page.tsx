@@ -128,7 +128,7 @@ export default async function InboxPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-8 text-center space-y-3">
             <p className="text-sm text-slate-500">まだ声がけはありません</p>
             <p className="text-xs text-slate-400">
-              <Link href="/me/pr" className="underline">公開PR</Link> を充実させると、
+              <Link href="/me/talent" className="underline">人材バンクの紹介文</Link> を充実させると、
               団体や主催者から声がかかる可能性が高まります。
             </p>
           </div>

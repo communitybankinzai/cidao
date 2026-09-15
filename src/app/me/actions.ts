@@ -135,7 +135,7 @@ export async function updateProfile(input: ProfileUpdate) {
         kind: 'system',
         title: '本登録が完了しました🎉 「登録メンバー」一覧に載るには公開PRの作成が必要です',
         body: 'できそうな貢献・資格などを公開PRとして登録すると一覧に載り、団体から活動の声がけが届くようになります。',
-        linkUrl: '/me/pr',
+        linkUrl: '/me/talent',
       })
     }
   }
