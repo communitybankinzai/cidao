@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/sns-dispatch",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/inzai-bunka-sync",
+      "schedule": "20 21 * * *"
     }
   ]
 }
