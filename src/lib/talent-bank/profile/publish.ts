@@ -35,3 +35,21 @@ export async function unpublish(input: { memberId: string; adminId?: never; prof
   if (result.error || !result.data) throw new ProfileError('publish_conflict')
   await notify(result.data, 'プロフィールの公開を停止しました')
 }
+// 公開申請を運営（admin_role あり・退会していない）全員へベル通知＋Webプッシュで知らせる。
+// 失敗しても申請自体は成立させる。本文・連絡先はログに出さない。
+export async function notifyAdminsOfApplication(versionId: string) {
+  try {
+    const db = createTalentBankServiceClient()
+    const [version, admins] = await Promise.all([
+      db.from('talent_profile_versions').select('fields_json').eq('id', versionId).maybeSingle(),
+      db.from('members').select('id, deleted_at').not('admin_role', 'is', null),
+    ])
+    if (admins.error) throw new Error('admin lookup failed')
+    const raw = (version.data?.fields_json?.display_name?.value ?? '').trim() || 'メンバー'
+    const who = raw.endsWith('さん') ? raw : `${raw}さん`
+    await Promise.allSettled((admins.data ?? []).filter(a => !a.deleted_at).map(a => insertNotification({
+      recipientId: a.id, kind: 'member', title: `${who}が人材バンクのプロフィール公開を申請しました`,
+      body: '管理画面で内容を確認し、承認または差し戻しをしてください', linkUrl: '/admin/talent-bank',
+    })))
+  } catch { console.error('[talent-bank] admin notification failed') }
+}

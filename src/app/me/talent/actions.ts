@@ -7,7 +7,7 @@ import { INTERVIEW_FIELDS } from '@/lib/talent-bank/interview/fields'
 import { sessionMember } from '@/lib/talent-bank/profile/access'
 import { generateProfileDraft } from '@/lib/talent-bank/profile/generate'
 import { createRevision, updateDraft } from '@/lib/talent-bank/profile/review'
-import { unpublish } from '@/lib/talent-bank/profile/publish'
+import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
 
 function refresh() {
@@ -51,6 +51,8 @@ export async function reviewAction(_previous: { error: string }, form: FormData)
           state: String(form.get(`${f.field_key}:state`) ?? 'unknown'), value: String(form.get(`${f.field_key}:value`) ?? ''),
         }])),
       } })
+      // 申請が成立したら運営全員へ知らせる（失敗しても申請は成立したまま）。
+      if (intent === 'approve') await notifyAdminsOfApplication(versionId)
     }
   } catch (error) { refresh(); return failure(error) }
   refresh(); return { error: '' }
