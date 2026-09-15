@@ -204,26 +204,85 @@ export async function announceFreefreeToSns(post: {
     const { data: row } = await supabase.from('freefree_posts').select('images').eq('id', post.id).maybeSingle()
     const hasImage = Array.isArray(row?.images) && row.images.length > 0
 
+    // 全自動モード（管理画面「FreeFree 告知の配信モード」＝app_settings.sns_freefree_auto_post）なら
+    // 承認済みで作ってその場で配信し、管理者には「配信した」ことを知らせる。既定は承認制
+    const { data: setting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'sns_freefree_auto_post')
+      .maybeSingle()
+    const auto = (setting?.value as { enabled?: boolean } | null)?.enabled === true
+
+    const now = new Date().toISOString()
     const rows = FREEFREE_MEDIA.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
       target_type: 'freefree',
       target_id: post.id,
       medium,
       status: 'pending',
       content: generateSnsContent(target, medium),
-      approved_at: null,
-      error_message: 'freefree announce: awaiting approval',
+      approved_at: auto ? now : null,
+      error_message: auto ? 'freefree auto post: dispatching' : 'freefree announce: awaiting approval',
     }))
-    const { error } = await supabase.from('sns_post_logs').insert(rows)
-    if (error) {
-      console.error('[sns-announce] freefree insert failed:', error.message)
+    const { data: inserted, error } = await supabase
+      .from('sns_post_logs')
+      .insert(rows)
+      .select('id, medium, content')
+    if (error || !inserted) {
+      console.error('[sns-announce] freefree insert failed:', error?.message)
       return { created: 0 }
     }
 
-    await notifyAdminsOfPendingDrafts(supabase, `FreeFree「${post.title}」`, rows.length)
-    return { created: rows.length }
+    if (!auto) {
+      await notifyAdminsOfPendingDrafts(supabase, `FreeFree「${post.title}」`, inserted.length)
+      return { created: inserted.length }
+    }
+
+    const results = await dispatchLogs(
+      supabase,
+      inserted.map((r) => ({
+        id: r.id as string,
+        medium: r.medium as SnsMedium,
+        content: r.content as string | null,
+        target_type: 'freefree',
+        target_id: post.id,
+      })),
+    )
+    const ok = results.filter((r) => r.outcome === 'success').length
+    await notifyAdminsOfAutoPosted(supabase, `FreeFree「${post.title}」`, ok, results.length)
+    return { created: inserted.length }
   } catch (e) {
     console.error('[sns-announce] freefree failed:', e instanceof Error ? e.message : e)
     return { created: 0 }
+  }
+}
+
+// 全自動モードで配信したことを管理者全員に知らせる（ベル＋Webプッシュ）。
+// 確認なしで公式SNSに出たものを、運営があとから見て必要なら削除できるようにするため
+async function notifyAdminsOfAutoPosted(
+  supabase: SupabaseClient,
+  subjectLabel: string,
+  okCount: number,
+  total: number,
+) {
+  try {
+    const { data: admins } = await supabase
+      .from('members')
+      .select('id')
+      .not('admin_role', 'is', null)
+      .is('deleted_at', null)
+    for (const a of admins ?? []) {
+      await insertNotification({
+        recipientId: a.id as string,
+        kind: 'system',
+        title: `SNSへ自動配信しました（${okCount}/${total} 件）`,
+        body: `${subjectLabel}の告知を全自動モードで配信しました。`
+          + (okCount < total ? '配信できなかった分は管理画面の投稿ログから再試行できます。' : '')
+          + '内容に問題があれば各SNSで削除してください',
+        linkUrl: '/admin/sns',
+      })
+    }
+  } catch (e) {
+    console.error('[sns-announce] auto-post notify failed:', e instanceof Error ? e.message : e)
   }
 }
 

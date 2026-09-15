@@ -77,9 +77,10 @@ export default async function AdminSnsPage() {
   const { data: settingsRows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['sns_auto_post', 'sns_threads_auth', 'sns_threads_app', 'sns_threads_discovery_auth', 'sns_facebook_auth', 'sns_instagram_auth', 'sns_instagram_discovery_auth', 'sns_bluesky_search_auth'])
+    .in('key', ['sns_auto_post', 'sns_freefree_auto_post', 'sns_threads_auth', 'sns_threads_app', 'sns_threads_discovery_auth', 'sns_facebook_auth', 'sns_instagram_auth', 'sns_instagram_discovery_auth', 'sns_bluesky_search_auth'])
   const settingOf = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, unknown> | null]))
   const autoPostEnabled = (settingOf.get('sns_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
+  const freefreeAutoPostEnabled = (settingOf.get('sns_freefree_auto_post') as { enabled?: boolean } | undefined)?.enabled === true
 
   const thAuth = settingOf.get('sns_threads_auth') as { username?: string; saved_at?: string; expires_at?: string; keyword_search_ready?: boolean } | undefined
   const thApp = settingOf.get('sns_threads_app') as { app_id?: string; saved_at?: string } | undefined
@@ -237,6 +238,8 @@ export default async function AdminSnsPage() {
         </details>
 
         <AutoPostToggle initialEnabled={autoPostEnabled} />
+
+        <AutoPostToggle kind="freefree" initialEnabled={freefreeAutoPostEnabled} />
 
         <RotationScheduleCard current={currentPreset} />
 

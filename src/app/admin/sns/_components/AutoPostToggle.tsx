@@ -3,24 +3,47 @@
 import { useState, useTransition } from 'react'
 import { setSnsAutoPost } from '../actions'
 
-// 提案告知の全自動／半自動モード切替スイッチ。
+// 告知の全自動／半自動モード切替スイッチ（提案用・FreeFree用）。
 // 全自動は承認なしで外部発信するため、切り替え時に確認ダイアログを挟む。
-export default function AutoPostToggle({ initialEnabled }: { initialEnabled: boolean }) {
+type Kind = 'proposal' | 'freefree'
+
+const TEXT: Record<Kind, { title: string; when: string; off: string; on: string; confirm: string }> = {
+  proposal: {
+    title: '📮 提案告知の配信モード',
+    when: '提案が作成されると',
+    off: '下書きが「承認待ち」になり管理者へ通知。承認したものだけ配信',
+    on: '下書きの生成から配信まですべて自動。',
+    confirm:
+      '全自動モードにすると、提案が作成された瞬間に承認なしで各SNSへ配信されます。\n'
+      + '外部発信の事前確認（運営承認）を省略する運用になりますが、よろしいですか？',
+  },
+  // 2026-09-15 追加。FreeFree は会員なら誰でも画像付きで掲載できるため、既定は OFF（承認制）
+  freefree: {
+    title: '📌 FreeFree 告知の配信モード',
+    when: 'FreeFree に掲載されると（SNS紹介を許可した掲載のみ）',
+    off: '下書きが「承認待ち」になり管理者へ通知。「承認して配信」で配信（2回目以降の定期告知は自動）',
+    on: '掲載と同時に Threads・Facebook・Instagram へ配信し、管理者には配信したことを通知。',
+    confirm:
+      '全自動モードにすると、FreeFree に掲載された瞬間に承認なしで各SNS（Threads・Facebook・Instagram）へ配信されます。\n'
+      + '迷惑な掲載も、そのまま CBI 公式SNSに出ます。掲示板で削除しても、SNSに出た投稿は消えません（各SNSで個別に削除が必要）。\n'
+      + 'よろしいですか？',
+  },
+}
+
+export default function AutoPostToggle({ initialEnabled, kind = 'proposal' }: { initialEnabled: boolean; kind?: Kind }) {
   const [enabled, setEnabled] = useState(initialEnabled)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const t = TEXT[kind]
 
   function toggle() {
     const next = !enabled
-    if (next && !window.confirm(
-      '全自動モードにすると、提案が作成された瞬間に承認なしで各SNSへ配信されます。\n'
-      + '外部発信の事前確認（運営承認）を省略する運用になりますが、よろしいですか？'
-    )) return
+    if (next && !window.confirm(t.confirm)) return
 
     setError(null)
     startTransition(async () => {
       try {
-        await setSnsAutoPost(next)
+        await setSnsAutoPost(next, kind)
         setEnabled(next)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
@@ -32,17 +55,17 @@ export default function AutoPostToggle({ initialEnabled }: { initialEnabled: boo
     <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold">📮 提案告知の配信モード</h2>
+          <h2 className="text-lg font-semibold">{t.title}</h2>
           <p className="text-xs text-slate-600 dark:text-slate-300">
-            提案が作成されると、どちらのモードでも告知文の下書きまでは自動で作られます。
+            {t.when}、どちらのモードでも告知文の下書きまでは自動で作られます。
             違いは<strong className="font-medium">「配信前に人が確認するかどうか」</strong>です。
           </p>
           <ul className="text-xs text-slate-500 space-y-0.5">
             <li className={!enabled ? 'font-medium text-slate-700 dark:text-slate-200' : ''}>
-              ✋ <strong>OFF＝半自動（承認制）</strong>：下書きが「承認待ち」になり管理者へ通知。承認したものだけ配信
+              ✋ <strong>OFF＝半自動（承認制）</strong>：{t.off}
             </li>
             <li className={enabled ? 'font-medium text-slate-700 dark:text-slate-200' : ''}>
-              ⚡ <strong>ON＝全自動</strong>：下書きの生成から配信まですべて自動。<span className="text-red-600 dark:text-red-400">誰の確認もなく即SNSへ投稿されます</span>
+              ⚡ <strong>ON＝全自動</strong>：{t.on}<span className="text-red-600 dark:text-red-400">誰の確認もなく即SNSへ投稿されます</span>
             </li>
           </ul>
         </div>

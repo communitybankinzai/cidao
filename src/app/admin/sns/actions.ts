@@ -492,12 +492,14 @@ export async function saveFacebookAuth(pageIdInput: string, tokenInput: string) 
 // ON: 提案作成と同時に承認なしで各SNSへ即配信する（A4運営ルールの承認を省略
 //     する運用になるため、切り替えは管理画面から明示的に行う）
 // OFF: 従来どおり承認待ちにして、管理者へ通知だけ飛ばす
-export async function setSnsAutoPost(enabled: boolean) {
+// 2026-09-15: FreeFree 告知にも同じ切替を用意（kind='freefree' → app_settings.sns_freefree_auto_post）。
+// 提案と FreeFree は別々に切り替えられる
+export async function setSnsAutoPost(enabled: boolean, kind: 'proposal' | 'freefree' = 'proposal') {
   const { supabase, user } = await requireAdmin()
   const { error } = await supabase
     .from('app_settings')
     .upsert({
-      key: 'sns_auto_post',
+      key: kind === 'freefree' ? 'sns_freefree_auto_post' : 'sns_auto_post',
       value: { enabled },
       updated_at: new Date().toISOString(),
       updated_by: user.id,
