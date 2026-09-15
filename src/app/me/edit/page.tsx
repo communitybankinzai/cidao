@@ -238,7 +238,7 @@ export default async function EditProfilePage({
                 <input type="checkbox" name="contact_permission" defaultChecked={member.contact_permission} className="mt-1" />
                 <span>
                   CBI からの連絡を許可
-                  <span className="block text-xs text-slate-500">運営からの重要連絡・依頼を受け取ります</span>
+                  <span className="block text-xs text-slate-500">運営から個別にお声がけしてよい、という意思表示です（人材バンクでの紹介・活動のお誘いなど）。ベル🔔やお知らせの受け取りには影響しません</span>
                 </span>
               </label>
               <label className="flex items-start gap-2">
@@ -257,7 +257,7 @@ export default async function EditProfilePage({
                 />
                 <span>
                   提案・投票のメール通知を受け取る
-                  <span className="block text-xs text-slate-500">投票開始・締切前・結果確定のお知らせが届きます</span>
+                  <span className="block text-xs text-slate-500">投票開始・締切前・結果確定をメールでお知らせします。メールアドレスを登録した旧アカウントのみが対象で、LINEログインの方には届きません（新しい提案はベル🔔に届きます）</span>
                 </span>
               </label>
               <label className="flex items-start gap-2">
