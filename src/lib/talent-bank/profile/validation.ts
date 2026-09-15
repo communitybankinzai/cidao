@@ -34,7 +34,7 @@ export function groundedFields(collected: CollectedFields, output: unknown): Pro
     const state = original?.state ?? 'unknown'
     // The model never controls state, evidence or source. A blank answer stays unknown.
     const answered = state === 'answered' && !!original.value?.trim()
-    const value = answered ? shortText(typeof values[field_key] === 'string' && (values[field_key] as string).trim()
+    const value = answered ? clipText(typeof values[field_key] === 'string' && (values[field_key] as string).trim()
       ? values[field_key] : original.value, 2000) : null
     return [field_key, { state: state === 'answered' && !answered ? 'unknown' : state,
       value, evidence: [...(original?.evidence ?? [])], source: 'interview' }]
@@ -67,10 +67,13 @@ export function applyFieldPatch(fields: ProfileFields, patch: unknown): ProfileF
 export const profileSchema = {
   type: 'object', additionalProperties: false, required: ['summary_short', 'summary_long', 'fields'],
   properties: {
-    // Anthropic の構造化出力は maxLength / maxItems / type 配列を受け付けない（400）。
-    // 文字数は prompt で指示し、clipText でサーバー側が切り詰める。null 許容は anyOf で表す。
+    // Anthropic の構造化出力は maxLength / maxItems / type 配列を受け付けず、
+    // さらに union 型（anyOf）のプロパティ数にも上限がある（20 項目を anyOf にしたら 400
+    // "too many parameters with union types"）。そのため全項目を string にし、
+    // 値が無い項目は空文字列で返させる（groundedFields が空文字列を「値なし」として扱う）。
+    // 文字数は prompt で指示し、clipText でサーバー側が切り詰める。
     summary_short: { type: 'string' }, summary_long: { type: 'string' },
     fields: { type: 'object', additionalProperties: false, required: INTERVIEW_FIELDS.map(f => f.field_key),
-      properties: Object.fromEntries(INTERVIEW_FIELDS.map(f => [f.field_key, { anyOf: [{ type: 'string' }, { type: 'null' }] }])) },
+      properties: Object.fromEntries(INTERVIEW_FIELDS.map(f => [f.field_key, { type: 'string' }])) },
   },
 }
