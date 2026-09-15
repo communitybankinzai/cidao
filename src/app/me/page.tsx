@@ -282,6 +282,20 @@ export default async function MyPage({
               「登録メンバー」一覧に載せて、団体から声がかかるための公開情報
             </p>
           </Link>
+          {/* 人材バンク（AI インタビュー版）：プロフィール案・紹介動画・他己紹介の確認画面。マイページからの入口が無く
+              「導線がわかりにくい」と指摘されたため追加（2026-09-15） */}
+          <Link
+            href="/me/talent"
+            className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition md:col-span-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden>🎬</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">人材バンクのプロフィールと紹介動画</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              AI インタビューで作ったプロフィールの確認・公開申請、写真の登録と紹介動画の確認、CBI からの他己紹介の確認
+            </p>
+          </Link>
           <Link
             href="/me/inbox"
             className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 transition md:col-span-2"

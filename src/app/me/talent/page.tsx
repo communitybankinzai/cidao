@@ -58,8 +58,9 @@ export default async function MyTalentPage() {
     : step === 4 ? '公開中です。直したいときは「新しい版を作って直す」から。' : ''
 
   return <main className="mx-auto min-h-dvh max-w-2xl space-y-6 px-4 py-6">
-    <nav><Link href="/talent" className="text-sm underline">← 人材バンク</Link></nav>
-    <h1 className="text-2xl font-semibold">あなたのプロフィール</h1>
+    <nav className="flex gap-4 text-sm"><Link href="/me" className="underline">← マイページ</Link><Link href="/talent" className="underline">登録メンバー一覧</Link></nav>
+    <h1 className="text-2xl font-semibold">人材バンクのプロフィールと紹介動画</h1>
+    <p className="text-sm text-muted-foreground">AI インタビューで作ったプロフィールの確認・公開申請と、紹介動画・他己紹介の確認をする画面です。マイページの「公開PRの編集」とは別です。</p>
     {!cards.length && <p>インタビューが終わると、ここにプロフィール案ができます。<Link href="/talent/interview" className="underline">インタビューへ</Link></p>}
     {cards.length > 0 && <section aria-label="進み具合" className="space-y-2 rounded-xl border border-sky-600 bg-sky-50 p-4 text-sm dark:bg-sky-950">
       <ol className="space-y-1">{steps.map((label, i) => <li key={label} className={i === step ? 'font-semibold' : i < step ? 'text-muted-foreground line-through' : 'text-muted-foreground'}>
