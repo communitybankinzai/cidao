@@ -14,20 +14,8 @@ export function freefreeCategoryLabel(key: string): string {
   return FREEFREE_CATEGORIES.find((c) => c.key === key)?.label ?? key
 }
 
-export const FREEFREE_PERIODS = [
-  { key: 'p_1week',   label: '1週間' },
-  { key: 'p_1month',  label: '1ヶ月' },
-  { key: 'p_3months', label: '3ヶ月' },
-] as const
-
-export function periodToDays(key: string): number {
-  switch (key) {
-    case 'p_1week': return 7
-    case 'p_1month': return 30
-    case 'p_3months': return 90
-    default: return 30
-  }
-}
+// 掲載期間は 2026-09-15 から「掲載終了日の日付指定」に一本化した（src/lib/freefree-dates.ts）。
+// 過去の掲載に残る 'p_1week' / 'p_1month' / 'p_3months' は DB の enum に残してある。
 
 // 掲載者区分（5区分）— UIで使う表示用の論理キー。
 // 物理的には freefree_posts.poster_type (enum: 'member' | 'org' | 'individual_business') と

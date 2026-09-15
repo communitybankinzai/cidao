@@ -14,6 +14,7 @@ export type ScannedFromUrl = {
   coupon_content?: string | null
   links?: ScannedLink[]
   sourceUrl?: string
+  event_end_date?: string | null // 開催最終日 YYYY-MM-DD（掲載終了日の自動入力に使う）
   confidence?: number
 }
 

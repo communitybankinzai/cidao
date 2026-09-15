@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { FREEFREE_CATEGORIES, FREEFREE_PERIODS, FREEFREE_POSTER_KINDS, type FreefreePosterKind } from '@/lib/freefree-categories'
+import { FREEFREE_CATEGORIES, FREEFREE_POSTER_KINDS, type FreefreePosterKind } from '@/lib/freefree-categories'
 import { createFreefreePost } from '../actions'
 import NewFreefreeForm from './_components/NewFreefreeForm'
 
@@ -33,7 +33,18 @@ export default async function NewFreefreePage() {
     const o = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations
     if (o) orgMap.set(o.id, o as EditableOrg)
   })
-  const editableOrgs = Array.from(orgMap.values())
+  const myOrgs = Array.from(orgMap.values())
+
+  // 2026-09-15: 運営者（committee / super）は、団体の依頼を受けて代理で掲載できる。
+  // 所属団体に加えて全団体を選べるようにする（実際に掲載できるかはサーバー側で再判定する）
+  const { data: me } = await supabase.from('members').select('admin_role').eq('id', user.id).maybeSingle()
+  const isOperator = me?.admin_role === 'committee' || me?.admin_role === 'super'
+  let editableOrgs = myOrgs
+  if (isOperator) {
+    const { data: allOrgs } = await supabase.from('organizations').select('id, name, type').order('name')
+    const own = new Set(myOrgs.map((o) => o.id))
+    editableOrgs = [...myOrgs, ...((allOrgs ?? []) as EditableOrg[]).filter((o) => !own.has(o.id))]
+  }
 
   async function handleCreate(formData: FormData) {
     'use server'
@@ -84,7 +95,7 @@ export default async function NewFreefreePage() {
           return /^https?:\/\//i.test(url) ? { label, url } : null
         })
         .filter((l): l is { label: string; url: string } => l !== null),
-      period: String(formData.get('period') ?? 'p_1month') as 'p_1week' | 'p_1month' | 'p_3months',
+      end_date: String(formData.get('end_date') ?? ''),
       images,
       coupon,
     })
@@ -99,9 +110,10 @@ export default async function NewFreefreePage() {
           action={handleCreate}
           userId={user.id}
           editableOrgs={editableOrgs}
+          memberOrgIds={myOrgs.map((o) => o.id)}
+          isOperator={isOperator}
           posterKinds={FREEFREE_POSTER_KINDS.map(({ key, label, needsOrg }) => ({ key, label, needsOrg }))}
           categories={FREEFREE_CATEGORIES.map(({ key, label }) => ({ key, label }))}
-          periods={FREEFREE_PERIODS.map(({ key, label }) => ({ key, label }))}
         />
       </div>
     </div>

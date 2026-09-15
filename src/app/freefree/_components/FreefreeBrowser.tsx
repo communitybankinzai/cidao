@@ -20,6 +20,7 @@ export type FreefreeRow = {
   expires_at: string | null
   posterKind: FreefreePosterKind
   orgName: string | null
+  proxied: boolean // 運営者が団体の依頼を受けて代理掲載したもの
   images: string[] | null
   hasCoupon: boolean
 }
@@ -149,7 +150,12 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
                       <span className="text-xs text-slate-500">{freefreeCategoryLabel(p.category)}</span>
                     </div>
                     <div className="font-semibold mb-1">{p.title}</div>
-                    {p.orgName && <div className="text-xs text-slate-500 mb-1">by {p.orgName}</div>}
+                    {p.orgName && (
+                      <div className="text-xs text-slate-500 mb-1">
+                        by {p.orgName}
+                        {p.proxied && <span className="ml-1 text-slate-400">（CBIが依頼を受けて掲載）</span>}
+                      </div>
+                    )}
                     <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{p.body}</p>
                     <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
                       {p.location ? <span>📍 {p.location}</span> : <span />}

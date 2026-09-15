@@ -76,6 +76,8 @@ async function extractFromImage(
   base64: string,
   mediaType: MediaType,
 ): Promise<ScanResult> {
+  // 開催日の年が省略されたチラシ（例:「11月3日」）を正しく読むための基準日（日本時間）
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
   const client = new Anthropic({ apiKey })
 
   let response: Anthropic.Message
@@ -115,15 +117,22 @@ async function extractFromImage(
                 ...nullableString,
                 description: '「初回無料」「◯◯円引き」等の特典・クーポンの記載があれば80字以内で。無ければ null。',
               },
+              event_end_date: {
+                ...nullableString,
+                description:
+                  'イベント・催しの開催最終日（複数日なら最後の日）。YYYY-MM-DD（日本時間）。' +
+                  '常設の店・教室の紹介など終わりの日が無いもの、読み取れないものは null。',
+              },
               confidence: { type: 'number', description: '0〜1の抽出自信度' },
             },
-            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'confidence'],
+            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'event_end_date', 'confidence'],
             additionalProperties: false,
           },
         },
       },
       system:
         '地域の掲示板に載せる「お店・教室・個人の活動」の紹介文を、チラシや店頭の写真から起こすアシスタント。' +
+        `今日は ${today}（日本時間）。開催日の年が省略されていれば、今日以降で最も近い日付と解釈する。` +
         '読み取れた事実だけを使い、書かれていないことは補わない。' +
         '屋号・教室名・団体名は sns_display_name に入れるが、個人の氏名しか無い場合は null にする（本人の同意なく実名を公開しないため）。' +
         '画像がチラシ・看板・商品写真等のいずれでもなく内容を読み取れない場合は title="（読み取り失敗）", confidence=0 を返す。',

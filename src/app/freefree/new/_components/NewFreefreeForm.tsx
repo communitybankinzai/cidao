@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from './FreefreeImagesUpload'
 import FreefreeFlyerScan from './FreefreeFlyerScan'
 import FreefreeUrlScan, { type ScannedLink } from './FreefreeUrlScan'
+import { clampScannedEndDate, defaultEndDate, jstToday, maxEndDate } from '@/lib/freefree-dates'
 
 const MAX_IMAGES = 3
 
@@ -17,16 +18,18 @@ export default function NewFreefreeForm({
   action,
   userId,
   editableOrgs,
+  memberOrgIds,
+  isOperator,
   posterKinds,
   categories,
-  periods,
 }: {
   action: (formData: FormData) => Promise<void>
   userId: string
   editableOrgs: EditableOrg[]
+  memberOrgIds: string[] // 自分が所属・代表の団体。それ以外を選ぶと代理掲載になる
+  isOperator: boolean // 運営者（committee / super）なら全団体を選べる
   posterKinds: PosterKindOpt[]
   categories: Opt[]
-  periods: Opt[]
 }) {
   const [posterKind, setPosterKind] = useState<string>('member')
   const [couponEnabled, setCouponEnabled] = useState(false)
@@ -43,6 +46,24 @@ export default function NewFreefreeForm({
   // URL読み取りで得た参考リンクと、権利を確認して取り込んだ画像
   const [links, setLinks] = useState<ScannedLink[]>([])
   const [importedImages, setImportedImages] = useState<string[]>([])
+  // 掲載終了日（日付指定）。初期値は1ヶ月後、選べるのは今日〜3ヶ月先まで
+  const [endDate, setEndDate] = useState(() => defaultEndDate())
+  const [endDateNote, setEndDateNote] = useState<string | null>(null)
+  // 団体の選択。運営者は全団体から選ぶので、名前で絞り込めるようにする
+  const [orgQuery, setOrgQuery] = useState('')
+  const [orgId, setOrgId] = useState('')
+  // チラシ・URLの読み取りで開催最終日が分かったら、掲載終了日に入れる（選べる範囲に収める）
+  function applyScannedEndDate(ymd: string | null | undefined) {
+    const r = clampScannedEndDate(ymd)
+    if (!r) return
+    setEndDate(r.date)
+    setEndDateNote(
+      r.clamped
+        ? `読み取った開催日（${ymd}）は3ヶ月より先のため、掲載終了日を上限の ${r.date} にしました`
+        : `読み取った開催日に合わせて、掲載終了日を ${r.date} にしました`,
+    )
+  }
+
   const currentKindMeta = posterKinds.find((k) => k.key === posterKind)
   const needsOrg = !!currentKindMeta?.needsOrg
 
@@ -51,6 +72,16 @@ export default function NewFreefreeForm({
     [needsOrg, posterKind, editableOrgs],
   )
   const hasUsableOrg = !needsOrg || orgsForCurrentKind.length > 0
+  // 所属団体は絞り込みに関係なく常に出す。それ以外（運営者のみ）は団体名で絞り込む
+  const memberOrgIdSet = useMemo(() => new Set(memberOrgIds), [memberOrgIds])
+  const visibleOrgs = useMemo(() => {
+    const q = orgQuery.trim()
+    if (!q) return orgsForCurrentKind
+    return orgsForCurrentKind.filter((o) => memberOrgIdSet.has(o.id) || o.name.includes(q))
+  }, [orgQuery, orgsForCurrentKind, memberOrgIdSet])
+  const selectedOrgId = visibleOrgs.some((o) => o.id === orgId) ? orgId : (visibleOrgs[0]?.id ?? '')
+  // 所属していない団体を選んだら代理掲載（最終的な可否はサーバー側で判定する）
+  const isProxy = isOperator && selectedOrgId !== '' && !memberOrgIdSet.has(selectedOrgId)
 
   return (
     <form action={action} className="space-y-4">
@@ -69,6 +100,7 @@ export default function NewFreefreeForm({
             setCouponContent(d.coupon_content.slice(0, 80))
             setCouponEnabled(true)
           }
+          applyScannedEndDate(d.event_end_date)
           // 出典として元ページも必ず残す（重複は除く）
           const found = [
             ...(d.links ?? []),
@@ -96,6 +128,7 @@ export default function NewFreefreeForm({
             setCouponContent(d.coupon_content.slice(0, 80))
             setCouponEnabled(true)
           }
+          applyScannedEndDate(d.event_end_date)
         }}
       />
       <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
@@ -112,10 +145,38 @@ export default function NewFreefreeForm({
           {needsOrg && (
             orgsForCurrentKind.length > 0 ? (
               <>
-                <select name="org_id" required className={`${inp} mt-2`}>
-                  {orgsForCurrentKind.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {isOperator && (
+                  <input
+                    type="search"
+                    value={orgQuery}
+                    onChange={(e) => setOrgQuery(e.target.value)}
+                    placeholder={`団体名で絞り込み（全${orgsForCurrentKind.length}団体）`}
+                    className={`${inp} mt-2`}
+                  />
+                )}
+                {isOperator && orgQuery.trim() !== '' && visibleOrgs.length === 0 && (
+                  <p className="mt-1 text-[11px] text-slate-500">「{orgQuery}」に一致する団体はありません</p>
+                )}
+                <select
+                  name="org_id"
+                  required
+                  value={selectedOrgId}
+                  onChange={(e) => setOrgId(e.target.value)}
+                  className={`${inp} mt-2`}
+                >
+                  {visibleOrgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}{isOperator && !memberOrgIdSet.has(o.id) ? '（代理掲載）' : ''}
+                    </option>
+                  ))}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-500">あなた個人のアカウントから「団体として」投稿します（団体メアドへの切替は不要）</p>
+                {isProxy ? (
+                  <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded p-2">
+                    運営者として、この団体からの依頼を受けて代わりに掲載します。掲示板には「CBIが依頼を受けて掲載」と表示され、誰が代理したかも記録されます。
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-500">あなた個人のアカウントから「団体として」投稿します（団体メアドへの切替は不要）</p>
+                )}
               </>
             ) : (
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded p-2">
@@ -158,10 +219,24 @@ export default function NewFreefreeForm({
               {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </L>
-          <L label="掲載期間" req>
-            <select name="period" required className={inp} defaultValue="p_1month">
-              {periods.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-            </select>
+          <L label="掲載終了日" req>
+            <input
+              type="date"
+              name="end_date"
+              required
+              min={jstToday()}
+              max={maxEndDate()}
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value)
+                setEndDateNote(null)
+              }}
+              className={inp}
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              この日の終わりまで掲載され、日付が変わると一覧から外れます（3ヶ月先まで）。イベントなら開催最終日を選んでください。
+            </p>
+            {endDateNote && <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">{endDateNote}</p>}
           </L>
         </div>
         <L label="場所">
