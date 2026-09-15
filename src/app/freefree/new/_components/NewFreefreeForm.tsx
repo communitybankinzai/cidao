@@ -1,14 +1,34 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition, useEffect, useRef, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from './FreefreeImagesUpload'
 import FreefreeFlyerScan from './FreefreeFlyerScan'
 import FreefreeUrlScan, { type ScannedLink } from './FreefreeUrlScan'
-import { clampScannedEndDate, defaultEndDate, jstToday, maxEndDate } from '@/lib/freefree-dates'
+import { clampScannedEndDate, defaultEndDate, isValidEndDate, jstToday, maxEndDate } from '@/lib/freefree-dates'
+import { matchesSearch, normalizeForSearch } from '@/lib/search-normalize'
 
 const MAX_IMAGES = 3
+// 入力の下書き（この端末のこのタブだけ）。送信に失敗して再読み込みしても入力が戻るようにする。
+// AI読み取りで入った文章も戻るので、読み取り直し（＝もう一度課金）をしなくて済む
+const DRAFT_KEY = 'cidao-freefree-draft-v1'
+const DRAFT_MAX_AGE_MS = 24 * 3600_000
+type Draft = {
+  savedAt: number
+  posterKind: string
+  orgId: string
+  title: string
+  body: string
+  category: string
+  location: string
+  snsDisplayName: string
+  couponEnabled: boolean
+  couponContent: string
+  links: ScannedLink[]
+  importedImages: string[]
+  endDate: string
+}
 
 type PosterKindOpt = { key: string; label: string; needsOrg: boolean }
 type EditableOrg = { id: string; name: string; type: 'civic_group' | 'business' | 'government' }
@@ -23,7 +43,7 @@ export default function NewFreefreeForm({
   posterKinds,
   categories,
 }: {
-  action: (formData: FormData) => Promise<void>
+  action: (formData: FormData) => Promise<{ error: string } | void>
   userId: string
   editableOrgs: EditableOrg[]
   memberOrgIds: string[] // 自分が所属・代表の団体。それ以外を選ぶと代理掲載になる
@@ -52,6 +72,67 @@ export default function NewFreefreeForm({
   // 団体の選択。運営者は全団体から選ぶので、名前で絞り込めるようにする
   const [orgQuery, setOrgQuery] = useState('')
   const [orgId, setOrgId] = useState('')
+  // 下書きの保存と復元。鍵に会員IDを含め、共用PCで別の人の下書きが出ないようにする
+  const draftKey = `${DRAFT_KEY}:${userId}`
+  const [draftRestored, setDraftRestored] = useState(false)
+  const draftReady = useRef(false) // 復元が済むまでは保存しない（空の初期値で下書きを上書きしないため）
+  function saveDraft() {
+    if (!title && !body && links.length === 0 && importedImages.length === 0) return
+    const d: Draft = {
+      savedAt: Date.now(), posterKind, orgId, title, body, category, location, snsDisplayName,
+      couponEnabled, couponContent, links, importedImages, endDate,
+    }
+    try { sessionStorage.setItem(draftKey, JSON.stringify(d)) } catch { /* 保存できなくても掲載は続けられる */ }
+  }
+  function clearDraft() {
+    try { sessionStorage.removeItem(draftKey) } catch { /* 無視 */ }
+  }
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey)
+      const d = raw ? (JSON.parse(raw) as Draft) : null
+      if (d && Date.now() - d.savedAt < DRAFT_MAX_AGE_MS) {
+        setPosterKind(d.posterKind); setOrgId(d.orgId); setTitle(d.title); setBody(d.body)
+        setCategory(d.category); setLocation(d.location); setSnsDisplayName(d.snsDisplayName)
+        setCouponEnabled(d.couponEnabled); setCouponContent(d.couponContent)
+        setLinks(d.links ?? []); setImportedImages(d.importedImages ?? [])
+        // 保存したあとに日付が過ぎていたら初期値に戻す
+        setEndDate(isValidEndDate(d.endDate) ? d.endDate : defaultEndDate())
+        setDraftRestored(true)
+      }
+    } catch { /* 壊れた下書きは無視する */ }
+    draftReady.current = true
+  }, [draftKey])
+  useEffect(() => {
+    if (draftReady.current) saveDraft()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posterKind, orgId, title, body, category, location, snsDisplayName, couponEnabled, couponContent, links, importedImages, endDate])
+
+  // 掲載の送信。失敗しても入力を消さないよう、form の action 属性ではなく自前で送る
+  // （action 属性だと送信後に React がフォームを初期化し、失敗時は画面ごと作り直されて入力が消えていた）
+  const [submitting, startSubmit] = useTransition()
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    setSubmitError(null)
+    // 掲載できると詳細ページへ移るので、先に下書きを消しておく（失敗したら保存し直す）
+    clearDraft()
+    startSubmit(async () => {
+      try {
+        const r = (await action(fd)) as { error?: string } | undefined
+        if (r?.error) {
+          saveDraft()
+          setSubmitError(r.error)
+        }
+      } catch {
+        // サイトの更新直後は、開いていた画面の送信先が無くなって送れない（Next.js の仕様）。
+        // 通信が不安定なときも同じ。下書きを保存しておけば、再読み込みしても入力は戻る
+        saveDraft()
+        setSubmitError('送信できませんでした（サイトの更新直後や、通信が不安定なときに起きます）。入力内容はこの端末に保存してあるので、ページを再読み込み（更新）しても消えません。再読み込みしてから、もう一度「掲載する」を押してください。')
+      }
+    })
+  }
   // チラシ・URLの読み取りで開催最終日が分かったら、掲載終了日に入れる（選べる範囲に収める）
   function applyScannedEndDate(ymd: string | null | undefined) {
     const r = clampScannedEndDate(ymd)
@@ -75,16 +156,26 @@ export default function NewFreefreeForm({
   // 所属団体は絞り込みに関係なく常に出す。それ以外（運営者のみ）は団体名で絞り込む
   const memberOrgIdSet = useMemo(() => new Set(memberOrgIds), [memberOrgIds])
   const visibleOrgs = useMemo(() => {
-    const q = orgQuery.trim()
-    if (!q) return orgsForCurrentKind
-    return orgsForCurrentKind.filter((o) => memberOrgIdSet.has(o.id) || o.name.includes(q))
+    // 空白・全角半角・英字の大小の違いを無視して探す（「みんなのおうちらんか」でも「印西みんなのおうち らんか」に当たる）
+    if (!normalizeForSearch(orgQuery)) return orgsForCurrentKind
+    return orgsForCurrentKind.filter((o) => memberOrgIdSet.has(o.id) || matchesSearch(o.name, orgQuery))
   }, [orgQuery, orgsForCurrentKind, memberOrgIdSet])
   const selectedOrgId = visibleOrgs.some((o) => o.id === orgId) ? orgId : (visibleOrgs[0]?.id ?? '')
   // 所属していない団体を選んだら代理掲載（最終的な可否はサーバー側で判定する）
   const isProxy = isOperator && selectedOrgId !== '' && !memberOrgIdSet.has(selectedOrgId)
 
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {draftRestored && (
+        <div className="text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-3 flex flex-wrap items-center gap-2">
+          <span className="flex-1 min-w-0">
+            前回の入力を復元しました（AI読み取りで入った文章も含みます）。写真は復元されないので、下の「画像」欄から選び直してください（チラシ読み取り欄から選ぶと、AI読み取りがもう一度行われます）。
+          </span>
+          <button type="button" className="underline text-amber-900 dark:text-amber-200" onClick={() => { clearDraft(); window.location.reload() }}>
+            下書きを消して最初から
+          </button>
+        </div>
+      )}
       <FreefreeUrlScan
         // 手動アップロード分は子側で持っているためここでは数えない。
         // 最終的な3枚制限はサーバー側（createFreefreePost の slice）で担保する
@@ -426,9 +517,15 @@ export default function NewFreefreeForm({
           </p>
         )}
       </div>
+      {submitError && (
+        <p role="alert" className="text-sm text-red-800 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded p-3">
+          掲載できませんでした：{submitError}
+          <span className="block mt-1 text-xs">入力した内容はそのまま残っています。直してから、もう一度「掲載する」を押してください。</span>
+        </p>
+      )}
       <div className="flex justify-end gap-2">
         <Link href="/freefree"><Button type="button" variant="outline">キャンセル</Button></Link>
-        <Button type="submit" disabled={!hasUsableOrg}>掲載する</Button>
+        <Button type="submit" disabled={!hasUsableOrg || submitting}>{submitting ? '掲載中…' : '掲載する'}</Button>
       </div>
     </form>
   )

@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { redirect, unstable_rethrow } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { FREEFREE_CATEGORIES, FREEFREE_POSTER_KINDS, type FreefreePosterKind } from '@/lib/freefree-categories'
@@ -46,7 +46,7 @@ export default async function NewFreefreePage() {
     editableOrgs = [...myOrgs, ...((allOrgs ?? []) as EditableOrg[]).filter((o) => !own.has(o.id))]
   }
 
-  async function handleCreate(formData: FormData) {
+  async function handleCreate(formData: FormData): Promise<{ error: string } | void> {
     'use server'
     const poster_kind = String(formData.get('poster_kind') ?? 'member') as FreefreePosterKind
     const org_id = formData.get('org_id') ? String(formData.get('org_id')) : undefined
@@ -60,7 +60,8 @@ export default async function NewFreefreePage() {
           usage_limit: usageLimitRaw ? Number(usageLimitRaw) : undefined,
         }
       : undefined
-    await createFreefreePost({
+    // 失敗したときは例外を投げずにエラー文を返す。投げると画面ごと作り直され、入力が全部消えるため
+    return createFreefreePost({
       poster_kind,
       org_id,
       sns_share: formData.get('sns_share') === 'on',
@@ -98,6 +99,11 @@ export default async function NewFreefreePage() {
       end_date: String(formData.get('end_date') ?? ''),
       images,
       coupon,
+    }).catch((e: unknown) => {
+      // 掲載後に詳細ページへ移る処理（redirect）も例外として届くので、それはそのまま投げ直す
+      unstable_rethrow(e)
+      console.error('[freefree/new] 掲載に失敗:', e)
+      return { error: e instanceof Error ? e.message : String(e) }
     })
   }
 

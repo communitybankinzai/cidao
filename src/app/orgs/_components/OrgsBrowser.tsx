@@ -6,6 +6,7 @@ import { PROPOSAL_CATEGORIES, categoryLabel } from '@/lib/categories'
 import { Avatar } from '@/components/ui/avatar'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
+import { matchesSearch } from '@/lib/search-normalize'
 
 const MEMBERS_PREVIEW = 5
 
@@ -143,8 +144,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
       if (categoryFilter && !(o.organization_categories ?? []).some((c) => c.category === categoryFilter)) return false
       if (statusFilter && o.status !== statusFilter) return false
       if (q) {
-        const hay = `${o.name} ${o.description ?? ''} ${o.inzai_registration_number ?? ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
+        // 名前・説明・登録番号をそれぞれ、空白・全角半角・英字の大小の違いを無視して照合する。
+        // 連結してから空白を消すと、名前の末尾と説明の先頭がつながって誤って当たるため別々に見る
+        if (![o.name, o.description, o.inzai_registration_number].some((t) => matchesSearch(t, query))) return false
       }
       return true
     })
