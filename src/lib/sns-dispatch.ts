@@ -239,11 +239,16 @@ export async function dispatchLogs(
       continue
     }
     try {
-      // 提案の Instagram 投稿には告知カード画像（公開URL・JPEG）を添える
+      // Instagram 投稿には画像（公開URL・JPEG）を添える。
+      // 提案は告知カード画像、FreeFree は1枚目の掲載画像を JPEG・4:5 に直したもの（2026-09-15）
       const imageUrl =
-        log.medium === 'instagram' && log.target_type === 'proposal' && log.target_id
-          ? `${SITE_BASE}/api/og/proposal/${log.target_id}`
-          : undefined
+        log.medium !== 'instagram' || !log.target_id
+          ? undefined
+          : log.target_type === 'proposal'
+            ? `${SITE_BASE}/api/og/proposal/${log.target_id}`
+            : log.target_type === 'freefree'
+              ? `${SITE_BASE}/api/og/freefree/${log.target_id}`
+              : undefined
       const out = await postToMedium(log.medium, content, creds, { imageUrl })
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
       // 「紹介済み」は実際に配信できたときだけ刻む。下書きを作った時点では刻まない

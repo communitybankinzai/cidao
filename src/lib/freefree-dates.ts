@@ -47,6 +47,22 @@ export function endOfDayJstIso(ymd: string): string {
   return new Date(`${ymd}T23:59:59+09:00`).toISOString()
 }
 
+// 日本時間の日付どうしの日数差（b − a）。SNS 告知のカウントダウンに使う
+export function daysBetweenYmd(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400_000)
+}
+
+// 日時（ISO 文字列）を日本時間の日付にする。掲載終了日（expires_at＝その日の 23:59:59）の読み戻しに使う
+export function jstYmdOf(iso: string): string {
+  return jstToday(Date.parse(iso))
+}
+
+// 開催日（初日）の検査。実在する日付で、掲載終了日（＝開催最終日）より後ではないこと。
+// 複数日のイベントは始まった後に掲載することもあるので、過去の日付も認める
+export function isValidStartDate(start: string, end: string): boolean {
+  return isRealDate(start) && start <= end
+}
+
 // AI が読み取った開催最終日を、選べる範囲に収める。
 // 読み取れない・過去の日付なら null（初期値のまま）。上限より先なら上限に丸めて知らせる
 export function clampScannedEndDate(

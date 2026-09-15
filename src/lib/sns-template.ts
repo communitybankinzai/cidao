@@ -4,6 +4,8 @@
 // Facebook: 制約緩い
 // LINE: メッセージ通常テキスト（リンク自動展開あり）
 
+import { daysBetweenYmd, jstToday } from '@/lib/freefree-dates'
+
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 const BOARD_URL = `${SITE_BASE}/freefree`
 
@@ -23,6 +25,10 @@ export type SnsTarget = {
   poster_name?: string | null
   // proposal 用。議論・投票の締切（表示用）
   deadline?: string | null
+  // freefree 用。カウントダウンに使う日本時間の日付（YYYY-MM-DD）。
+  // event_start_date＝開催日（初日・任意）、end_date＝掲載終了日（イベントなら開催最終日）
+  event_start_date?: string | null
+  end_date?: string | null
 }
 
 export type SnsMedium = 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
@@ -71,8 +77,47 @@ function freefreePrefix(category?: string | null): string {
   }
 }
 
-export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string {
+// YYYY-MM-DD → 「11/3」
+function md(ymd: string): string {
+  const [, m, d] = ymd.split('-')
+  return `${Number(m)}/${Number(d)}`
+}
+
+// FreeFree 告知の冒頭に置くカウントダウン（2026-09-15）。
+// 定期告知で毎回同じ文面にならないよう、配信する日を基準に毎回作る。
+// イベントは開催日（初日）まで、開催日の入力が無いイベントは開催最終日まで、
+// それ以外（お店・教室など）は掲載終了日まで数える。数えられないとき（過ぎた等）は null
+export function freefreeCountdown(target: SnsTarget, today: string): string | null {
+  const start = target.event_start_date ?? null
+  const end = target.end_date ?? null
+  if (start) {
+    const n = daysBetweenYmd(today, start)
+    if (n > 1) return `⏳ 開催まであと${n}日！（${md(start)}）`
+    if (n === 1) return `⏰ いよいよ明日開催！（${md(start)}）`
+    if (n === 0) return end && end > start ? `🎉 本日開催！（${md(end)}まで）` : '🎉 本日開催！'
+    if (end && today <= end) return `🎉 開催中！（${md(end)}まで）`
+    return null
+  }
+  if (!end) return null
+  const n = daysBetweenYmd(today, end)
+  if (target.category === 'event') {
+    if (n > 1) return `⏳ ${md(end)}まで、あと${n}日！`
+    if (n === 1) return `⏰ いよいよ明日（${md(end)}）まで！`
+    if (n === 0) return `🎉 本日（${md(end)}）まで！`
+    return null
+  }
+  if (n > 1) return `⏳ 掲載終了まであと${n}日（${md(end)}まで）`
+  if (n === 1) return '⏰ 掲載は明日まで'
+  if (n === 0) return '⏰ 掲載は本日まで'
+  return null
+}
+
+// now は「配信する時点」。カウントダウンの基準日になる（テストでは固定値を渡す）
+export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = Date.now()): string {
   const link = url(target, medium)
+  // FreeFree は冒頭をカウントダウンで強調する（無ければ何も付けない）
+  const countdown = target.target_type === 'freefree' ? freefreeCountdown(target, jstToday(now)) : null
+  const head = countdown ? `${countdown}\n` : ''
   let prefix = ''
   let body = ''
   let hashtags: string[] = []
@@ -122,7 +167,7 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string
       // 掲載者名・タイトル・場所はいずれも利用者の自由入力なので、
       // どれが長くても 280 weighted を超えないよう個別に上限をかける。
       const loc = target.location ? `（${truncate(target.location, 20)}）` : ''
-      return `${prefix}\n${freefreeEndorsement(target.poster_name, 20)}\n\n${truncate(target.title, 30)}${loc}\n${link}\n${tagLine}`
+      return `${head}${prefix}\n${freefreeEndorsement(target.poster_name, 20)}\n\n${truncate(target.title, 30)}${loc}\n${link}\n${tagLine}`
     }
     const compact = `${prefix} ${truncate(target.title, 50)}\n${truncate(body.replace(target.title, '').replace(/\n+/g, ' '), 80)}\n${link}\n${tagLine}`
     return compact
@@ -131,7 +176,11 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium): string
   // Facebook / LINE / Threads / Instagram は字数に余裕があるため、導線も添える
   // （Threads は500字・Instagram キャプションは2200字まで。下記は十分収まる）
   if (target.target_type === 'freefree') {
-    return `${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${BOARD_URL}\n${tagLine}`
+    // Instagram はキャプション内の URL を押せないため、プロフィールのリンクへ誘導する（提案告知と同じ運用）
+    if (medium === 'instagram') {
+      return `${head}${prefix}\n${body}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
+    }
+    return `${head}${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${BOARD_URL}\n${tagLine}`
   }
   if (target.target_type === 'proposal') {
     // Instagram はキャプション内のURLがクリックできないため、URL文字列は載せず

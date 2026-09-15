@@ -162,8 +162,8 @@ export default async function AdminSnsPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin / SNS</p>
           <h1 className="text-3xl font-serif font-bold">SNS 定期紹介・提案告知</h1>
           <p className="text-sm text-slate-500 mt-1">
-            FreeFree・団体は毎朝9時のローテーションで、提案は作成時に、それぞれ告知の下書きが自動生成されます
-            （団体は新規登録・紹介内容の更新時にも生成。配信先：Threads、提案のみ Instagram も）。
+            FreeFree は掲載時、提案は作成時、団体は新規登録・紹介内容の更新時とローテーションで、それぞれ告知の下書きが自動生成されます
+            （FreeFree は承認するとその場で配信し、以後はローテーションで繰り返し告知。配信先：Threads、FreeFree は Facebook・Instagram も、提案は Instagram も）。
             イベントは毎朝のまとめ配信で告知するため、ローテーション単独紹介の対象外です。
           </p>
         </header>
@@ -178,7 +178,7 @@ export default async function AdminSnsPage() {
               <ul className="list-disc pl-5 space-y-0.5 text-xs">
                 <li><strong>提案</strong>：CiDAOに提案が作成されると自動生成（Threads / Instagram / Facebook）</li>
                 <li><strong>団体</strong>：新規登録・紹介内容の更新のタイミングで自動生成＋毎朝9時のローテーションでも定期紹介（Threads）</li>
-                <li><strong>FreeFree</strong>：毎朝9時のローテーションが「最近紹介していないもの」から1件ずつ生成（Threads。🌟 イベントカテゴリの掲載分も対象）</li>
+                <li><strong>FreeFree</strong>：掲載と同時に自動生成（Threads / Facebook、画像があれば Instagram）。「承認して配信」でその場で配信。以後はローテーションが「最近紹介していないもの」から1件ずつ承認済みで作り、18時台に冒頭のカウントダウン（「開催まであと◯日！」など）を付けて配信（初回の承認・配信を経た掲載、SNS紹介を許可した掲載のみ）</li>
                 <li><strong>イベント</strong>：毎朝のまとめ配信で告知するため、ローテーションによる単独紹介は行いません</li>
               </ul>
               <p className="text-xs mt-1">下書きができると管理者へベル・プッシュ・メールで通知が届きます。</p>

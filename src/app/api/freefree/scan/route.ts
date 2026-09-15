@@ -117,6 +117,12 @@ async function extractFromImage(
                 ...nullableString,
                 description: '「初回無料」「◯◯円引き」等の特典・クーポンの記載があれば80字以内で。無ければ null。',
               },
+              event_start_date: {
+                ...nullableString,
+                description:
+                  'イベント・催しの開催日（複数日なら最初の日）。YYYY-MM-DD（日本時間）。' +
+                  '常設の店・教室の紹介など開催日の無いもの、読み取れないものは null。',
+              },
               event_end_date: {
                 ...nullableString,
                 description:
@@ -125,7 +131,7 @@ async function extractFromImage(
               },
               confidence: { type: 'number', description: '0〜1の抽出自信度' },
             },
-            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'event_end_date', 'confidence'],
+            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'event_start_date', 'event_end_date', 'confidence'],
             additionalProperties: false,
           },
         },

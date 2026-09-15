@@ -131,24 +131,40 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
             >
               却下
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending || !text.trim() || overLimit}
-              onClick={() => run(() => approveDraft(log.id, text))}
-            >
-              承認する（{nextDispatchLabel()}に配信）
-            </Button>
-            <Button
-              type="button"
-              disabled={pending || !text.trim() || overLimit}
-              onClick={() => {
-                if (!window.confirm(`「${log.title}」（${log.mediumLabel}）をこの内容でただちに投稿します。よろしいですか？`)) return
-                run(() => approveAndDispatchDraft(log.id, text))
-              }}
-            >
-              ⚡ 今すぐ投稿
-            </Button>
+            {log.target_type === 'freefree' ? (
+              // FreeFree は承認＝その場で配信（2026-09-15・admin/sns/actions.ts の approveDraft）
+              <Button
+                type="button"
+                disabled={pending || !text.trim() || overLimit}
+                onClick={() => {
+                  if (!window.confirm(`「${log.title}」（${log.mediumLabel}）を承認し、この内容でただちに投稿します。よろしいですか？`)) return
+                  run(() => approveDraft(log.id, text))
+                }}
+              >
+                承認して配信
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || !text.trim() || overLimit}
+                  onClick={() => run(() => approveDraft(log.id, text))}
+                >
+                  承認する（{nextDispatchLabel()}に配信）
+                </Button>
+                <Button
+                  type="button"
+                  disabled={pending || !text.trim() || overLimit}
+                  onClick={() => {
+                    if (!window.confirm(`「${log.title}」（${log.mediumLabel}）をこの内容でただちに投稿します。よろしいですか？`)) return
+                    run(() => approveAndDispatchDraft(log.id, text))
+                  }}
+                >
+                  ⚡ 今すぐ投稿
+                </Button>
+              </>
+            )}
           </>
         )}
       </div>

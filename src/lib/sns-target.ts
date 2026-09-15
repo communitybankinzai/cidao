@@ -5,6 +5,7 @@
 // 取得ロジックは1か所に置く。
 
 import type { SnsTarget } from '@/lib/sns-template'
+import { jstYmdOf } from '@/lib/freefree-dates'
 
 type AnySupabase = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
 
@@ -34,7 +35,7 @@ export async function fetchSnsTarget(
   if (target_type === 'freefree') {
     const { data } = await supabase
       .from('freefree_posts')
-      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name')
+      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name, event_start_date, expires_at')
       .eq('id', target_id)
       .maybeSingle()
     if (!data || data.status !== 'active') return null
@@ -62,6 +63,9 @@ export async function fetchSnsTarget(
       category: data.category as string | null,
       location: data.location as string | null,
       poster_name,
+      // カウントダウン用（開催日は任意。掲載終了日は expires_at＝その日の 23:59:59 日本時間）
+      event_start_date: (data.event_start_date as string | null) ?? null,
+      end_date: data.expires_at ? jstYmdOf(String(data.expires_at)) : null,
     }
   }
 

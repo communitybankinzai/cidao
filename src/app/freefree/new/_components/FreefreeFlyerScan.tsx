@@ -10,6 +10,7 @@ export type ScannedFreefree = {
   location?: string | null
   sns_display_name?: string | null
   coupon_content?: string | null
+  event_start_date?: string | null // 開催日（初日）YYYY-MM-DD（SNS告知のカウントダウンに使う）
   event_end_date?: string | null // 開催最終日 YYYY-MM-DD（掲載終了日の自動入力に使う）
   confidence?: number
 }
