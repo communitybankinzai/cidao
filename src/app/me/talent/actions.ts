@@ -9,6 +9,7 @@ import { generateProfileDraft } from '@/lib/talent-bank/profile/generate'
 import { createRevision, updateDraft } from '@/lib/talent-bank/profile/review'
 import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
+import { createClient } from '@/lib/supabase/server'
 
 function refresh() {
   for (const p of ['/me/talent', '/talent', '/admin/talent-bank', '/talent/interview']) revalidatePath(p)
@@ -61,5 +62,15 @@ export async function reviewAction(_previous: { error: string }, form: FormData)
       if (intent === 'approve') await notifyAdminsOfApplication(versionId)
     }
   } catch (error) { refresh(); return failure(error) }
+  refresh(); return { error: '' }
+}
+// 紹介ページに「活動の足あと」を出すか（本人の設定・2026-09-15）。本人の権限（RLS）で自分の行だけを更新する。
+export async function footprintsAction(_previous: { error: string }, form: FormData) {
+  try {
+    const { memberId } = await sessionMember()
+    const db = await createClient()
+    const { error } = await db.from('members').update({ show_footprints: form.get('show') === 'yes' }).eq('id', memberId)
+    if (error) throw error
+  } catch { return { error: '設定を保存できませんでした。時間をおいて再度お試しください。' } }
   refresh(); return { error: '' }
 }

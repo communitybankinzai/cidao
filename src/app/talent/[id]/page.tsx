@@ -6,6 +6,7 @@ import { nameWithSan } from '@/lib/honorific'
 import { ContactForm } from './_components/ContactForm'
 import { getPublicProfile } from '@/lib/talent-bank/profile/read'
 import ProfileContent from '@/app/me/talent/_components/ProfileContent'
+import { getFootprints, hasFootprints } from '@/lib/talent-bank/footprints'
 
 export default async function TalentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ subject?: string }> }) {
   const { id } = await params
@@ -32,6 +33,8 @@ export default async function TalentDetailPage({ params, searchParams }: { param
     ? await supabase.from('members').select('tier').eq('id', user.id).single()
     : { data: null }
   const myTier = myTierRow?.tier ?? null
+  // 見る人の権限で読むので、その人に見えない記録は出ない（本人が隠していれば null）
+  const footprints = await getFootprints(supabase, id)
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -111,6 +114,47 @@ export default async function TalentDetailPage({ params, searchParams }: { param
             <h2 className="text-xs font-semibold uppercase text-slate-500 mb-2">自己紹介</h2>
             <p className="text-sm whitespace-pre-wrap">{member.self_introduction}</p>
           </div>
+        )}
+
+        {footprints && hasFootprints(footprints) && (
+          <section aria-label="活動の足あと" className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-4">
+            <h2 className="text-xs font-semibold uppercase text-slate-500">活動の足あと</h2>
+            {footprints.orgs.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">所属している団体</h3>
+                <ul className="text-sm list-disc pl-5 space-y-1">
+                  {footprints.orgs.map(o => (
+                    <li key={o.id}><Link href={`/orgs/${o.id}`} className="hover:underline">{o.name}</Link>{o.representative && '（代表）'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {footprints.events.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">主催したイベント</h3>
+                <ul className="text-sm list-disc pl-5 space-y-1">
+                  {footprints.events.map(e => (
+                    <li key={e.id}>
+                      <Link href={`/events/${e.id}`} className="hover:underline">{e.title}</Link>
+                      {e.startAt && <span className="text-slate-500">（{new Date(e.startAt).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}）</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {footprints.proposals.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">出した提案</h3>
+                <ul className="text-sm list-disc pl-5 space-y-1">
+                  {footprints.proposals.map(p => (
+                    <li key={p.id}><Link href={`/proposals/${p.id}`} className="hover:underline">{p.title}</Link></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {footprints.commentCount > 0 && <p className="text-sm">提案への意見・回答：{footprints.commentCount}件</p>}
+            <p className="text-[11px] text-slate-500">CiDAO で公開されている記録から自動で表示しています。</p>
+          </section>
         )}
 
         {user?.id !== id && pr?.message_acceptance !== 'closed' && (

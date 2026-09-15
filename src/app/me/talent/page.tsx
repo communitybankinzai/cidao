@@ -2,10 +2,11 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CONSENT_TEXTS, hasConsent } from '@/lib/consents'
+import { createClient } from '@/lib/supabase/server'
 import { createTalentBankClient } from '@/lib/talent-bank/db'
 import { currentInterview } from '@/lib/talent-bank/interview/access'
 import { INTERVIEW_FIELDS } from '@/lib/talent-bank/interview/fields'
-import { reviewAction } from './actions'
+import { footprintsAction, reviewAction } from './actions'
 import ActionForm from './_components/ActionForm'
 import EditChat from './_components/EditChat'
 import GenerateForm from './_components/GenerateForm'
@@ -26,10 +27,13 @@ export default async function MyTalentPage() {
   const { data } = await db.auth.getUser()
   if (!data.user) redirect('/login?next=/me/talent')
   const memberId = data.user.id
-  const [profiles, tags, interview] = await Promise.all([
+  const [profiles, tags, interview, me] = await Promise.all([
     db.from('talent_profiles').select('*').eq('member_id', memberId).order('updated_at', { ascending: false }),
     db.from('talent_tags').select('*').order('label'), currentInterview(memberId),
+    // show_footprints は人材バンク用の型定義に無い列なので、型なしの通常クライアントで読む
+    (await createClient()).from('members').select('show_footprints').eq('id', memberId).maybeSingle(),
   ])
+  const showFootprints = me.data?.show_footprints !== false
   if (profiles.error || tags.error) throw new Error('Profile unavailable')
   const cards = await Promise.all((profiles.data ?? []).map(async profile => {
     const versions = await db.from('talent_profile_versions').select('*').eq('profile_id', profile.id).order('version', { ascending: false })
@@ -136,5 +140,15 @@ export default async function MyTalentPage() {
       </section>
     })}
     {interview?.status === 'done' && <GenerateForm consented={consented} again={cards.length > 0} />}
+
+    <section aria-label="活動の足あと" className="space-y-3 rounded-xl border p-4 text-sm">
+      <h2 className="font-medium">紹介ページの「活動の足あと」</h2>
+      <p className="text-muted-foreground">所属している団体・出した提案・提案への意見の数・主催したイベントを、紹介ページに自動で並べます。CiDAO ですでに公開されている記録だけで、投票や参加したイベントの記録は出しません。</p>
+      <ActionForm key={`footprints:${showFootprints}`} action={footprintsAction} successText="設定を保存しました。">
+        <input type="hidden" name="show" value={showFootprints ? 'no' : 'yes'} />
+        <p>いまの設定：{showFootprints ? '表示する' : '表示しない'}</p>
+        <Button type="submit" variant="outline">{showFootprints ? '足あとを隠す' : '足あとを表示する'}</Button>
+      </ActionForm>
+    </section>
   </main>
 }
