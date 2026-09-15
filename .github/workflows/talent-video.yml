@@ -1,0 +1,45 @@
+# 人材バンク紹介動画の作成（2026-09-15）。待っている仕事（talent_videos.status=queued）があるときだけ
+# VOICEVOX（Docker）と ffmpeg で作り、非公開バケットへ上げる。公開リポジトリなので Actions の実行時間は無料。
+# 起動：10分ごとの定期実行（Vercel 側に GitHub のトークンを置かずに済む）／手動実行／repository_dispatch（talent-video）
+name: talent-video
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [talent-video]
+concurrency:
+  group: talent-video
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.TALENT_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TALENT_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 待っている仕事の数
+        id: queue
+        run: echo "count=$(python3 scripts/talent-video/run_job.py --count)" >> "$GITHUB_OUTPUT"
+      - name: VOICEVOX を起動
+        if: steps.queue.outputs.count != '0'
+        run: docker run -d --name voicevox -p 50021:50021 voicevox/voicevox_engine:cpu-latest
+      - name: ffmpeg・フォント・Pillow
+        if: steps.queue.outputs.count != '0'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk > /dev/null
+          pip install -q pillow
+      - name: VOICEVOX の起動を待つ
+        if: steps.queue.outputs.count != '0'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:50021/version > /dev/null; then echo "voicevox ready ($i)"; exit 0; fi
+            sleep 3
+          done
+          echo "voicevox did not start"; docker logs voicevox | tail -20; exit 1
+      - name: 動画を作る
+        if: steps.queue.outputs.count != '0'
+        run: python3 scripts/talent-video/run_job.py

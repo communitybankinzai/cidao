@@ -6,7 +6,7 @@ export const fields = (): ProfileFields => Object.fromEntries(INTERVIEW_FIELDS.m
   state: 'answered', value: `${f.label}の回答`, evidence: ['11111111-1111-4111-8111-111111111111'], source: 'interview',
 }]))
 export const profile = (): TalentProfile => ({ id: 'profile-1', subject_id: 'subject-1', member_id: memberId,
-  current_version_id: null, draft_version_id: 'version-1', public_scope: 'private', created_at: 'now', updated_at: 'now' })
+  current_version_id: null, draft_version_id: 'version-1', public_scope: 'private', face_mode: 'photo', created_at: 'now', updated_at: 'now' })
 export const version = (patch: Partial<ProfileVersion> = {}): ProfileVersion => ({ id: 'version-1', profile_id: 'profile-1', version: 1,
   status: 'draft', fields_json: fields(), summary_short: '短い紹介', summary_long: '詳しい紹介', generated_run_id: 'run-1',
   edited_by_owner_at: null, owner_approved_at: null, admin_approved_by: null, admin_approved_at: null, rejected_reason: null,

@@ -5,6 +5,9 @@ import { createTalentBankClient } from '@/lib/talent-bank/db'
 import ActionForm from '@/app/me/talent/_components/ActionForm'
 import ProfileContent from '@/app/me/talent/_components/ProfileContent'
 import { moderateAction } from './actions'
+import { videoModerateAction } from './video-actions'
+import { adminVideoQueue } from '@/lib/talent-bank/video/jobs'
+const VIDEO_STATUS: Record<string, string> = { owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
 export default async function TalentBankAdminPage() {
   const db = await createTalentBankClient()
   const { data } = await db.auth.getUser()
@@ -15,6 +18,9 @@ export default async function TalentBankAdminPage() {
   const versions = await db.from('talent_profile_versions').select('*').eq('status', 'owner_reviewed').order('owner_approved_at')
   const tags = await db.from('talent_tags').select('*')
   if (profiles.error || versions.error || tags.error) throw new Error('Review queue unavailable')
+  const videos = await adminVideoQueue(data.user.id)
+  const memberRows = videos.length ? await db.from('members').select('id, display_name').in('id', [...new Set(videos.map(v => v.member_id))]) : { data: [] }
+  const names = new Map((memberRows.data ?? []).map(m => [m.id, m.display_name]))
   const currentDrafts = new Set(profiles.data?.map(p => p.draft_version_id))
   const cards = await Promise.all((versions.data ?? []).filter(v => currentDrafts.has(v.id)).map(async version => {
     const links = await db.from('talent_profile_version_tags').select('tag_id').eq('version_id', version.id)
@@ -38,6 +44,22 @@ export default async function TalentBankAdminPage() {
         <label className="block">差し戻し理由（必須）<textarea name="reason" required maxLength={1000} rows={3} className="mt-2 w-full rounded border bg-background p-3" /></label>
         <Button type="submit" name="intent" value="reject" variant="outline">差し戻し</Button>
       </ActionForm>
+    </section>)}
+
+    <h2 className="text-xl font-semibold">紹介動画</h2>
+    {!videos.length && <p>本人が承認した動画・掲載中の動画はありません。</p>}
+    {videos.map(v => <section key={v.id} className="space-y-3 rounded-xl border p-4 text-sm">
+      <p><span className="rounded-full border px-2 py-0.5 text-xs">{VIDEO_STATUS[v.status] ?? v.status}</span> {names.get(v.member_id) ?? '（表示名なし）'}
+        <span className="text-muted-foreground">　{v.style}／{v.voice_name}／{v.bgm_credit}{v.duration_sec ? `／${Math.round(Number(v.duration_sec))}秒` : ''}</span></p>
+      {v.status === 'failed' && <p className="text-red-700">失敗の理由：{v.error}</p>}
+      {v.storage_path && <video controls playsInline preload="metadata" poster={`/api/talent-bank/video/${v.id}?thumb=1`} src={`/api/talent-bank/video/${v.id}`} className="w-full max-w-xs rounded-lg bg-black" />}
+      {v.status === 'owner_approved' && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
+        <label className="block">確認にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
+        <Button type="submit" name="intent" value="publish">紹介ページに掲載する</Button>
+      </ActionForm>}
+      {(v.status === 'published' || v.status === 'owner_approved') && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
+        <Button type="submit" name="intent" value="retire" variant="outline" size="sm">掲載を下げる</Button>
+      </ActionForm>}
     </section>)}
   </main>
 }

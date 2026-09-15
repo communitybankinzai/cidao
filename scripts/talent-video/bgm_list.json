@@ -1,0 +1,219 @@
+[
+ {
+  "file": "oshare_simplestyle.mp3",
+  "title": "シンプルスタイル",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「シンプルスタイル」",
+  "seconds": 125
+ },
+ {
+  "file": "oshare_yoiyaminoseaside.mp3",
+  "title": "宵闇のシーサイド",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「宵闇のシーサイド」",
+  "seconds": 142
+ },
+ {
+  "file": "oshare_yuugurenocampus.mp3",
+  "title": "夕暮れのキャンパス",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「夕暮れのキャンパス」",
+  "seconds": 151
+ },
+ {
+  "file": "oshare_natsuironocampus.mp3",
+  "title": "夏色のキャンパス",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「夏色のキャンパス」",
+  "seconds": 147
+ },
+ {
+  "file": "oshare_marbletechno1.mp3",
+  "title": "マーブルテクノⅠ",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「マーブルテクノⅠ」",
+  "seconds": 127
+ },
+ {
+  "file": "cool_energy.mp3",
+  "title": "エナジー",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「エナジー」",
+  "seconds": 109
+ },
+ {
+  "file": "cool_uchiagehanabi.mp3",
+  "title": "打ち上げ花火",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「打ち上げ花火」",
+  "seconds": 116
+ },
+ {
+  "file": "warm_houkagonoyuzora.mp3",
+  "title": "放課後の夕空",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「放課後の夕空」",
+  "seconds": 153
+ },
+ {
+  "file": "warm_chiisanaashiato.mp3",
+  "title": "小さな足あと",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「小さな足あと」",
+  "seconds": 130
+ },
+ {
+  "file": "warm_akiironooka.mp3",
+  "title": "秋色の丘",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「秋色の丘」",
+  "seconds": 152
+ },
+ {
+  "file": "warm_pugtoosanpo.mp3",
+  "title": "パグとお散歩",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「パグとお散歩」",
+  "seconds": 109
+ },
+ {
+  "file": "warm_ukiukilalala.mp3",
+  "title": "ウキウキららら",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「ウキウキららら」",
+  "seconds": 116
+ },
+ {
+  "file": "warm_yuruyakanaasayake.mp3",
+  "title": "ゆるやかな朝焼け",
+  "mood": "warm",
+  "credit": "BGM　甘茶の音楽工房「ゆるやかな朝焼け」",
+  "seconds": 120
+ },
+ {
+  "file": "positive_happytime.mp3",
+  "title": "ハッピータイム",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「ハッピータイム」",
+  "seconds": 104
+ },
+ {
+  "file": "positive_houkagonoumibe.mp3",
+  "title": "放課後の海辺",
+  "mood": "positive",
+  "credit": "BGM　甘茶の音楽工房「放課後の海辺」",
+  "seconds": 157
+ },
+ {
+  "file": "calm_kougenwowatarukaze.mp3",
+  "title": "高原を渡る風",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「高原を渡る風」",
+  "seconds": 167
+ },
+ {
+  "file": "calm_yuruyakanakaze.mp3",
+  "title": "緩やかな風",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「緩やかな風」",
+  "seconds": 124
+ },
+ {
+  "file": "calm_yume.mp3",
+  "title": "夢",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「夢」",
+  "seconds": 157
+ },
+ {
+  "file": "calm_asaitsukiakari.mp3",
+  "title": "浅い月明かり",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「浅い月明かり」",
+  "seconds": 68
+ },
+ {
+  "file": "calm_latenightbridge.mp3",
+  "title": "レイト・ナイト・ブリッジ",
+  "mood": "calm",
+  "credit": "BGM　甘茶の音楽工房「レイト・ナイト・ブリッジ」",
+  "seconds": 135
+ },
+ {
+  "file": "heart_sangatsunosundasora.mp3",
+  "title": "3月の澄んだ空",
+  "mood": "heart",
+  "credit": "BGM　甘茶の音楽工房「3月の澄んだ空」",
+  "seconds": 176
+ },
+ {
+  "file": "heart_haruemukaukusabanae.mp3",
+  "title": "春へ向かう草花へ",
+  "mood": "heart",
+  "credit": "BGM　甘茶の音楽工房「春へ向かう草花へ」",
+  "seconds": 172
+ },
+ {
+  "file": "heart_tsukiakarinotodai.mp3",
+  "title": "月明かりの灯台",
+  "mood": "heart",
+  "credit": "BGM　甘茶の音楽工房「月明かりの灯台」",
+  "seconds": 120
+ },
+ {
+  "file": "heart_rokugatsunoenrai.mp3",
+  "title": "6月の遠雷",
+  "mood": "heart",
+  "credit": "BGM　甘茶の音楽工房「6月の遠雷」",
+  "seconds": 167
+ },
+ {
+  "file": "heart_odysseia.mp3",
+  "title": "オデュッセイア",
+  "mood": "heart",
+  "credit": "BGM　甘茶の音楽工房「オデュッセイア」",
+  "seconds": 111
+ },
+ {
+  "file": "documentary_otologic_01.mp3",
+  "title": "社会派ドキュメンタリー01",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー01」（CC BY 4.0）",
+  "seconds": 117
+ },
+ {
+  "file": "documentary_otologic_02.mp3",
+  "title": "社会派ドキュメンタリー02",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー02」（CC BY 4.0）",
+  "seconds": 116
+ },
+ {
+  "file": "documentary_otologic_03.mp3",
+  "title": "社会派ドキュメンタリー03",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー03」（CC BY 4.0）",
+  "seconds": 147
+ },
+ {
+  "file": "documentary_otologic_04.mp3",
+  "title": "社会派ドキュメンタリー04",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー04」（CC BY 4.0）",
+  "seconds": 121
+ },
+ {
+  "file": "documentary_otologic_05.mp3",
+  "title": "社会派ドキュメンタリー05",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー05」（CC BY 4.0）",
+  "seconds": 103
+ },
+ {
+  "file": "documentary_otologic_06.mp3",
+  "title": "社会派ドキュメンタリー06",
+  "mood": "documentary",
+  "credit": "BGM　OtoLogic「社会派ドキュメンタリー06」（CC BY 4.0）",
+  "seconds": 116
+ }
+]

@@ -7,6 +7,7 @@ import { ContactForm } from './_components/ContactForm'
 import { getPublicProfile } from '@/lib/talent-bank/profile/read'
 import ProfileContent from '@/app/me/talent/_components/ProfileContent'
 import { getFootprints, hasFootprints } from '@/lib/talent-bank/footprints'
+import { publishedVideo } from '@/lib/talent-bank/video/jobs'
 
 export default async function TalentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ subject?: string }> }) {
   const { id } = await params
@@ -35,6 +36,8 @@ export default async function TalentDetailPage({ params, searchParams }: { param
   const myTier = myTierRow?.tier ?? null
   // 見る人の権限で読むので、その人に見えない記録は出ない（本人が隠していれば null）
   const footprints = await getFootprints(supabase, id)
+  // 紹介動画：プロフィールが見える人にだけ出す（再生の権限は /api/talent-bank/video でもう一度確かめる）
+  const video = published ? await publishedVideo(id) : null
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -51,6 +54,16 @@ export default async function TalentDetailPage({ params, searchParams }: { param
           <h1 className="text-3xl font-serif font-bold">{published?.version.fields_json.display_name?.value ?? member.display_name}</h1>
         </header>
 
+        {video && (
+          <section aria-label="紹介動画" className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
+            <h2 className="text-xs font-semibold uppercase text-slate-500">紹介動画</h2>
+            <video controls playsInline preload="metadata" poster={`/api/talent-bank/video/${video.id}?thumb=1`} src={`/api/talent-bank/video/${video.id}`} className="w-full max-w-xs rounded-lg bg-black" />
+            <p className="text-xs text-slate-500">
+              <a href={`/api/talent-bank/video/${video.id}?download=1`} className="underline">動画を保存する（mp4）</a>
+              {video.duration_sec && <span>　約{Math.round(Number(video.duration_sec))}秒</span>}
+            </p>
+          </section>
+        )}
         {published && <ProfileContent fields={published.version.fields_json} short={published.version.summary_short} long={published.version.summary_long} tags={published.tags} />}
         {!published && member.skills_text && (
           <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">

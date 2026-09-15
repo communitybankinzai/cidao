@@ -1,0 +1,24 @@
+{
+  "note": "紹介動画の選択肢。TypeScript（台本づくり）と scripts/talent-video/render.py（Actions での作成）の両方が読む。2026-09-15。",
+  "styles": {
+    "oshare": { "label": "ゆったり", "needs_face": true },
+    "cool": { "label": "テンポよく", "needs_face": true },
+    "hands": { "label": "顔を出さない（手元と作品）", "needs_face": false }
+  },
+  "voices": [
+    { "name": "ずんだもん", "speaker": 3, "speed": 1.15 },
+    { "name": "四国めたん", "speaker": 2, "speed": 1.05 },
+    { "name": "春日部つむぎ", "speaker": 8, "speed": 1.05 },
+    { "name": "九州そら", "speaker": 16, "speed": 1.5 },
+    { "name": "冥鳴ひまり", "speaker": 14, "speed": 1.05 },
+    { "name": "玄野武宏", "speaker": 11, "speed": 1.0 },
+    { "name": "青山龍星", "speaker": 13, "speed": 1.05 }
+  ],
+  "moods": {
+    "warm": "あたたかい・親しみやすい（地域の世話役、子ども向け活動、お店）",
+    "positive": "前向き・元気（挑戦中の人、イベント、ものづくり）",
+    "calm": "落ち着いて信頼できる（専門職、相談窓口、講師）",
+    "heart": "想いが伝わる（活動を始めた理由や、地域への想いを伝えたい人）",
+    "documentary": "ドキュメンタリー風（起伏の少ない曲）"
+  }
+}

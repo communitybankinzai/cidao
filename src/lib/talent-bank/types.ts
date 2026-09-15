@@ -1,6 +1,13 @@
 import type { Database, Json } from '@/lib/supabase/database.types'
 
-export type ConsentKind = 'interview' | 'profile' | 'photo' | 'video' | 'sns' | 'bank' | 'matching' | 'external_ai'
+export type ConsentKind = 'interview' | 'profile' | 'photo' | 'video' | 'sns' | 'bank' | 'matching' | 'external_ai' | 'cbi_intro'
+// 他己紹介（CBI が書き、本人が確認してから載せる・2026-09-15）
+export type CbiIntro = {
+  id: string; member_id: string; body: string; status: 'draft' | 'owner_review' | 'published' | 'returned'
+  draft_source: 'manual' | 'ai'; written_by: string | null; requested_at: string | null
+  owner_approved_at: string | null; owner_comment: string | null; published_at: string | null
+  created_at: string; updated_at: string
+}
 export type UsageStatus = 'estimated' | 'unavailable' | 'reconciled'
 export type RateUnit = 'input_tokens' | 'output_tokens' | 'cache_creation_tokens' | 'cache_read_tokens' | 'tts_chars' | 'image'
 export type TalentSubject = {
@@ -33,7 +40,7 @@ export type TTSVoice = {
 }
 export type WorkLog = {
   id: string; actor_member_id: string; case_id: string | null; subject_id: string | null
-  kind: 'profile_review' | 'text_edit' | 'video_review' | 'video_edit' | 'inquiry_support' | 'ops' | 'illustration'
+  kind: 'profile_review' | 'text_edit' | 'video_review' | 'video_edit' | 'inquiry_support' | 'ops' | 'illustration' | 'intro_write'
   started_at: string; ended_at: string | null; minutes: number | null; edit_count: number
   note: string | null; created_at: string
 }
@@ -71,6 +78,9 @@ type Phase1Tables = {
   cost_rates: Table<CostRate, 'provider' | 'model' | 'unit' | 'rate_per_unit' | 'effective_from'>
   tts_voices: Table<TTSVoice, 'provider' | 'voice_id' | 'display_name' | 'credit_text' | 'terms_url'>
   work_logs: Table<WorkLog, 'actor_member_id' | 'kind' | 'started_at'>
+  member_cbi_intros: Table<CbiIntro, 'member_id'>
+  talent_photos: Table<TalentPhoto, 'member_id' | 'path'>
+  talent_videos: Table<TalentVideo, 'member_id' | 'profile_id' | 'version_id' | 'style' | 'face_mode' | 'voice_name' | 'voice_speaker' | 'bgm_mood' | 'bgm_file' | 'bgm_credit' | 'script_json'>
   // Existing generated types predate app_settings; this mirrors its existing migration.
   app_settings: Table<{ key: string; value: Json; updated_at: string; updated_by: string | null }, 'key' | 'value'>
 }
@@ -101,7 +111,19 @@ export type ApiUsageInsert = Phase1Tables['api_usage']['Insert']
 export type PublicScope = 'public' | 'registered_only' | 'private'
 export type ProfileField = { state: CollectedField['state']; value: string | null; evidence: string[]; source: 'interview' | 'owner' }
 export type ProfileFields = Record<string, ProfileField>
-export type TalentProfile = { id: string; subject_id: string; member_id: string; current_version_id: string | null; draft_version_id: string | null; public_scope: PublicScope; created_at: string; updated_at: string }
+export type TalentProfile = { id: string; subject_id: string; member_id: string; current_version_id: string | null; draft_version_id: string | null; public_scope: PublicScope; face_mode: 'photo' | 'no_face'; created_at: string; updated_at: string }
+// 紹介動画（2026-09-15）
+export type TalentPhoto = { id: string; member_id: string; path: string; width: number | null; height: number | null; bytes: number | null; sort: number; created_at: string }
+export type TalentVideo = {
+  id: string; member_id: string; profile_id: string; version_id: string
+  status: 'queued' | 'rendering' | 'owner_review' | 'owner_approved' | 'published' | 'failed' | 'retired'
+  style: 'oshare' | 'cool' | 'hands'; face_mode: 'photo' | 'no_face'
+  voice_name: string; voice_speaker: number; voice_speed: number; bgm_mood: string; bgm_file: string; bgm_credit: string
+  script_json: Json; script_run_id: string | null; trigger: 'manual' | 'profile_published' | 'photos_changed'
+  storage_path: string | null; thumb_path: string | null; duration_sec: number | null; size_bytes: number | null; error: string | null
+  claimed_at: string | null; rendered_at: string | null; owner_approved_at: string | null; owner_comment: string | null
+  admin_published_by: string | null; published_at: string | null; retired_at: string | null; created_at: string; updated_at: string
+}
 export type ProfileVersion = { id: string; profile_id: string; version: number; status: 'draft' | 'owner_reviewed' | 'approved' | 'published' | 'retired'; fields_json: ProfileFields; summary_short: string | null; summary_long: string | null; generated_run_id: string | null; edited_by_owner_at: string | null; owner_approved_at: string | null; admin_approved_by: string | null; admin_approved_at: string | null; rejected_reason: string | null; created_at: string; updated_at: string; public_scope: PublicScope; suggested_tags: string[] }
 export type TalentTag = { id: string; slug: string; label: string; kind: 'skill' | 'field' | 'target' | 'area' | 'style'; created_at: string }
 export type VersionTag = { version_id: string; tag_id: string; source: 'ai' | 'owner' }

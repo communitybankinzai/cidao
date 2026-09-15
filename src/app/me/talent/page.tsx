@@ -11,6 +11,8 @@ import ActionForm from './_components/ActionForm'
 import EditChat from './_components/EditChat'
 import GenerateForm from './_components/GenerateForm'
 import ProfileContent from './_components/ProfileContent'
+import VideoSection from './_components/VideoSection'
+import { listOwnVideos, listPhotos, photoUrl } from '@/lib/talent-bank/video/jobs'
 
 const SCOPE_LABEL = {
   registered_only: 'CiDAOにログインした会員だけ',
@@ -34,6 +36,8 @@ export default async function MyTalentPage() {
     (await createClient()).from('members').select('show_footprints').eq('id', memberId).maybeSingle(),
   ])
   const showFootprints = me.data?.show_footprints !== false
+  const [photoRows, videos] = await Promise.all([listPhotos(memberId), listOwnVideos(memberId)])
+  const photos = await Promise.all(photoRows.map(async p => ({ id: p.id, url: await photoUrl(p.path) })))
   if (profiles.error || tags.error) throw new Error('Profile unavailable')
   const cards = await Promise.all((profiles.data ?? []).map(async profile => {
     const versions = await db.from('talent_profile_versions').select('*').eq('profile_id', profile.id).order('version', { ascending: false })
@@ -140,6 +144,8 @@ export default async function MyTalentPage() {
       </section>
     })}
     {interview?.status === 'done' && <GenerateForm consented={consented} again={cards.length > 0} />}
+
+    {cards.length > 0 && <VideoSection photos={photos} faceMode={cards[0].profile.face_mode} videos={videos} published={!!cards[0].profile.current_version_id} />}
 
     <section aria-label="活動の足あと" className="space-y-3 rounded-xl border p-4 text-sm">
       <h2 className="font-medium">紹介ページの「活動の足あと」</h2>

@@ -4,6 +4,7 @@ import { createTalentBankServiceClient } from '../db'
 import { memberClient } from '../interview/access'
 import { adminClient } from './access'
 import { ProfileError, shortText } from './validation'
+import { queueVideo } from '../video/jobs'
 
 async function notify(recipientId: string, title: string) {
   await insertNotification({ recipientId, kind: 'member', title, linkUrl: '/me/talent' })
@@ -16,6 +17,9 @@ export async function adminApprove({ adminId, versionId, minutes, editCount, not
   })
   if (result.error || !result.data) throw new ProfileError('publish_conflict')
   await notify(result.data, 'プロフィールが運営に承認され、選択した範囲で公開されました')
+  // 自己紹介が公開されるたびに紹介動画を自動で作り直す（2026-09-15 中司さん）。写真が無ければ何もしない。失敗しても公開は成立
+  try { await queueVideo({ memberId: result.data, trigger: 'profile_published' }) }
+  catch { console.error('[talent-bank] auto video queue failed') }
 }
 export async function adminReject({ adminId, versionId, reason }: { adminId: string; versionId: string; reason: string }) {
   await adminClient(adminId)

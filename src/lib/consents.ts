@@ -15,6 +15,7 @@ export const CONSENT_TEXTS: Record<ConsentKind, { version: string; text: string 
   bank: { version: '2026-09-14-draft-1', text: `${draft}${eligibility}承認したプロフィールを人材バンクに掲載することに同意します。` },
   matching: { version: '2026-09-14-draft-1', text: `${draft}${eligibility}依頼条件とプロフィールを比較して候補として紹介することに同意します。` },
   external_ai: { version: '2026-09-14-draft-1', text: `${draft}${eligibility}会話・紹介内容を外部AI（Anthropic）で処理することに同意します。イラスト化のため外部 AI サービスに写真を送ることがあることに同意します。手動生成では運営が学習利用をオフにします。` },
+  cbi_intro: { version: '2026-09-15-draft-1', text: `${draft}${eligibility}CBI（運営）が自己紹介文やプロフィールを読んで他己紹介を書き、本人が確認して承認したものだけを、紹介ページ（CiDAO にログインした会員だけが見られる）に掲載することに同意します。同意を取り消すと、掲載も止めます。` },
 }
 
 async function memberClient(memberId: string) {

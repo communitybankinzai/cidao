@@ -10,6 +10,7 @@ import { createRevision, updateDraft } from '@/lib/talent-bank/profile/review'
 import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
 import { createClient } from '@/lib/supabase/server'
+import { ownerRespondVideo, requestVideo, retireVideo, setFaceMode } from '@/lib/talent-bank/video/jobs'
 
 function refresh() {
   for (const p of ['/me/talent', '/talent', '/admin/talent-bank', '/talent/interview']) revalidatePath(p)
@@ -62,6 +63,29 @@ export async function reviewAction(_previous: { error: string }, form: FormData)
       if (intent === 'approve') await notifyAdminsOfApplication(versionId)
     }
   } catch (error) { refresh(); return failure(error) }
+  refresh(); return { error: '' }
+}
+// 紹介動画（2026-09-15）：顔の見せ方・作り直し・本人の確認・掲載の取り下げ
+export async function videoAction(_previous: { error: string }, form: FormData) {
+  try {
+    const { memberId } = await sessionMember()
+    const intent = String(form.get('intent') ?? '')
+    const videoId = String(form.get('videoId') ?? '')
+    if (intent === 'face_mode') await setFaceMode({ memberId, faceMode: form.get('face_mode') === 'no_face' ? 'no_face' : 'photo' })
+    else if (intent === 'request') await requestVideo(memberId)
+    else if (intent === 'approve') await ownerRespondVideo({ memberId, videoId, approve: true })
+    else if (intent === 'redo') await ownerRespondVideo({ memberId, videoId, approve: false, comment: String(form.get('comment') ?? '') })
+    else if (intent === 'retire') await retireVideo({ actorId: memberId, videoId, asAdmin: false })
+    else throw new ProfileError('invalid_intent')
+  } catch (error) {
+    const messages: Record<string, string> = {
+      photos_required: '先に写真を1枚以上登録してください。', profile_not_published: 'プロフィールが公開されてから動画を作れます。',
+      video_in_progress: 'いま作っている最中です。できるまでお待ちください（10〜20分）。', daily_limit: '作り直しは1日3回までです。明日またお試しください。',
+      stale_version: '状態が変わっています。画面を読み直してください。',
+    }
+    if (error instanceof ProfileError && messages[error.reason]) { refresh(); return { error: messages[error.reason] } }
+    refresh(); return failure(error)
+  }
   refresh(); return { error: '' }
 }
 // 紹介ページに「活動の足あと」を出すか（本人の設定・2026-09-15）。本人の権限（RLS）で自分の行だけを更新する。
