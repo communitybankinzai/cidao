@@ -129,7 +129,11 @@ export default function NewFreefreeForm({
           saveDraft()
           setSubmitError(r.error)
         }
-      } catch {
+      } catch (e) {
+        // 掲載に成功すると、サーバーの redirect() が「エラーの形」で届く（Next.js の仕様。詳細ページへの移動は別に進む）。
+        // これを失敗と見なすと、毎回一瞬「送信できませんでした」が出てから詳細ページへ移っていた（2026-09-15）
+        const digest = (e as { digest?: unknown } | null)?.digest
+        if (typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT')) return
         // サイトの更新直後は、開いていた画面の送信先が無くなって送れない（Next.js の仕様）。
         // 通信が不安定なときも同じ。下書きを保存しておけば、再読み込みしても入力は戻る
         saveDraft()
