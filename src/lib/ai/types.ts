@@ -1,4 +1,4 @@
-export type AIPurpose = 'interview' | 'extract_profile' | 'generate_tags' | 'video_script' | 'sns_caption' | 'hear_request' | 'rank_candidates' | 'edit_profile'
+export type AIPurpose = 'interview' | 'extract_profile' | 'generate_tags' | 'video_script' | 'sns_caption' | 'hear_request' | 'rank_candidates' | 'edit_profile' | 'cbi_intro'
 export type CallContext = { caseId?: string; subjectId?: string; memberId?: string }
 export type AIUsage = {
   input_tokens: number; output_tokens: number; cache_creation_tokens: number; cache_read_tokens: number

@@ -12,6 +12,8 @@ import EditChat from './_components/EditChat'
 import GenerateForm from './_components/GenerateForm'
 import ProfileContent from './_components/ProfileContent'
 import VideoSection from './_components/VideoSection'
+import IntroSection from './_components/IntroSection'
+import { ownIntro } from '@/lib/talent-bank/cbi-intro'
 import { listOwnVideos, listPhotos, photoUrl } from '@/lib/talent-bank/video/jobs'
 
 const SCOPE_LABEL = {
@@ -36,7 +38,7 @@ export default async function MyTalentPage() {
     (await createClient()).from('members').select('show_footprints').eq('id', memberId).maybeSingle(),
   ])
   const showFootprints = me.data?.show_footprints !== false
-  const [photoRows, videos] = await Promise.all([listPhotos(memberId), listOwnVideos(memberId)])
+  const [photoRows, videos, intro] = await Promise.all([listPhotos(memberId), listOwnVideos(memberId), ownIntro(memberId)])
   const photos = await Promise.all(photoRows.map(async p => ({ id: p.id, url: await photoUrl(p.path) })))
   if (profiles.error || tags.error) throw new Error('Profile unavailable')
   const cards = await Promise.all((profiles.data ?? []).map(async profile => {
@@ -145,6 +147,7 @@ export default async function MyTalentPage() {
     })}
     {interview?.status === 'done' && <GenerateForm consented={consented} again={cards.length > 0} />}
 
+    <IntroSection intro={intro} />
     {cards.length > 0 && <VideoSection photos={photos} faceMode={cards[0].profile.face_mode} videos={videos} published={!!cards[0].profile.current_version_id} />}
 
     <section aria-label="活動の足あと" className="space-y-3 rounded-xl border p-4 text-sm">

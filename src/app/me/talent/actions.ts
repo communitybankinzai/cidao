@@ -11,6 +11,7 @@ import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
 import { createClient } from '@/lib/supabase/server'
 import { ownerRespondVideo, requestVideo, retireVideo, setFaceMode } from '@/lib/talent-bank/video/jobs'
+import { ownerRespondIntro, ownerRetireIntro } from '@/lib/talent-bank/cbi-intro'
 
 function refresh() {
   for (const p of ['/me/talent', '/talent', '/admin/talent-bank', '/talent/interview']) revalidatePath(p)
@@ -85,6 +86,21 @@ export async function videoAction(_previous: { error: string }, form: FormData) 
     }
     if (error instanceof ProfileError && messages[error.reason]) { refresh(); return { error: messages[error.reason] } }
     refresh(); return failure(error)
+  }
+  refresh(); return { error: '' }
+}
+// 他己紹介（2026-09-15）：本人が「このまま載せる」「直してほしい点を書いて戻す」「取り下げる」
+export async function introAction(_previous: { error: string }, form: FormData) {
+  try {
+    const { memberId } = await sessionMember()
+    const intent = String(form.get('intent') ?? '')
+    if (intent === 'approve') await ownerRespondIntro({ memberId, approve: true })
+    else if (intent === 'return') await ownerRespondIntro({ memberId, approve: false, comment: String(form.get('comment') ?? '') })
+    else if (intent === 'retire') await ownerRetireIntro(memberId)
+    else throw new ProfileError('invalid_intent')
+  } catch (error) {
+    const messages: Record<string, string> = { reason_required: '直してほしい点を書いてください。', stale_version: '状態が変わっています。画面を読み直してください。' }
+    refresh(); return { error: error instanceof ProfileError && messages[error.reason] ? messages[error.reason] : '処理できませんでした。時間をおいて再度お試しください。' }
   }
   refresh(); return { error: '' }
 }

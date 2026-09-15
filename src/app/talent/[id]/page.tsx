@@ -8,6 +8,7 @@ import { getPublicProfile } from '@/lib/talent-bank/profile/read'
 import ProfileContent from '@/app/me/talent/_components/ProfileContent'
 import { getFootprints, hasFootprints } from '@/lib/talent-bank/footprints'
 import { publishedVideo } from '@/lib/talent-bank/video/jobs'
+import { publishedIntro } from '@/lib/talent-bank/cbi-intro'
 
 export default async function TalentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ subject?: string }> }) {
   const { id } = await params
@@ -38,6 +39,8 @@ export default async function TalentDetailPage({ params, searchParams }: { param
   const footprints = await getFootprints(supabase, id)
   // 紹介動画：プロフィールが見える人にだけ出す（再生の権限は /api/talent-bank/video でもう一度確かめる）
   const video = published ? await publishedVideo(id) : null
+  // 他己紹介：ログインした会員に対して掲載中のものだけ（RLS）
+  const intro = await publishedIntro(supabase, id)
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -129,6 +132,13 @@ export default async function TalentDetailPage({ params, searchParams }: { param
           </div>
         )}
 
+        {intro && (
+          <section aria-label="他己紹介" className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-2">
+            <h2 className="text-xs font-semibold uppercase text-slate-500">CBI から見た{nameWithSan(published?.version.fields_json.display_name?.value ?? member.display_name)}</h2>
+            <p className="text-sm whitespace-pre-wrap">{intro}</p>
+            <p className="text-[11px] text-slate-500">CBI の運営が公開プロフィールをもとに書き、本人が確認したものです。</p>
+          </section>
+        )}
         {footprints && hasFootprints(footprints) && (
           <section aria-label="活動の足あと" className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-4">
             <h2 className="text-xs font-semibold uppercase text-slate-500">活動の足あと</h2>

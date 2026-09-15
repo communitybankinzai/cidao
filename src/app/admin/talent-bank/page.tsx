@@ -7,6 +7,9 @@ import ProfileContent from '@/app/me/talent/_components/ProfileContent'
 import { moderateAction } from './actions'
 import { videoModerateAction } from './video-actions'
 import { adminVideoQueue } from '@/lib/talent-bank/video/jobs'
+import { introAdminAction } from './intro-actions'
+import { adminIntroQueue } from '@/lib/talent-bank/cbi-intro'
+const INTRO_STATUS: Record<string, string> = { draft: '下書き（本人には見えない）', owner_review: '本人の確認待ち', published: '掲載中', returned: '本人から差し戻し' }
 const VIDEO_STATUS: Record<string, string> = { owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
 export default async function TalentBankAdminPage() {
   const db = await createTalentBankClient()
@@ -18,7 +21,7 @@ export default async function TalentBankAdminPage() {
   const versions = await db.from('talent_profile_versions').select('*').eq('status', 'owner_reviewed').order('owner_approved_at')
   const tags = await db.from('talent_tags').select('*')
   if (profiles.error || versions.error || tags.error) throw new Error('Review queue unavailable')
-  const videos = await adminVideoQueue(data.user.id)
+  const [videos, intros] = await Promise.all([adminVideoQueue(data.user.id), adminIntroQueue(data.user.id)])
   const memberRows = videos.length ? await db.from('members').select('id, display_name').in('id', [...new Set(videos.map(v => v.member_id))]) : { data: [] }
   const names = new Map((memberRows.data ?? []).map(m => [m.id, m.display_name]))
   const currentDrafts = new Set(profiles.data?.map(p => p.draft_version_id))
@@ -43,6 +46,26 @@ export default async function TalentBankAdminPage() {
       <ActionForm action={moderateAction}><input type="hidden" name="versionId" value={version.id} />
         <label className="block">差し戻し理由（必須）<textarea name="reason" required maxLength={1000} rows={3} className="mt-2 w-full rounded border bg-background p-3" /></label>
         <Button type="submit" name="intent" value="reject" variant="outline">差し戻し</Button>
+      </ActionForm>
+    </section>)}
+
+    <h2 className="text-xl font-semibold">他己紹介（CBI から見た○○さん）</h2>
+    <p className="text-sm text-muted-foreground">プロフィールを公開している人が並びます。「AIで下書き」→読んで直す→「本人に確認を依頼」。本人が承認すると紹介ページ（会員のみ）に載ります。</p>
+    {!intros.length && <p>プロフィールを公開している人はまだいません。</p>}
+    {intros.map(({ member, summary, intro }) => <section key={member.id} className="space-y-3 rounded-xl border p-4 text-sm">
+      <p className="font-medium">{member.display_name} <span className="rounded-full border px-2 py-0.5 text-xs font-normal">{intro ? INTRO_STATUS[intro.status] : '未作成'}</span></p>
+      {summary && <p className="text-muted-foreground">紹介文：{summary}</p>}
+      {intro?.status === 'returned' && intro.owner_comment && <p className="rounded border border-amber-500 p-2">本人から：{intro.owner_comment}</p>}
+      <ActionForm action={introAdminAction} successText="AI が下書きを書きました。下の欄で直せます。"><input type="hidden" name="memberId" value={member.id} />
+        <Button type="submit" name="intent" value="draft" variant="outline" size="sm">{intro ? 'AIで下書きを書き直す' : 'AIで下書き'}</Button>
+      </ActionForm>
+      <ActionForm key={`intro:${intro?.updated_at ?? 'none'}`} action={introAdminAction} successText="保存しました。"><input type="hidden" name="memberId" value={member.id} />
+        <textarea name="body" maxLength={400} rows={6} defaultValue={intro?.body ?? ''} className="w-full rounded border bg-background p-3" placeholder="AI の下書きを読んで直す（400字以内）" />
+        <label className="block">一読にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" name="intent" value="save" variant="outline">下書きとして保存</Button>
+          <Button type="submit" name="intent" value="request">本人に確認を依頼</Button>
+        </div>
       </ActionForm>
     </section>)}
 
