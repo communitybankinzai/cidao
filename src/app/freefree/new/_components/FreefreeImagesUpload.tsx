@@ -8,7 +8,8 @@ const MAX_IMAGES = 3
 const INPUT_MAX_BYTES = 20 * 1024 * 1024
 const PATH_PREFIX = 'pending' // 投稿確定前は pending/<userId>/<random>.webp
 
-export default function FreefreeImagesUpload({ userId }: { userId: string }) {
+// maxImages: この欄で追加できる枚数。編集画面では「残す既存画像」の分を引いて渡す
+export default function FreefreeImagesUpload({ userId, maxImages = MAX_IMAGES }: { userId: string; maxImages?: number }) {
   const [urls, setUrls] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,8 +21,8 @@ export default function FreefreeImagesUpload({ userId }: { userId: string }) {
     if (!file) return
     setError(null)
 
-    if (urls.length >= MAX_IMAGES) {
-      setError(`画像は最大 ${MAX_IMAGES} 枚までです`)
+    if (urls.length >= maxImages) {
+      setError(`画像は最大 ${maxImages} 枚までです`)
       return
     }
     if (!file.type.startsWith('image/')) {
@@ -68,7 +69,7 @@ export default function FreefreeImagesUpload({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium">画像（最大 {MAX_IMAGES} 枚）</label>
+      <label className="text-sm font-medium">画像（最大 {maxImages} 枚）</label>
 
       {urls.length > 0 && (
         <ul className="grid grid-cols-3 gap-2">
@@ -89,7 +90,7 @@ export default function FreefreeImagesUpload({ userId }: { userId: string }) {
         </ul>
       )}
 
-      {urls.length < MAX_IMAGES && (
+      {urls.length < maxImages && (
         <div>
           <input
             ref={inputRef}

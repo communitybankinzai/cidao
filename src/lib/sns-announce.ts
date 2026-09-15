@@ -176,10 +176,14 @@ export async function announceOrgToSns(org: {
 // Instagram は画像が必須なので、画像のある掲載だけ作る（画像は /api/og/freefree/[id] が JPEG にして渡す）
 const FREEFREE_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
 
-export async function announceFreefreeToSns(post: {
-  id: string
-  title: string
-}): Promise<{ created: number }> {
+export async function announceFreefreeToSns(
+  post: {
+    id: string
+    title: string
+  },
+  // forceApproval: 全自動モードでも承認制で作る（編集後の作り直しに使う）。label: 管理者への通知で使う呼び名
+  opts: { forceApproval?: boolean; label?: string } = {},
+): Promise<{ created: number }> {
   const supabase = adminClient()
   if (!supabase) return { created: 0 }
 
@@ -211,7 +215,7 @@ export async function announceFreefreeToSns(post: {
       .select('value')
       .eq('key', 'sns_freefree_auto_post')
       .maybeSingle()
-    const auto = (setting?.value as { enabled?: boolean } | null)?.enabled === true
+    const auto = !opts.forceApproval && (setting?.value as { enabled?: boolean } | null)?.enabled === true
 
     const now = new Date().toISOString()
     const rows = FREEFREE_MEDIA.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
@@ -233,7 +237,7 @@ export async function announceFreefreeToSns(post: {
     }
 
     if (!auto) {
-      await notifyAdminsOfPendingDrafts(supabase, `FreeFree「${post.title}」`, inserted.length)
+      await notifyAdminsOfPendingDrafts(supabase, opts.label ?? `FreeFree「${post.title}」`, inserted.length)
       return { created: inserted.length }
     }
 
@@ -253,6 +257,39 @@ export async function announceFreefreeToSns(post: {
   } catch (e) {
     console.error('[sns-announce] freefree failed:', e instanceof Error ? e.message : e)
     return { created: 0 }
+  }
+}
+
+// FreeFree の掲載が編集されたとき（2026-09-16）。未送信の下書き（承認待ち・配信待ち）は古い中身なので消し、
+// SNS紹介を許可していれば新しい中身で作り直して、運営の承認待ちに戻す。
+// 全自動モードでも編集後は承認制にする（編集のたびに勝手に配信されないように）。
+// 未送信の下書きがある間は定期紹介（run_sns_rotation_cycle）もこの掲載を候補から外すので、承認されるまで配信は止まる。
+// freefree/actions.ts の updateFreefreePost の after() から呼ばれる best-effort
+export async function reannounceFreefreeAfterEdit(post: {
+  id: string
+  title: string
+  snsShare: boolean
+}): Promise<void> {
+  const supabase = adminClient()
+  if (!supabase) return
+  try {
+    const { error } = await supabase
+      .from('sns_post_logs')
+      .delete()
+      .eq('target_type', 'freefree')
+      .eq('target_id', post.id)
+      .eq('status', 'pending')
+    if (error) {
+      console.error('[sns-announce] freefree edit: old drafts delete failed:', error.message)
+      return
+    }
+    if (!post.snsShare) return
+    await announceFreefreeToSns(
+      { id: post.id, title: post.title },
+      { forceApproval: true, label: `FreeFree「${post.title}」（編集後）` },
+    )
+  } catch (e) {
+    console.error('[sns-announce] freefree edit failed:', e instanceof Error ? e.message : e)
   }
 }
 

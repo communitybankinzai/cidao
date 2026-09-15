@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { freefreeCategoryLabel, freefreePosterKindMeta, resolveFreefreePosterKind } from '@/lib/freefree-categories'
+import { canEditFreefreePost } from '@/lib/freefree-permissions'
 import { likeFreefree, commentFreefree, useCoupon } from '../actions'
 
 export default async function FreefreeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,6 +26,11 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
   }
   const posterKind = resolveFreefreePosterKind(post.poster_type, orgInfo?.type)
   const posterMeta = freefreePosterKindMeta(posterKind)
+  // 編集できる人（掲載者本人・団体のメンバー・運営者）にだけ「編集する」を出す（2026-09-16）
+  const canEdit = user ? await canEditFreefreePost(supabase, user.id, post) : false
+  const updatedLabel = post.content_updated_at
+    ? new Date(post.content_updated_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric' })
+    : null
 
   const { data: supports } = await supabase
     .from('supports')
@@ -88,6 +94,16 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
             </p>
           )}
           {post.location && <p className="text-sm text-slate-500">📍 {post.location}</p>}
+          {(updatedLabel || canEdit) && (
+            <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500">
+              {updatedLabel && <span>{updatedLabel}更新</span>}
+              {canEdit && (
+                <Link href={`/freefree/${id}/edit`} className="text-sky-700 dark:text-sky-400 hover:underline">
+                  ✏️ 編集する
+                </Link>
+              )}
+            </div>
+          )}
         </header>
 
         {post.images && post.images.length > 0 && (

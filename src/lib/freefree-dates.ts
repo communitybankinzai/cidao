@@ -42,6 +42,17 @@ export function isValidEndDate(ymd: string, now = Date.now()): boolean {
   return isRealDate(ymd) && ymd >= jstToday(now) && ymd <= maxEndDate(now)
 }
 
+// 編集時の掲載終了日の上限（2026-09-16）。今日ではなく掲載した日から3ヶ月
+// （編集で掲載期間を延ばし続けられないように。DB の CHECK も expires_at <= created_at + 3ヶ月3日）
+export function maxEndDateForEdit(createdAtIso: string): string {
+  return addMonthsYmd(jstYmdOf(createdAtIso), FREEFREE_MAX_MONTHS)
+}
+
+// 編集時の掲載終了日の検査。形式が正しく、今日〜掲載日から3ヶ月の範囲にあるか
+export function isValidEditEndDate(ymd: string, createdAtIso: string, now = Date.now()): boolean {
+  return isRealDate(ymd) && ymd >= jstToday(now) && ymd <= maxEndDateForEdit(createdAtIso)
+}
+
 // 終了日の日本時間 23:59:59。その日いっぱい掲載し、日付が変わると一覧から外れる
 export function endOfDayJstIso(ymd: string): string {
   return new Date(`${ymd}T23:59:59+09:00`).toISOString()
