@@ -28,6 +28,7 @@ type Draft = {
   links: ScannedLink[]
   importedImages: string[]
   endDate: string
+  startDate?: string
 }
 
 type PosterKindOpt = { key: string; label: string; needsOrg: boolean }
@@ -69,6 +70,8 @@ export default function NewFreefreeForm({
   // 掲載終了日（日付指定）。初期値は1ヶ月後、選べるのは今日〜3ヶ月先まで
   const [endDate, setEndDate] = useState(() => defaultEndDate())
   const [endDateNote, setEndDateNote] = useState<string | null>(null)
+  // イベントの開催日（初日）。SNS告知の「開催まであと◯日」に使う（任意）
+  const [startDate, setStartDate] = useState('')
   // 団体の選択。運営者は全団体から選ぶので、名前で絞り込めるようにする
   const [orgQuery, setOrgQuery] = useState('')
   const [orgId, setOrgId] = useState('')
@@ -80,7 +83,7 @@ export default function NewFreefreeForm({
     if (!title && !body && links.length === 0 && importedImages.length === 0) return
     const d: Draft = {
       savedAt: Date.now(), posterKind, orgId, title, body, category, location, snsDisplayName,
-      couponEnabled, couponContent, links, importedImages, endDate,
+      couponEnabled, couponContent, links, importedImages, endDate, startDate,
     }
     try { sessionStorage.setItem(draftKey, JSON.stringify(d)) } catch { /* 保存できなくても掲載は続けられる */ }
   }
@@ -98,6 +101,7 @@ export default function NewFreefreeForm({
         setLinks(d.links ?? []); setImportedImages(d.importedImages ?? [])
         // 保存したあとに日付が過ぎていたら初期値に戻す
         setEndDate(isValidEndDate(d.endDate) ? d.endDate : defaultEndDate())
+        setStartDate(d.startDate ?? '')
         setDraftRestored(true)
       }
     } catch { /* 壊れた下書きは無視する */ }
@@ -106,7 +110,7 @@ export default function NewFreefreeForm({
   useEffect(() => {
     if (draftReady.current) saveDraft()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posterKind, orgId, title, body, category, location, snsDisplayName, couponEnabled, couponContent, links, importedImages, endDate])
+  }, [posterKind, orgId, title, body, category, location, snsDisplayName, couponEnabled, couponContent, links, importedImages, endDate, startDate])
 
   // 掲載の送信。失敗しても入力を消さないよう、form の action 属性ではなく自前で送る
   // （action 属性だと送信後に React がフォームを初期化し、失敗時は画面ごと作り直されて入力が消えていた）
@@ -192,6 +196,7 @@ export default function NewFreefreeForm({
             setCouponEnabled(true)
           }
           applyScannedEndDate(d.event_end_date)
+          if (d.event_start_date) setStartDate(d.event_start_date)
           // 出典として元ページも必ず残す（重複は除く）
           const found = [
             ...(d.links ?? []),
@@ -220,6 +225,7 @@ export default function NewFreefreeForm({
             setCouponEnabled(true)
           }
           applyScannedEndDate(d.event_end_date)
+          if (d.event_start_date) setStartDate(d.event_start_date)
         }}
       />
       <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
@@ -329,6 +335,21 @@ export default function NewFreefreeForm({
             </p>
             {endDateNote && <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">{endDateNote}</p>}
           </L>
+          {category === 'event' && (
+            <L label="開催日（初日）">
+              <input
+                type="date"
+                name="event_start_date"
+                max={endDate}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className={inp}
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                SNSの告知で「開催まであと◯日！」と数えるのに使います。1日だけのイベントなら掲載終了日と同じ日にしてください。
+              </p>
+            </L>
+          )}
         </div>
         <L label="場所">
           <input

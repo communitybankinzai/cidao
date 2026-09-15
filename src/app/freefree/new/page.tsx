@@ -97,6 +97,7 @@ export default async function NewFreefreePage() {
         })
         .filter((l): l is { label: string; url: string } => l !== null),
       end_date: String(formData.get('end_date') ?? ''),
+      event_start_date: String(formData.get('event_start_date') ?? '') || undefined,
       images,
       coupon,
     }).catch((e: unknown) => {

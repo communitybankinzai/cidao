@@ -11,6 +11,7 @@
 
 import { createClient as createAdminClient, type SupabaseClient } from '@supabase/supabase-js'
 import { generateSnsContent, type SnsMedium, type SnsTarget } from '@/lib/sns-template'
+import { fetchSnsTarget } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
 import { normalizeMailFrom } from '@/lib/mail'
@@ -164,6 +165,64 @@ export async function announceOrgToSns(org: {
     return { created: 1 }
   } catch (e) {
     console.error('[sns-announce] org failed:', e instanceof Error ? e.message : e)
+    return { created: 0 }
+  }
+}
+
+// FreeFree の掲載直後に SNS 告知の下書きを作る（2026-09-15・初回は常に承認制）。
+// 運営がベル通知で気づいて承認すると、その場で配信される（admin/sns/actions.ts の approveDraft）。
+// 2回目以降は定期紹介（run_sns_rotation_cycle）が承認済みで作り、18時台の配信時にカウントダウン付きの本文になる。
+// freefree/actions.ts の after() から呼ばれる best-effort。SNS紹介を許可した掲載だけ呼ぶこと。
+// Instagram は画像が必須なので、画像のある掲載だけ作る（画像は /api/og/freefree/[id] が JPEG にして渡す）
+const FREEFREE_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
+
+export async function announceFreefreeToSns(post: {
+  id: string
+  title: string
+}): Promise<{ created: number }> {
+  const supabase = adminClient()
+  if (!supabase) return { created: 0 }
+
+  try {
+    // 未配信の下書きが残っていれば作らない（二重作成の防止）
+    const { data: existing } = await supabase
+      .from('sns_post_logs')
+      .select('id')
+      .eq('target_type', 'freefree')
+      .eq('target_id', post.id)
+      .eq('status', 'pending')
+      .limit(1)
+    if (existing && existing.length > 0) return { created: 0 }
+
+    // 本文は管理画面の「作り直す」・定期紹介と同じ取得ロジックから作る
+    const target = await fetchSnsTarget(
+      supabase as unknown as Parameters<typeof fetchSnsTarget>[0],
+      'freefree',
+      post.id,
+    )
+    if (!target) return { created: 0 }
+    const { data: row } = await supabase.from('freefree_posts').select('images').eq('id', post.id).maybeSingle()
+    const hasImage = Array.isArray(row?.images) && row.images.length > 0
+
+    const rows = FREEFREE_MEDIA.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
+      target_type: 'freefree',
+      target_id: post.id,
+      medium,
+      status: 'pending',
+      content: generateSnsContent(target, medium),
+      approved_at: null,
+      error_message: 'freefree announce: awaiting approval',
+    }))
+    const { error } = await supabase.from('sns_post_logs').insert(rows)
+    if (error) {
+      console.error('[sns-announce] freefree insert failed:', error.message)
+      return { created: 0 }
+    }
+
+    await notifyAdminsOfPendingDrafts(supabase, `FreeFree「${post.title}」`, rows.length)
+    return { created: rows.length }
+  } catch (e) {
+    console.error('[sns-announce] freefree failed:', e instanceof Error ? e.message : e)
     return { created: 0 }
   }
 }

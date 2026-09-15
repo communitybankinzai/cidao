@@ -99,11 +99,29 @@ export async function approveDraft(logId: string, content: string): Promise<Draf
     const text = content.trim()
     if (!text) return { ok: false, error: '本文が空のままでは承認できません' }
 
-    const { error } = await supabase
+    const { data: log, error } = await supabase
       .from('sns_post_logs')
       .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
       .eq('id', logId)
+      .select('id, medium, content, target_type, target_id, status')
+      .maybeSingle()
     if (error) return { ok: false, error: `承認に失敗しました: ${error.message}` }
+
+    // FreeFree は承認したらその場で配信する（2026-09-15。掲載と同時にまず告知するため、18時台を待たない）。
+    // 配信できなかった場合も承認は残るので、18時台の自動配信か投稿ログの再試行で送り直せる
+    if (log && log.target_type === 'freefree' && log.status === 'pending') {
+      const results = await dispatchLogs(supabase, [{
+        id: log.id,
+        medium: log.medium,
+        content: log.content as string | null,
+        target_type: log.target_type,
+        target_id: log.target_id,
+      }])
+      revalidatePath('/admin/sns')
+      const r = results[0]
+      if (r?.outcome === 'success') return { ok: true }
+      return { ok: false, error: `承認しましたが、配信できませんでした（${r?.outcome ?? '不明'}）: ${r?.message ?? ''}` }
+    }
 
     revalidatePath('/admin/sns')
     return { ok: true }

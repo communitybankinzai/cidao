@@ -5,8 +5,9 @@ import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
-import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
+import { endOfDayJstIso, isValidEndDate, isValidStartDate, maxEndDate } from '@/lib/freefree-dates'
 import { notifyAllMembers } from '@/lib/notify'
+import { announceFreefreeToSns } from '@/lib/sns-announce'
 import { recordWrite } from '@/lib/audit'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 
@@ -24,6 +25,7 @@ type CreateInput = {
   category: string
   location?: string
   end_date: string                  // 掲載終了日 YYYY-MM-DD（日本時間）。今日〜3ヶ月先まで
+  event_start_date?: string         // 開催日（初日）YYYY-MM-DD。イベントのみ・任意。SNS告知のカウントダウンに使う
   images?: string[]                 // public URL 最大3つ（client がアップロード済み）
   coupon?: CouponInput              // 任意のクーポン同時作成
   sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
@@ -120,6 +122,11 @@ export async function createFreefreePost(input: CreateInput) {
     throw new Error(`掲載終了日は今日から ${maxEndDate()} までの日付を選んでください`)
   }
   const expires_at = endOfDayJstIso(input.end_date)
+  // 開催日（初日）はイベントのときだけ受け取る。掲載終了日（＝開催最終日）より後の日は不可
+  const startDate = input.category === 'event' ? (input.event_start_date ?? '').trim() : ''
+  if (startDate && !isValidStartDate(startDate, input.end_date)) {
+    throw new Error('開催日は、掲載終了日（開催最終日）と同じ日か、それより前の日付を選んでください')
+  }
   const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
   const { data, error } = await supabase
     .from('freefree_posts')
@@ -134,6 +141,7 @@ export async function createFreefreePost(input: CreateInput) {
       proxy_posted_by: proxyPostedBy,
       status: 'active',
       expires_at,
+      event_start_date: startDate || null,
       images: images.length > 0 ? images : null,
       sns_share: input.sns_share !== false,
       // 団体掲載では organizations.name を使うため保存しない
@@ -172,6 +180,14 @@ export async function createFreefreePost(input: CreateInput) {
       linkUrl: `/freefree/${data.id}`,
     })
   })
+
+  // SNS 紹介を許可した掲載は、告知の下書きをすぐ作って運営にベル通知で知らせる（2026-09-15）。
+  // 運営が承認するとその場で配信され、以後は定期紹介が繰り返し告知する。失敗しても掲載は成立する
+  if (input.sns_share !== false) {
+    after(async () => {
+      await announceFreefreeToSns({ id: data.id, title: input.title })
+    })
+  }
 
   // redirect() は例外を投げるので、記録はその前に済ませる
   await recordWrite({

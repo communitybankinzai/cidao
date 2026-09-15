@@ -20,8 +20,9 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { dispatchLogs } from '@/lib/sns-dispatch'
-import type { SnsMedium } from '@/lib/sns-template'
+import { dispatchLogs, markLog } from '@/lib/sns-dispatch'
+import { generateSnsContent, type SnsMedium } from '@/lib/sns-template'
+import { fetchSnsTarget } from '@/lib/sns-target'
 
 // 1回の実行で送る上限。詰まっていても一度に大量投稿してスパム判定されないようにする。
 // 承認済みが溜まっている場合は古いもの（approved_at 昇順）から順に、翌日以降へ持ち越す
@@ -67,16 +68,35 @@ async function handle(request: Request) {
     return NextResponse.json({ processed: 0, results: [], note: '承認済みで未配信のものはありません' })
   }
 
-  const results = await dispatchLogs(
-    supabase,
-    pendings.map((r) => ({
+  // 定期紹介が承認済みで作った FreeFree の下書き（2回目以降の告知）は本文が空。
+  // 配信する今の日付で、冒頭にカウントダウンを付けた本文を作る（毎回同じ文面にしないため）
+  const now = Date.now()
+  const ready: Array<{ id: string; medium: SnsMedium; content: string | null; target_type: string; target_id: string }> = []
+  for (const r of pendings) {
+    let content = r.content as string | null
+    if (!content?.trim() && r.target_type === 'freefree') {
+      const target = await fetchSnsTarget(
+        supabase as unknown as Parameters<typeof fetchSnsTarget>[0],
+        'freefree',
+        r.target_id as string,
+      )
+      if (!target) {
+        await markLog(supabase, r.id as string, 'failed', '掲載が終了・非公開になったため配信しませんでした')
+        continue
+      }
+      content = generateSnsContent(target, r.medium as SnsMedium, now)
+      await supabase.from('sns_post_logs').update({ content }).eq('id', r.id)
+    }
+    ready.push({
       id: r.id as string,
       medium: r.medium as SnsMedium,
-      content: r.content as string | null,
+      content,
       target_type: r.target_type as string,
       target_id: r.target_id as string,
-    })),
-  )
+    })
+  }
+
+  const results = await dispatchLogs(supabase, ready)
 
   const success = results.filter((r) => r.outcome === 'success').length
   const failed = results.filter((r) => r.outcome === 'failed').length
