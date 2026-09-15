@@ -44,11 +44,17 @@ export async function reviewAction(_previous: { error: string }, form: FormData)
     if (intent === 'revision') await createRevision({ memberId, versionId })
     else if (intent === 'unpublish') await unpublish({ memberId, profileId: String(form.get('profileId') ?? ''), reason: '本人による公開停止' })
     else {
-      await updateDraft({ memberId, versionId, expectedUpdatedAt: String(form.get('expectedUpdatedAt') ?? ''), approve: intent === 'approve', patch: {
-        summary_short: String(form.get('summary_short') ?? ''), summary_long: String(form.get('summary_long') ?? ''),
-        public_scope: String(form.get('public_scope') ?? ''), tag_ids: form.getAll('tag').map(String),
-        fields: Object.fromEntries(INTERVIEW_FIELDS.map(f => [f.field_key, {
-          state: String(form.get(`${f.field_key}:state`) ?? 'unknown'), value: String(form.get(`${f.field_key}:value`) ?? ''),
+      // フォームに含まれている項目だけを反映する。申請ボタンだけの小さいフォームから送っても、
+      // 送られていない項目を「未回答」で上書きしない。タグは tags_present がある時だけ置き換える。
+      const has = (k: string) => form.has(k)
+      await updateDraft({ memberId, versionId, expectedUpdatedAt: String(form.get('expectedUpdatedAt') ?? '') || undefined, approve: intent === 'approve', patch: {
+        ...(has('summary_short') ? { summary_short: String(form.get('summary_short')) } : {}),
+        ...(has('summary_long') ? { summary_long: String(form.get('summary_long')) } : {}),
+        ...(has('public_scope') ? { public_scope: String(form.get('public_scope')) } : {}),
+        ...(has('tags_present') ? { tag_ids: form.getAll('tag').map(String) } : {}),
+        fields: Object.fromEntries(INTERVIEW_FIELDS.filter(f => has(`${f.field_key}:state`) || has(`${f.field_key}:value`)).map(f => [f.field_key, {
+          ...(has(`${f.field_key}:state`) ? { state: String(form.get(`${f.field_key}:state`)) } : {}),
+          ...(has(`${f.field_key}:value`) ? { value: String(form.get(`${f.field_key}:value`)) } : {}),
         }])),
       } })
       // 申請が成立したら運営全員へ知らせる（失敗しても申請は成立したまま）。

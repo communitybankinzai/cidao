@@ -54,10 +54,22 @@ export function applyFieldPatch(fields: ProfileFields, patch: unknown): ProfileF
     if (!isFieldKey(key)) throw new ProfileError('invalid_field')
     const item = object(raw)
     if (Object.keys(item).some(k => k !== 'state' && k !== 'value')) throw new ProfileError('invalid_field')
-    const state = item.state ?? result[key]?.state ?? 'unknown'
-    if (!['answered', 'none', 'declined', 'unknown'].includes(String(state))) throw new ProfileError('invalid_field')
-    const value = state === 'answered' ? shortText(item.value ?? result[key]?.value, 2000) : null
-    if (state === 'answered' && !value) throw new ProfileError('invalid_text')
+    const chosen = String(item.state ?? result[key]?.state ?? 'unknown')
+    if (!['answered', 'none', 'declined', 'unknown'].includes(chosen)) throw new ProfileError('invalid_field')
+    const hasValue = typeof item.value === 'string'
+    const text = hasValue ? (item.value as string).trim() : ''
+    let state = chosen
+    let value: string | null = null
+    if (text) {
+      // 文章が書かれていれば「回答あり」とみなす。状態欄を変え忘れても書いた内容を捨てない
+      // （2026-09-15 実機で、未回答欄に書いた文が保存時に消えた不具合への対応）。
+      state = 'answered'; value = clipText(text, 2000)
+    } else if (chosen === 'answered') {
+      // 値が送られていなければ既存の値を保つ。空欄で送られたら未回答に戻す（例外にはしない）。
+      const kept = hasValue ? '' : (result[key]?.value ?? '')
+      if (kept) value = kept
+      else state = 'unknown'
+    }
     if (state !== result[key]?.state || value !== result[key]?.value) result[key] = {
       state: state as ProfileFields[string]['state'], value, evidence: result[key]?.evidence ?? [], source: 'owner',
     }
