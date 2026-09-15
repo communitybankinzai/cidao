@@ -68,13 +68,35 @@ export async function photoUrl(path: string) {
   return r.data?.signedUrl ?? null
 }
 
-// 仕事を積む。公開中のプロフィールと写真が1枚以上ある人だけ。自動（trigger≠manual）は条件が揃わなければ静かに何もしない
+// 写真が1枚も無い人は、マイページのアイコン（すでに公開されている顔写真）を1枚目として登録する（2026-09-15 中司さん決定・案A）。
+// 本人の写真一覧に「アイコン」として並ぶので、本人が消したり差し替えたりできる。アイコンも無ければ null
+async function ensureAvatarPhoto(memberId: string) {
+  const db = service()
+  const member = await db.from('members').select('avatar_url').eq('id', memberId).maybeSingle()
+  if (member.error || !member.data?.avatar_url) return null
+  try {
+    const res = await fetch(member.data.avatar_url)
+    if (!res.ok) return null
+    const sharp = (await import('sharp')).default
+    const image = await sharp(Buffer.from(await res.arrayBuffer())).rotate().resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 90 }).toBuffer({ resolveWithObject: true })
+    const path = `photos/${memberId}/avatar-${randomUUID()}.jpg`
+    const up = await db.storage.from(MEDIA_BUCKET).upload(path, image.data, { contentType: 'image/jpeg', upsert: false })
+    if (up.error) return null
+    const row = await db.from('talent_photos').insert({ member_id: memberId, path, width: image.info.width, height: image.info.height, bytes: image.info.size, sort: 0 }).select('path').single()
+    return row.error ? null : row.data.path
+  } catch { return null }
+}
+
+// 仕事を積む。公開中のプロフィールと写真が1枚以上（無ければアイコン）ある人だけ。自動（trigger≠manual）は条件が揃わなければ静かに何もしない
 export async function queueVideo({ memberId, trigger }: { memberId: string; trigger: TalentVideo['trigger'] }): Promise<string | null> {
   const db = service()
   const manual = trigger === 'manual'
   const profile = await db.from('talent_profiles').select('id, subject_id, current_version_id, face_mode').eq('member_id', memberId).maybeSingle()
   if (profile.error) throw new ProfileError('storage_unavailable')
   if (!profile.data?.current_version_id) { if (manual) throw new ProfileError('profile_not_published'); return null }
+  const existing = await db.from('talent_photos').select('id', { count: 'exact', head: true }).eq('member_id', memberId)
+  if (!existing.error && !existing.count) await ensureAvatarPhoto(memberId)
   const [version, photos, active, recent] = await Promise.all([
     db.from('talent_profile_versions').select('id, fields_json').eq('id', profile.data.current_version_id).single(),
     db.from('talent_photos').select('path').eq('member_id', memberId).order('sort'),
