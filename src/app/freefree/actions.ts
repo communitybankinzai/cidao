@@ -4,10 +4,18 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
-import { endOfDayJstIso, isValidEndDate, isValidStartDate, maxEndDate } from '@/lib/freefree-dates'
+import { FREEFREE_CATEGORIES, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
+import {
+  endOfDayJstIso,
+  isValidEditEndDate,
+  isValidEndDate,
+  isValidStartDate,
+  maxEndDate,
+  maxEndDateForEdit,
+} from '@/lib/freefree-dates'
+import { canEditFreefreePost } from '@/lib/freefree-permissions'
 import { notifyAllMembers } from '@/lib/notify'
-import { announceFreefreeToSns } from '@/lib/sns-announce'
+import { announceFreefreeToSns, reannounceFreefreeAfterEdit } from '@/lib/sns-announce'
 import { recordWrite } from '@/lib/audit'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 
@@ -200,6 +208,118 @@ export async function createFreefreePost(input: CreateInput) {
 
   revalidatePath('/freefree')
   redirect(`/freefree/${data.id}`)
+}
+
+type UpdateInput = {
+  title: string
+  body: string
+  category: string
+  location?: string
+  end_date: string                  // 掲載終了日 YYYY-MM-DD（日本時間）。今日〜掲載した日から3ヶ月まで
+  event_start_date?: string
+  images?: string[]                 // 残す既存画像＋新しく追加した画像（最大3つ）
+  links?: { label: string; url: string }[]
+  sns_share?: boolean
+  sns_display_name?: string
+}
+
+type LinkItem = { label: string; url: string }
+
+// 掲載の編集（2026-09-16）。各事業主のPRを日に日に良いものへ直せるようにする。
+// - 編集できる人: 掲載者本人（団体の掲載ならその団体の所属メンバー）と運営者（lib/freefree-permissions.ts）
+// - 直せるのは中身だけ。掲載者・状態・代理掲載の記録は変えない（DB のトリガーでも守っている）
+// - 掲載終了日の上限は掲載した日から3ヶ月（編集で掲載期間を延ばし続けられないように）
+// - 全メンバーへの新着通知は出さない。変更前の中身は DB のトリガーが履歴に残す（運営者だけが読める）
+// - SNS 紹介は、未送信の下書きを新しい中身で作り直して運営の承認待ちに戻す
+export async function updateFreefreePost(postId: string, input: UpdateInput) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: post } = await supabase
+    .from('freefree_posts')
+    .select('id, poster_type, poster_id, created_at, title, body, category, location, images, links, expires_at, event_start_date, sns_share, sns_display_name')
+    .eq('id', postId)
+    .maybeSingle()
+  if (!post) throw new Error('掲載が見つかりません')
+  if (!(await canEditFreefreePost(supabase, user.id, post))) throw new Error('この掲載を編集する権限がありません')
+
+  if (!FREEFREE_CATEGORIES.some((c) => c.key === input.category)) throw new Error('カテゴリを選んでください')
+  if (!isValidEditEndDate(input.end_date, post.created_at)) {
+    throw new Error(`掲載終了日は今日から ${maxEndDateForEdit(post.created_at)} までの日付を選んでください（掲載した日から3ヶ月まで）`)
+  }
+  const startDate = input.category === 'event' ? (input.event_start_date ?? '').trim() : ''
+  if (startDate && !isValidStartDate(startDate, input.end_date)) {
+    throw new Error('開催日は、掲載終了日（開催最終日）と同じ日か、それより前の日付を選んでください')
+  }
+  const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
+  const seenUrls = new Set<string>()
+  const links = (input.links ?? [])
+    .filter((l) => l && l.label && /^https?:\/\//i.test(l.url))
+    .filter((l) => (seenUrls.has(l.url) ? false : (seenUrls.add(l.url), true)))
+    .slice(0, 5)
+    .map((l) => ({ label: l.label.slice(0, 30), url: l.url }))
+
+  const patch = {
+    title: input.title,
+    body: input.body,
+    category: input.category,
+    location: input.location?.trim() || null,
+    expires_at: endOfDayJstIso(input.end_date),
+    event_start_date: startDate || null,
+    images: images.length > 0 ? images : null,
+    links,
+    sns_share: input.sns_share !== false,
+    // 団体掲載では organizations.name を使うため保存しない
+    sns_display_name:
+      post.poster_type === 'org' ? null : (input.sns_display_name?.trim().slice(0, 40) || null),
+  }
+
+  // 何が変わったかを比べる。DB から読んだ値は日時の書式やリンクのキー順が違うので、そろえてから比べる
+  const canon = (k: keyof typeof patch, v: unknown): string => {
+    if (v === null || v === undefined) return 'null'
+    if (k === 'expires_at') return new Date(v as string).toISOString()
+    if (k === 'links') return JSON.stringify((v as LinkItem[]).map((l) => ({ label: l.label, url: l.url })))
+    return JSON.stringify(v)
+  }
+  const before = post as Record<string, unknown>
+  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter(
+    (k) => canon(k, patch[k]) !== canon(k, k === 'links' ? (before.links ?? []) : before[k]),
+  )
+  // 何も変えずに保存したときは、更新日も SNS の下書きも変えない
+  if (changed.length === 0) redirect(`/freefree/${postId}`)
+
+  const { data: updated, error } = await supabase
+    .from('freefree_posts')
+    .update({ ...patch, content_updated_at: new Date().toISOString() })
+    .eq('id', postId)
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(`保存に失敗しました: ${error.message}`)
+  if (!updated) throw new Error('保存できませんでした（編集する権限が無いか、掲載が削除されています）')
+
+  // クーポンの有効期限は掲載終了日と同じ決まりなので、終了日を変えたら合わせる（best-effort）
+  if (changed.includes('expires_at')) {
+    await supabase.from('coupons').update({ expires_at: patch.expires_at }).eq('post_id', postId)
+  }
+
+  // SNS 紹介の下書きを新しい中身で作り直し、運営の承認待ちに戻す。失敗しても編集は成立する
+  after(async () => {
+    await reannounceFreefreeAfterEdit({ id: postId, title: patch.title, snsShare: patch.sns_share })
+  })
+
+  // redirect() は例外を投げるので、記録はその前に済ませる
+  await recordWrite({
+    actorId: user.id,
+    action: 'freefree.update',
+    targetType: 'freefree',
+    targetId: postId,
+    detail: { title: patch.title, changed },
+  })
+
+  revalidatePath('/freefree')
+  revalidatePath(`/freefree/${postId}`)
+  redirect(`/freefree/${postId}`)
 }
 
 export async function useCoupon(couponId: string, postId: string) {

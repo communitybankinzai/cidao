@@ -18,6 +18,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 // 「誰がどの提案に投票したか」が運営に見えてしまい、設計方針に反する。
 export type AuditAction =
   | 'freefree.create'
+  | 'freefree.update'
   | 'freefree.comment'
   | 'freefree.like'
   | 'event.create'

@@ -85,6 +85,30 @@ function collectImages(html: string, base: URL): string[] {
   return out.slice(0, MAX_IMAGE_CANDIDATES)
 }
 
+// ページ内の <a href> を集める（2026-09-16）。htmlToText はタグごと消すので、リンクの本当の行き先が
+// AI に渡らず、AI が表示文字から URL を推測して作っていた（例: 実在しない inzai-bunka-hall.jp）。
+// ここで集めた一覧を AI に渡し、この一覧に無い URL は採用しない
+const MAX_ANCHORS = 150
+function collectAnchors(html: string, base: URL): { text: string; url: string }[] {
+  const out: { text: string; url: string }[] = []
+  const seen = new Set<string>()
+  const re = /<a\b[^>]*?\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null && out.length < MAX_ANCHORS) {
+    const abs = toAbsoluteSafe(m[1], base)
+    if (!abs || seen.has(linkKey(abs))) continue
+    seen.add(linkKey(abs))
+    const text = htmlToText(m[2]).replace(/\s+/g, ' ').slice(0, 40)
+    out.push({ text, url: abs })
+  }
+  return out
+}
+
+// 末尾の / と #以降の違いは同じリンクとみなす
+function linkKey(u: string): string {
+  return u.replace(/#.*$/, '').replace(/\/+$/, '')
+}
+
 async function fetchPage(url: URL): Promise<{ ok: true; html: string } | { ok: false; reason: ScanFailReason }> {
   let res: Response
   try {
@@ -121,6 +145,8 @@ export async function POST(request: Request) {
   if (text.length < 50) return NextResponse.json({ ok: false, reason: 'empty' })
 
   const imageCandidates = collectImages(page.html, url)
+  const anchors = collectAnchors(page.html, url)
+  const anchorKeys = new Set(anchors.map((a) => linkKey(a.url)))
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ ok: false, reason: 'config', imageCandidates })
@@ -190,12 +216,15 @@ export async function POST(request: Request) {
         `今日は ${today}（日本時間）。開催日の年が省略されていれば、今日以降で最も近い日付と解釈する。` +
         '読み取れた事実だけを使い、書かれていないことは補わない。' +
         '屋号・教室名・団体名は sns_display_name に入れるが、個人の氏名しか無い場合は null にする（本人の同意なく実名を公開しないため）。' +
-        'リンクは本文中に実際に出てくるものだけを挙げ、URL を推測して作らない。' +
+        'リンクは「ページ内のリンク一覧」にある URL だけから選び、一文字も変えずに使う。URL を推測して作らない（一覧に無い URL は採用されない）。' +
         'ページが告知として読み取れない場合は title="（読み取り失敗）", confidence=0 を返す。',
       messages: [
         {
           role: 'user',
-          content: `次のページから、地域掲示板に載せる紹介情報を抽出してください。\n\nURL: ${url.toString()}\n\n---\n${text}`,
+          content:
+            `次のページから、地域掲示板に載せる紹介情報を抽出してください。\n\nURL: ${url.toString()}\n\n---\n${text}` +
+            `\n\n---\nページ内のリンク一覧（表示文字 → URL）\n` +
+            (anchors.length > 0 ? anchors.map((a) => `${a.text || '(文字なし)'} → ${a.url}`).join('\n') : '(リンクなし)'),
         },
       ],
     })
@@ -209,12 +238,13 @@ export async function POST(request: Request) {
 
   try {
     const parsed = JSON.parse(block.text) as Record<string, unknown>
-    // AI が挙げたリンクも安全確認を通す（推測URLや危険な宛先を弾く）
+    // AI が挙げたリンクも安全確認を通し、ページ内に実在するリンクだけを残す（推測URLや危険な宛先を弾く）
     const rawLinks = Array.isArray(parsed.links) ? parsed.links : []
     const links = rawLinks
       .map((l) => l as { label?: unknown; url?: unknown })
       .map((l) => ({ label: String(l.label ?? '').slice(0, 30), url: toAbsoluteSafe(String(l.url ?? ''), url) }))
       .filter((l): l is { label: string; url: string } => !!l.label && !!l.url)
+      .filter((l) => anchorKeys.has(linkKey(l.url)))
       .slice(0, 4)
 
     return NextResponse.json({
