@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { canUserEditOrg } from '@/lib/org-permissions'
 import { freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
 import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { notifyAllMembers } from '@/lib/notify'
@@ -69,7 +68,10 @@ export async function createFreefreePost(input: CreateInput) {
       throw new Error(`選択した組織の種別 (${org.type}) と掲載区分 (${input.poster_kind}) が一致しません`)
     }
     // 2026-07-25: 掲載権限を役員限定→所属確定済みメンバー全員に緩和（RLSも同時変更済み）
-    let isMember = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
+    // 2026-09-15: 所属の判定は DB の is_org_member と同じ「代表者 or 所属確定」にそろえる。
+    // canUserEditOrg は運営者や連絡先メールの一致も「編集できる」と数えるため、それを使うと
+    // 運営者の代理掲載に proxy_posted_by が付かず、DB（RLS）に拒否されていた
+    let isMember = org.representative_id === user.id
     if (!isMember) {
       const { data: membership } = await supabase
         .from('memberships')
