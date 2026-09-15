@@ -192,7 +192,7 @@ export async function retireVideo({ actorId, videoId, asAdmin }: { actorId: stri
 }
 export async function adminVideoQueue(adminId: string) {
   await adminClient(adminId)
-  const r = await service().from('talent_videos').select('*').in('status', ['owner_approved', 'published', 'failed']).order('created_at', { ascending: false }).limit(30)
+  const r = await service().from('talent_videos').select('*').in('status', ['owner_review', 'owner_approved', 'published', 'failed']).order('created_at', { ascending: false }).limit(50)
   if (r.error) throw new ProfileError('storage_unavailable')
   return r.data ?? []
 }

@@ -10,7 +10,7 @@ import { adminVideoQueue } from '@/lib/talent-bank/video/jobs'
 import { introAdminAction } from './intro-actions'
 import { adminIntroQueue } from '@/lib/talent-bank/cbi-intro'
 const INTRO_STATUS: Record<string, string> = { draft: '下書き（本人には見えない）', owner_review: '本人の確認待ち', published: '掲載中', returned: '本人から差し戻し' }
-const VIDEO_STATUS: Record<string, string> = { owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
+const VIDEO_STATUS: Record<string, string> = { owner_review: '本人の確認待ち（運営は先に見られる）', owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
 export default async function TalentBankAdminPage() {
   const db = await createTalentBankClient()
   const { data } = await db.auth.getUser()
@@ -70,7 +70,7 @@ export default async function TalentBankAdminPage() {
     </section>)}
 
     <h2 className="text-xl font-semibold">紹介動画</h2>
-    {!videos.length && <p>本人が承認した動画・掲載中の動画はありません。</p>}
+    {!videos.length && <p>動画はまだありません。</p>}
     {videos.map(v => <section key={v.id} className="space-y-3 rounded-xl border p-4 text-sm">
       <p><span className="rounded-full border px-2 py-0.5 text-xs">{VIDEO_STATUS[v.status] ?? v.status}</span> {names.get(v.member_id) ?? '（表示名なし）'}
         <span className="text-muted-foreground">　{v.style}／{v.voice_name}／{v.bgm_credit}{v.duration_sec ? `／${Math.round(Number(v.duration_sec))}秒` : ''}</span></p>
