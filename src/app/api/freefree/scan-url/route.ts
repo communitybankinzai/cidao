@@ -125,6 +125,8 @@ export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ ok: false, reason: 'config', imageCandidates })
 
+  // 開催日の年が省略されたページ（例:「11月3日」）を正しく読むための基準日（日本時間）
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
   const client = new Anthropic({ apiKey })
   let response: Anthropic.Message
   try {
@@ -164,15 +166,22 @@ export async function POST(request: Request) {
                   additionalProperties: false,
                 },
               },
+              event_end_date: {
+                ...nullableString,
+                description:
+                  'イベント・催しの開催最終日（複数日なら最後の日）。YYYY-MM-DD（日本時間）。' +
+                  '常設の店・教室の紹介など終わりの日が無いもの、読み取れないものは null。',
+              },
               confidence: { type: 'number', description: '0〜1の抽出自信度' },
             },
-            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'links', 'confidence'],
+            required: ['title', 'body', 'category', 'location', 'sns_display_name', 'coupon_content', 'links', 'event_end_date', 'confidence'],
             additionalProperties: false,
           },
         },
       },
       system:
         '地域の掲示板に載せる「お店・教室・個人の活動」の紹介文を、告知ページの本文から起こすアシスタント。' +
+        `今日は ${today}（日本時間）。開催日の年が省略されていれば、今日以降で最も近い日付と解釈する。` +
         '読み取れた事実だけを使い、書かれていないことは補わない。' +
         '屋号・教室名・団体名は sns_display_name に入れるが、個人の氏名しか無い場合は null にする（本人の同意なく実名を公開しないため）。' +
         'リンクは本文中に実際に出てくるものだけを挙げ、URL を推測して作らない。' +

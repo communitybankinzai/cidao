@@ -10,8 +10,10 @@ export default async function FreefreePage() {
 
   const { data: posts } = await supabase
     .from('freefree_posts')
-    .select('id, title, body, category, location, created_at, expires_at, poster_type, poster_id, images')
+    .select('id, title, body, category, location, created_at, expires_at, poster_type, poster_id, images, proxy_posted_by')
     .eq('status', 'active')
+    // 掲載終了日を過ぎたものは、翌朝の期限切れ処理を待たずに外す
+    .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(100)
 
@@ -50,6 +52,7 @@ export default async function FreefreePage() {
       expires_at: p.expires_at,
       posterKind: resolveFreefreePosterKind(p.poster_type, org?.type),
       orgName: org?.name ?? null,
+      proxied: !!p.proxy_posted_by,
       images: p.images ?? null,
       hasCoupon: couponPostIds.has(p.id),
     }

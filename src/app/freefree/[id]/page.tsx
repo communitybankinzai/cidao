@@ -81,7 +81,12 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
             <span className="text-xs text-slate-500">{freefreeCategoryLabel(post.category)}</span>
           </div>
           <h1 className="text-3xl font-serif font-bold">{post.title}</h1>
-          {orgInfo && <p className="text-sm text-slate-600 dark:text-slate-400">by {orgInfo.name}</p>}
+          {orgInfo && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              by {orgInfo.name}
+              {post.proxy_posted_by && <span className="ml-1 text-slate-500">（CBIが依頼を受けて掲載）</span>}
+            </p>
+          )}
           {post.location && <p className="text-sm text-slate-500">📍 {post.location}</p>}
         </header>
 

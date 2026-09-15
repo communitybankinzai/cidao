@@ -5,7 +5,8 @@ import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { canUserEditOrg } from '@/lib/org-permissions'
-import { periodToDays, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
+import { freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
+import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { notifyAllMembers } from '@/lib/notify'
 import { recordWrite } from '@/lib/audit'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
@@ -23,7 +24,7 @@ type CreateInput = {
   body: string
   category: string
   location?: string
-  period: 'p_1week' | 'p_1month' | 'p_3months'
+  end_date: string                  // 掲載終了日 YYYY-MM-DD（日本時間）。今日〜3ヶ月先まで
   images?: string[]                 // public URL 最大3つ（client がアップロード済み）
   coupon?: CouponInput              // 任意のクーポン同時作成
   sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
@@ -36,6 +37,12 @@ type CreateInput = {
   shop_links?: { label: string; url: string }[]
 }
 
+// 運営者（管理画面の運営権限 committee / super）か。団体の依頼を受けた代理掲載の可否に使う
+async function isOperator(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<boolean> {
+  const { data } = await supabase.from('members').select('admin_role').eq('id', userId).maybeSingle()
+  return data?.admin_role === 'committee' || data?.admin_role === 'super'
+}
+
 export async function createFreefreePost(input: CreateInput) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -44,6 +51,7 @@ export async function createFreefreePost(input: CreateInput) {
   // 論理区分→DB列にマッピング
   let dbPosterType: 'member' | 'org' | 'individual_business'
   let dbPosterId: string
+  let proxyPostedBy: string | null = null // 運営者が団体の依頼を受けて代理掲載したときだけ入る
   if (input.poster_kind === 'member') {
     dbPosterType = 'member'; dbPosterId = user.id
   } else if (input.poster_kind === 'individual_business') {
@@ -61,8 +69,8 @@ export async function createFreefreePost(input: CreateInput) {
       throw new Error(`選択した組織の種別 (${org.type}) と掲載区分 (${input.poster_kind}) が一致しません`)
     }
     // 2026-07-25: 掲載権限を役員限定→所属確定済みメンバー全員に緩和（RLSも同時変更済み）
-    const canEdit = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
-    if (!canEdit) {
+    let isMember = await canUserEditOrg(supabase, org, user.id, user.email ?? null)
+    if (!isMember) {
       const { data: membership } = await supabase
         .from('memberships')
         .select('org_id')
@@ -71,7 +79,14 @@ export async function createFreefreePost(input: CreateInput) {
         .eq('status', 'confirmed')
         .is('left_at', null)
         .maybeSingle()
-      if (!membership) throw new Error('この団体の所属メンバーではないため掲載できません')
+      isMember = !!membership
+    }
+    if (!isMember) {
+      // 2026-09-15: 運営者は、団体の依頼を受けて代わりに掲載できる。
+      // 掲示板に「CBIが依頼を受けて掲載」と出すため、誰が代理したかを残す
+      // （DB 側もトリガーで、運営者が自分の名前でしか記録できないよう守っている）
+      if (!(await isOperator(supabase, user.id))) throw new Error('この団体の所属メンバーではないため掲載できません')
+      proxyPostedBy = user.id
     }
     dbPosterType = 'org'; dbPosterId = org.id
   }
@@ -98,7 +113,11 @@ export async function createFreefreePost(input: CreateInput) {
     .slice(0, 5)
     .map((l) => ({ label: l.label.slice(0, 30), url: l.url }))
 
-  const expires_at = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
+  // 画面でも上限を掛けているが、直接呼ばれても守れるようここでも検査する（DB にも CHECK あり）
+  if (!isValidEndDate(input.end_date)) {
+    throw new Error(`掲載終了日は今日から ${maxEndDate()} までの日付を選んでください`)
+  }
+  const expires_at = endOfDayJstIso(input.end_date)
   const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
   const { data, error } = await supabase
     .from('freefree_posts')
@@ -109,7 +128,8 @@ export async function createFreefreePost(input: CreateInput) {
       body: input.body,
       category: input.category,
       location: input.location ?? null,
-      period: input.period,
+      period: 'p_until_date',
+      proxy_posted_by: proxyPostedBy,
       status: 'active',
       expires_at,
       images: images.length > 0 ? images : null,
@@ -126,7 +146,7 @@ export async function createFreefreePost(input: CreateInput) {
 
   // 任意でクーポン同時作成（best-effort、失敗しても投稿は成立）
   if (input.coupon && input.coupon.content.trim()) {
-    const couponExpires = new Date(Date.now() + periodToDays(input.period) * 86400_000).toISOString()
+    const couponExpires = expires_at // クーポンの期限は掲載終了日と同じ
     await supabase.from('coupons').insert({
       post_id: data.id,
       content: input.coupon.content.trim(),
@@ -157,7 +177,7 @@ export async function createFreefreePost(input: CreateInput) {
     action: 'freefree.create',
     targetType: 'freefree',
     targetId: data.id,
-    detail: { title: input.title, poster_type: dbPosterType },
+    detail: { title: input.title, poster_type: dbPosterType, proxy: proxyPostedBy !== null },
   })
 
   revalidatePath('/freefree')
