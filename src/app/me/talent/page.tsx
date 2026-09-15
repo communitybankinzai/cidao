@@ -35,6 +35,18 @@ export default async function MyTalentPage() {
     <h1 className="text-2xl font-semibold">プロフィールの確認・編集</h1>
     <p className="text-sm text-muted-foreground">住所・電話番号・メールアドレスは記載しないでください。連絡は声がけから届きます。</p>
     {!cards.length && <p>インタビューが完了したら、プロフィール案を作成できます。<Link href="/talent/interview" className="underline">インタビューへ</Link></p>}
+    {cards.length > 0 && (() => {
+      const v = cards[0].version
+      const step = !v ? 0 : v.status === 'published' ? 4 : v.status === 'owner_reviewed' ? 3 : 2
+      const steps = ['インタビュー', 'プロフィール案の作成', '内容を確認・修正して「公開を申請」', '運営（CBI）の確認', '公開']
+      return <section aria-label="進み具合" className="space-y-2 rounded-xl border border-sky-600 bg-sky-50 p-4 text-sm dark:bg-sky-950">
+        <ol className="space-y-1">{steps.map((label, i) => <li key={label} className={i === step ? 'font-semibold' : i < step ? 'text-muted-foreground line-through' : 'text-muted-foreground'}>
+          {i < step ? '✓' : i === step ? '▶' : '・'} {label}</li>)}</ol>
+        <p>{step === 2 ? 'いまは「確認・修正」の段階です。下の内容を読み、違うところだけ直してから、いちばん下の「この内容で公開を申請」を押してください。直すところが無ければ、そのまま押して大丈夫です。'
+          : step === 3 ? '申請を受け付けました。運営が確認して公開します。結果はベル通知でお知らせします。'
+          : step === 4 ? '公開中です。直したいときは「新しい版を作って編集」から。' : ''}</p>
+      </section>
+    })()}
     {cards.map(({ profile, version, selected, versions }) => version && <section key={`${profile.id}:${version.updated_at}`} className="space-y-4">
       <h2 className="text-xl font-medium">{version.fields_json.display_name?.value ?? 'プロフィール'} · 第{version.version}版</h2>
       <p role="status">{({ draft: '編集中', owner_reviewed: '本人確認済み・運営確認待ち', approved: '運営承認済み', published: '公開中', retired: '公開停止・旧版' })[version.status]}</p>
@@ -65,6 +77,6 @@ export default async function MyTalentPage() {
       </ActionForm> : <><ProfileContent fields={version.fields_json} short={version.summary_short} long={version.summary_long} tags={(tags.data ?? []).filter(t => selected.has(t.id))} provenance />
         <ActionForm action={reviewAction}><input type="hidden" name="versionId" value={version.id} /><Button name="intent" value="revision">新しい版を作って編集</Button></ActionForm></>}
     </section>)}
-    {interview?.status === 'done' && <GenerateForm consented={consented} />}
+    {interview?.status === 'done' && <GenerateForm consented={consented} again={cards.length > 0} />}
   </main>
 }
