@@ -12,9 +12,9 @@
 //           INGEST_BOT_MEMBER_ID（取り込みイベントの organizer_id。COCoLa ingest と同じ bot）
 
 import { NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 import { INZAI_BUNKA_SOURCE } from '@/lib/inzai-bunka/calendar'
-import { syncInzaiBunka, type EventRow, type ExistingEventRow, type OtherEventRow, type SyncDb } from '@/lib/inzai-bunka/sync'
+import { syncInzaiBunka, type EventRow, type ExistingEventRow, type OtherEventRow, type SyncDb, type SyncResult } from '@/lib/inzai-bunka/sync'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -87,13 +87,48 @@ async function handle(request: Request) {
   }
 
   const dryRun = new URL(request.url).searchParams.get('dry') === '1'
-  const result = await syncInzaiBunka(db, {
-    botMemberId,
-    dryRun,
-    log: (m) => console.warn('[inzai-bunka-sync]', m),
-  })
+  const startedAt = new Date()
+  let result: SyncResult
+  try {
+    result = await syncInzaiBunka(db, {
+      botMemberId,
+      dryRun,
+      log: (m) => console.warn('[inzai-bunka-sync]', m),
+    })
+  } catch (err) {
+    // 一覧の取得失敗など、同期本体が例外で落ちた場合も「動いたが失敗」として記録を残す
+    const message = err instanceof Error ? err.message : String(err)
+    await recordRun(supabase, startedAt, {
+      ok: false,
+      fetched: { list: 0, details: 0, detailFailed: 0, calendar: 0, merged: 0, future: 0 },
+      inserted: [], updated: [], unchanged: 0, skipped: [], duplicates: [], errors: [message], dryRun,
+    })
+    console.error('[inzai-bunka-sync] failed:', message)
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+  }
+  await recordRun(supabase, startedAt, result)
   console.log(
     `[inzai-bunka-sync] ${dryRun ? '(dry) ' : ''}list=${result.fetched.list} details=${result.fetched.details}/${result.fetched.detailFailed}fail calendar=${result.fetched.calendar} merged=${result.fetched.merged} future=${result.fetched.future} inserted=${result.inserted.length} updated=${result.updated.length} unchanged=${result.unchanged} duplicates=${result.duplicates.length} errors=${result.errors.length}`,
   )
   return NextResponse.json(result, { status: result.ok ? 200 : 500 })
+}
+
+/** 実行記録を event_sync_runs に1行残す（管理画面「イベント一括取り込み」で見る）。失敗しても同期結果は返す */
+async function recordRun(supabase: SupabaseClient, startedAt: Date, r: SyncResult) {
+  const { error } = await supabase.from('event_sync_runs').insert({
+    source: INZAI_BUNKA_SOURCE,
+    started_at: startedAt.toISOString(),
+    finished_at: new Date().toISOString(),
+    ok: r.ok,
+    dry_run: r.dryRun,
+    fetched: r.fetched,
+    inserted: r.inserted.length,
+    updated: r.updated.length,
+    unchanged: r.unchanged,
+    duplicates: r.duplicates.length,
+    skipped: r.skipped.length,
+    errors: r.errors,
+    detail: { inserted: r.inserted, updated: r.updated, duplicates: r.duplicates, skipped: r.skipped },
+  })
+  if (error) console.error('[inzai-bunka-sync] recordRun failed:', error.message)
 }

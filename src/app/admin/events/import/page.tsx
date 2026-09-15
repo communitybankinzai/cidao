@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { BulkFlyerImport } from './_components/BulkFlyerImport'
 import { KouhouPdfImport } from './_components/KouhouPdfImport'
+import { InzaiBunkaSyncRuns, type SyncRunRow } from './_components/InzaiBunkaSyncRuns'
 
 export default async function AdminEventImportPage() {
   const supabase = await createClient()
@@ -13,9 +14,16 @@ export default async function AdminEventImportPage() {
   if (rpcErr || !isAdmin) redirect('/')
 
   // これまでこの画面から取り込んだ件数（COCoLa 経由分と区別して数える）
-  const [{ count: flyerCount }, { count: kouhouCount }] = await Promise.all([
+  const [{ count: flyerCount }, { count: kouhouCount }, { count: bunkaCount }, { data: bunkaRuns }] = await Promise.all([
     supabase.from('events').select('id', { count: 'exact', head: true }).eq('external_source', 'cbi-admin-import'),
     supabase.from('events').select('id', { count: 'exact', head: true }).eq('external_source', 'cbi-kouhou-import'),
+    supabase.from('events').select('id', { count: 'exact', head: true }).eq('external_source', 'inzai-bunka-calendar'),
+    supabase
+      .from('event_sync_runs')
+      .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
+      .eq('source', 'inzai-bunka-calendar')
+      .order('started_at', { ascending: false })
+      .limit(14),
   ])
 
   return (
@@ -38,6 +46,18 @@ export default async function AdminEventImportPage() {
         </header>
 
         <section className="space-y-3">
+          <div className="space-y-1">
+            <h2 className="text-xl font-serif font-bold">印西市文化ホール（毎朝 自動）</h2>
+            <p className="text-xs text-slate-500">
+              文化ホール公式サイトの公演一覧・詳細・月別カレンダーを毎朝 06:20 に読み、今日以降の公演を自動で登録・更新します（AI は使いません）。
+              チラシから手で登録済みのもの（同じ日・文化ホール・似た題名）は二重に載せず、そのまま残します。
+              登録済み: {bunkaCount ?? 0} 件
+            </p>
+          </div>
+          <InzaiBunkaSyncRuns runs={(bunkaRuns ?? []) as SyncRunRow[]} />
+        </section>
+
+        <section className="space-y-3 border-t border-slate-200 dark:border-slate-800 pt-8">
           <div className="space-y-1">
             <h2 className="text-xl font-serif font-bold">広報いんざいから取り込む</h2>
             <p className="text-xs text-slate-500">取り込み実績: {kouhouCount ?? 0} 件</p>
