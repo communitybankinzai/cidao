@@ -11,6 +11,7 @@
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -184,12 +185,22 @@ def zoompan(motion, frames, amount):
     return f"zoompan=z='1+{amount}':x='(iw-iw/zoom)*on/{frames}':y='{c}'"
 
 
+def split_words(text):
+    """字幕の文を、大きく動く文字用に 2〜4 の句へ分ける（script.ts の splitWords と同じ規則）。"""
+    text = re.sub(r'\s+', '', text)
+    parts = [p for p in re.split(r'(?<=[、。！？])', text) if p]
+    while len(parts) > 4:
+        parts[1] = parts[0] + parts[1]
+        parts.pop(0)
+    return parts or [text]
+
+
 def words_png(scene, st, k, dst):
     """大きな文字の場面：k 番目の句だけを描いた透明画像。句は画面中央に上から順に並べ、最後の句を差し色にする。"""
     im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     words = scene['words']
-    size = st['words_size']
+    size = st.get('words_size', 112)
     f = font(st['head_font'], size)
     while max(d.textlength(w, font=f) for w in words) > W - 160 and size > 60:
         size -= 4
@@ -223,11 +234,18 @@ def words_clip(st, i, scene, work, bg, dur, narr, wav):
         fc += (f"[{k + 1}:v]format=rgba,fade=t=in:st={t0:.2f}:d={a}:alpha=1[w{k}];"
                f"[{prev}][w{k}]overlay=x=0:y='(1-min(max(t-{t0:.2f},0)/{a},1))*60':eval=frame[b{k + 1}];")
         prev = f"b{k + 1}"
-    fc += f"[{prev}]format=yuv420p[v]"
+    if scene.get('stock'):
+        badge = os.path.join(work, f"{i:02d}_badge.png")
+        stock_badge(badge)
+        inputs += ['-loop', '1', '-framerate', str(FPS), '-i', badge]
+        fc += f"[{prev}][{n + 1}:v]overlay=0:0,format=yuv420p[v]"
+    else:
+        fc += f"[{prev}]format=yuv420p[v]"
     out = os.path.join(work, f"{i:02d}_clip.mp4")
     run(['ffmpeg', '-y', '-loglevel', 'error', *inputs, '-filter_complex', fc, '-map', '[v]', '-t', f"{dur:.3f}",
          '-r', str(FPS), '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', out])
-    print(f"  scene {i} {scene['id']}（文字）: {dur:.2f}s（ナレーション {narr:.2f}s）", flush=True)
+    label = '文字・イメージ画像' if scene.get('stock') else '文字'
+    print(f"  scene {i} {scene['id']}（{label}）: {dur:.2f}s（ナレーション {narr:.2f}s）", flush=True)
     return out, dur, wav
 
 
@@ -236,6 +254,9 @@ def scene_clip(st, i, scene, voice, work):
     narr = tts(scene['narration'], voice, wav)
     dur = st['pad_before'] + narr + st['pad_after'] + st['trans_dur']  # 次の場面への切り替え分を足す
     bg = os.path.join(work, f"{i:02d}_bg.jpg")
+    if scene.get('stock') and not scene.get('words'):
+        # イメージ画像（Openverse）の場面は、写真をぼかして雰囲気だけにし、字幕の文を大きな文字で主役にする（2026-09-16 中司さん決定・案A＋B）
+        scene = dict(scene, words=split_words(scene.get('subtitle') or scene['narration']))
     if scene.get('words'):  # 文字の場面は写真をぼかすので、横長でも画面いっぱいに切り抜く
         compose_photo(scene['photo'], bg, st['margin'], fit_ratio=99)
         return words_clip(st, i, scene, work, bg, dur, narr, wav)

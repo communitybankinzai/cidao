@@ -9,6 +9,7 @@ GitHub Actions（.github/workflows/talent-video.yml）から動く。環境変�
 """
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -64,6 +65,14 @@ OPENVERSE = 'https://api.openverse.org/v1/images/'
 STOCK_LICENSES = 'cc0,pdm,by'  # 動画に組み込んで本人が SNS に使うので、商用可・継承条件なしのものだけ（BY-SA・NC・ND は使わない）
 
 
+# 人物・政治・お金・ブランドなどを示す語。検索語か写真の題名・タグに含まれたら使わない（別の人がその人だと誤解される・不適切な写真が混ざる。2026-09-16）
+STOCK_BLOCK = {'people', 'person', 'man', 'men', 'woman', 'women', 'boy', 'girl', 'child', 'children', 'kid', 'kids', 'baby', 'family', 'parent',
+               'mother', 'father', 'team', 'player', 'players', 'crowd', 'portrait', 'face', 'faces', 'couple', 'friends', 'group', 'student', 'students',
+               'teacher', 'worker', 'workers', 'staff', 'adult', 'adults', 'meeting', 'conversation', 'talking', 'chatting', 'party', 'political', 'politics',
+               'election', 'vote', 'campaign', 'flag', 'protest', 'money', 'cash', 'banknote', 'coin', 'coins', 'currency', 'dollar', 'euro', 'pound',
+               'logo', 'brand', 'advert', 'advertisement', 'poster', 'flyer', 'religion', 'church', 'military', 'gun', 'weapon', 'alcohol', 'beer', 'wine'}
+
+
 def find_stock(query, used):
     """Openverse（CC0／パブリックドメイン／CC BY）から、検索語が題名かタグに含まれる画像を1枚選ぶ。無ければ None。
     匿名の上限は 20回/分・200回/日（2026-09-16 実測）。"""
@@ -77,13 +86,18 @@ def find_stock(query, used):
     except Exception as e:  # noqa: BLE001
         print(f'  openverse: {e}', flush=True)
         return None
+    if any(w in STOCK_BLOCK for w in words):
+        return None  # 人物や場面が主役の検索語には画像を付けない（文字の場面になる）
+    need = (len(words) + 1) // 2  # 検索語の半分以上が題名・タグに含まれるものだけ
     best, best_score = None, 0
     for r in data.get('results', []):
         if r.get('url') in used or not r.get('url') or min(r.get('width') or 0, r.get('height') or 0) < 600:
             continue
-        text = ' '.join([r.get('title') or ''] + [t.get('name', '') for t in (r.get('tags') or [])]).lower()
-        score = sum(1 for w in words if w in text)
-        if score > best_score:  # 検索語が題名・タグに1つも無いものは使わない（関係ない写真が混ざるため）
+        tokens = set(re.findall(r'[a-z]+', ' '.join([r.get('title') or ''] + [t.get('name', '') for t in (r.get('tags') or [])]).lower()))
+        if tokens & STOCK_BLOCK:
+            continue
+        score = sum(1 for w in words if w in tokens)
+        if score >= need and score > best_score:
             best, best_score = r, score
     if not best:
         return None
@@ -96,6 +110,7 @@ def fetch_stock_photos(script, tmp):
     """本人の写真が1枚以下（use_stock）のとき、最初と最後以外の場面の画像を Openverse で補う。取れた分だけ差し替え、出どころを scene['stock'] に残す。"""
     used, n = set(), 0
     for i, s in enumerate(script['scenes']):
+        s.pop('stock', None)  # 前回の選択は引き継がない（作り直しのたびに選び直す）
         if s['id'] in ('title', 'cta') or not s.get('query'):
             continue
         pick = find_stock(s['query'], used)
