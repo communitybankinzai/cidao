@@ -17,13 +17,22 @@ import {
 } from '@/lib/inzai-bunka/sync'
 import {
   GOGUYNET_COSMOS_SOURCE,
+  GOGUYNET_MEDIA,
   buildSearchUrl,
   dedupeCandidates,
   extractCandidates,
   toCandidateDescription,
   type CosmosCandidate,
   type GoguynetPost,
+  type MediaSource,
 } from './cosmos'
+import { CHIICOMI_MEDIA, buildChiicomiSearchUrl } from '@/lib/chiicomi/press'
+
+/** 候補の情報源。追加するときはここに1行足す（記事の形式は WordPress REST の posts と同じ想定） */
+export const MEDIA_SOURCES: { media: MediaSource; url: string }[] = [
+  { media: GOGUYNET_MEDIA, url: buildSearchUrl() },
+  { media: CHIICOMI_MEDIA, url: buildChiicomiSearchUrl() },
+]
 
 const FETCH_TIMEOUT_MS = 15_000
 const COSMOS_PLACE_RE = /コスモスパレット|cosmos\s*palette/i
@@ -60,7 +69,7 @@ export function candidateToRow(c: CosmosCandidate, botMemberId: string): EventRo
     fee: c.fee,
     organizer_type: 'member',
     organizer_id: botMemberId,
-    organizer_name_text: 'コスモスパレット（号外NET の記事より）',
+    organizer_name_text: `コスモスパレット（${c.mediaName} の記事より）`,
     proxy_registration: true,
     proxy_source_url: c.articleUrl,
     external_source: GOGUYNET_COSMOS_SOURCE,
@@ -94,27 +103,38 @@ export async function syncGoguynetCosmos(db: CosmosSyncDb, opts: SyncOptions): P
     inserted: [], updated: [], unchanged: 0, skipped: [], duplicates: [], errors: [], dryRun,
   }
 
-  // 1. 記事検索
-  const res = await fetchFn(buildSearchUrl(), {
-    headers: { 'user-agent': 'Mozilla/5.0 (compatible; CiDAO-event-sync/1.0; +https://cidao.vercel.app)', accept: 'application/json' },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  })
-  if (!res.ok) throw new Error(`号外NET HTTP ${res.status}`)
-  const posts = (await res.json()) as GoguynetPost[]
-  if (!Array.isArray(posts)) throw new Error('号外NET の応答が配列ではない')
-  result.fetched.list = posts.length
-
-  // 2. 候補抽出（記事＝details として数える）
+  // 1. 記事検索（媒体ごと）→ 2. 候補抽出（候補が出た記事＝details として数える）
+  //    1媒体が落ちても他の媒体は続ける（全媒体が落ちたら失敗）
   const all: CosmosCandidate[] = []
-  for (const p of posts) {
-    const cands = extractCandidates(p)
-    if (cands.length === 0) {
-      result.skipped.push(`候補なし: ${p.title.rendered.slice(0, 40)}`)
+  let okSources = 0
+  for (const src of MEDIA_SOURCES) {
+    let posts: GoguynetPost[]
+    try {
+      const res = await fetchFn(src.url, {
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; CiDAO-event-sync/1.0; +https://cidao.vercel.app)', accept: 'application/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      posts = (await res.json()) as GoguynetPost[]
+      if (!Array.isArray(posts)) throw new Error('応答が配列ではない')
+    } catch (err) {
+      result.errors.push(`${src.media.name}: ${err instanceof Error ? err.message : String(err)}`)
+      log(`${src.media.name} fetch failed`)
       continue
     }
-    result.fetched.details++
-    all.push(...cands)
+    okSources++
+    result.fetched.list += posts.length
+    for (const p of posts) {
+      const cands = extractCandidates(p, src.media)
+      if (cands.length === 0) {
+        result.skipped.push(`候補なし（${src.media.name}）: ${p.title.rendered.slice(0, 40)}`)
+        continue
+      }
+      result.fetched.details++
+      all.push(...cands)
+    }
   }
+  if (okSources === 0) throw new Error(`記事の取得に全媒体で失敗: ${result.errors.join(' / ')}`)
   const merged = dedupeCandidates(all)
   result.fetched.merged = merged.length
   const today = todayJst(now)

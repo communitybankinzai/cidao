@@ -34,6 +34,8 @@ export type GoguynetPost = {
 /** inzai-bunka の登録処理をそのまま使えるよう、同じ形（BunkaCalendarEntry）に記事情報を足す */
 export type CosmosCandidate = BunkaCalendarEntry & {
   postId: number
+  /** 媒体名（号外NET 印西版／ちいき新聞）。説明文と主催表示に使う */
+  mediaName: string
   articleUrl: string
   articleTitle: string
   articleDate: string
@@ -42,7 +44,8 @@ export type CosmosCandidate = BunkaCalendarEntry & {
 }
 
 const COSMOS_RE = /コスモスパレット|cosmos\s*palette/i
-const LABEL_RE = /^[■●◆◇□・▼▶]?\s*(開催日時|開催日|日程|日時|開催時間|時間|開催場所|会場|場所|入場料|参加費|料金)\s*[：:]\s*(.*)$/
+// 区切りは「：」「:」のほか、ちいき新聞の「日時／7月25日…」の「／」「/」も許す
+const LABEL_RE = /^[■●◆◇□・▼▶]?\s*(開催日時|開催日|日程|日時|開催時間|時間|開催場所|会場|場所|入場料|参加費|料金)\s*[：:／/]\s*(.*)$/
 
 /** 記事HTMLを行の配列にする（埋め込み Instagram の定型文などは除く） */
 export function articleLines(html: string): string[] {
@@ -84,6 +87,9 @@ export function eventTitleFromArticle(title: string): string {
 export function normalizeJaTime(s: string): string {
   return s
     .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    // 「午後3時」→「15時」「午前10時」→「10時」（ちいき新聞の書き方）。午後12時は12時のまま
+    .replace(/午後\s*(\d{1,2})時/g, (_, h) => `${Number(h) < 12 ? Number(h) + 12 : Number(h)}時`)
+    .replace(/午前\s*(\d{1,2})時/g, (_, h) => `${Number(h)}時`)
     .replace(/(\d{1,2})時(\d{1,2})分/g, (_, h, m) => `${h}:${String(m).padStart(2, '0')}`)
     .replace(/(\d{1,2})時半/g, (_, h) => `${h}:30`)
     .replace(/(\d{1,2})時(?![\d:])/g, (_, h) => `${h}:00`)
@@ -130,7 +136,10 @@ function addDays(date: string, n: number): string {
  * 1記事から候補（開催日ごと）を作る。コスモスパレットの記事でなければ空配列。
  * 日付が読めない記事も空配列（skipped として呼び出し側が数える）。
  */
-export function extractCandidates(post: GoguynetPost): CosmosCandidate[] {
+export type MediaSource = { name: string; idPrefix: string }
+export const GOGUYNET_MEDIA: MediaSource = { name: '号外NET 印西版', idPrefix: 'goguynet' }
+
+export function extractCandidates(post: GoguynetPost, media: MediaSource = GOGUYNET_MEDIA): CosmosCandidate[] {
   const articleTitle = cleanArticleTitle(post.title.rendered)
   const lines = articleLines(post.content.rendered)
   if (!isCosmosArticle(articleTitle, lines)) return []
@@ -165,6 +174,7 @@ export function extractCandidates(post: GoguynetPost): CosmosCandidate[] {
 
   return dates.map((date) => ({
     postId: post.id,
+    mediaName: media.name,
     articleUrl: post.link,
     articleTitle,
     articleDate,
@@ -182,7 +192,7 @@ export function extractCandidates(post: GoguynetPost): CosmosCandidate[] {
     endAt: `${date}T${t.end}`,
     timeAssumed: t.assumed,
     fee: parseFeeText(feeText),
-    sourceId: `goguynet:${post.id}:${date}`,
+    sourceId: `${media.idPrefix}:${post.id}:${date}`,
     imageUrl: null,
   }))
 }
@@ -199,7 +209,9 @@ export function dedupeCandidates(cands: CosmosCandidate[]): CosmosCandidate[] {
 }
 
 function isSameEvent(a: string, b: string): boolean {
-  const n = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[\s・･\-–—~〜～「」『』（）()!！?？。、]/g, '')
+  // 「Cosmos Palette 夏祭り 2026」（号外NET）と「コスモスパレット 夏祭り」（ちいき新聞）を同じ催しと見なす
+  const n = (s: string) =>
+    s.normalize('NFKC').toLowerCase().replace(/[\s・･\-–—~〜～「」『』（）()!！?？。、]/g, '').replace(/cosmospalette/g, 'コスモスパレット')
   const x = n(a)
   const y = n(b)
   return x === y || x.includes(y) || y.includes(x) || x.slice(0, 6) === y.slice(0, 6)
@@ -212,7 +224,7 @@ export function candidateFingerprint(c: CosmosCandidate): string {
 
 /** events.description（本文は転記せず、事実の定型行と記事URLだけ） */
 export function toCandidateDescription(c: CosmosCandidate): string {
-  const lines: string[] = ['地域メディア「号外NET 印西版」の記事から自動で拾った候補です。詳しくは記事をご覧ください。']
+  const lines: string[] = [`地域メディア「${c.mediaName}」の記事から自動で拾った候補です。詳しくは記事をご覧ください。`]
   if (c.infoLines.length > 0) lines.push(c.infoLines.map((l) => `■${l}`).join('\n'))
   if (c.timeAssumed) lines.push('※時間は記事に明記が無いため仮置きです。')
   lines.push(`記事：${c.articleTitle}\n${c.articleUrl}`)

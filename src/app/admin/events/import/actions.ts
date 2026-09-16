@@ -155,7 +155,8 @@ export async function importScannedEvents(items: ImportItem[]): Promise<ImportRe
 // 下書きは RLS 上、作った bot 以外には見えないので、運営確認のうえ service_role で読み書きする。
 // ---------------------------------------------------------------------------
 
-const COSMOS_SOURCE = 'goguynet-cosmos'
+/** 自動取り込みが「下書き候補」として入れる取り込み元（号外NET・ちいき新聞＝goguynet-cosmos、市サイト＝inzai-city-calendar） */
+const CANDIDATE_SOURCES = ['goguynet-cosmos', 'inzai-city-calendar'] as const
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -183,15 +184,17 @@ export type CosmosCandidateRow = {
   description: string
   proxy_source_url: string | null
   created_at: string
+  external_source: string
+  external_source_id: string
 }
 
-/** 確認待ちの候補（今日以降・開催日順） */
+/** 確認待ちの候補（今日以降・開催日順・全取り込み元） */
 export async function listCosmosCandidates(): Promise<CosmosCandidateRow[]> {
   await requireAdmin()
   const { data, error } = await serviceClient()
     .from('events')
-    .select('id, title, start_at, end_at, location, fee, description, proxy_source_url, created_at')
-    .eq('external_source', COSMOS_SOURCE)
+    .select('id, title, start_at, end_at, location, fee, description, proxy_source_url, created_at, external_source, external_source_id')
+    .in('external_source', [...CANDIDATE_SOURCES])
     .eq('status', 'draft')
     .gte('start_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
     .order('start_at', { ascending: true })
@@ -208,7 +211,7 @@ async function setCosmosCandidateStatus(id: string, status: 'open' | 'cancelled'
       .from('events')
       .update({ status })
       .eq('id', id)
-      .eq('external_source', COSMOS_SOURCE)
+      .in('external_source', [...CANDIDATE_SOURCES])
       .eq('status', 'draft')
       .select('id')
     if (error) return { ok: false, error: error.message }

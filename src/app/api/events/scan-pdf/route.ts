@@ -16,8 +16,11 @@
 // env: ANTHROPIC_API_KEY 必須
 // 認可: 管理者のみ（is_admin）。取得先は印西市の公式ドメインに限定する（SSRF対策）。
 
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { estimateCost, unavailableCost } from '@/lib/ai/pricing'
+import { recordApiUsage } from '@/lib/talent-bank/usage'
 import { extractText } from 'unpdf'
 import { createClient } from '@/lib/supabase/server'
 import { classifyScanError, type ScanFailReason } from '@/lib/event-scan'
@@ -52,6 +55,8 @@ type ScanPdfResult =
       to_page: number
       events: unknown[]
       usage: unknown
+      /** この呼び出しの推定費用（円）。記録できなかったときは null */
+      cost_jpy?: number | null
     }
   | { ok: false; reason: ScanFailReason }
 
@@ -127,18 +132,22 @@ function buildInstruction(fromPage: number, toPage: number, pageText: string): s
   ].join('\n')
 }
 
+// 読み取りモデル。2026-09-16 に opus-5 → sonnet-5 へ（1号あたり概算 164円 → 66円）。環境変数で差し替え可
+const KOUHOU_SCAN_MODEL = process.env.KOUHOU_SCAN_MODEL ?? 'claude-sonnet-5'
+
 async function extractEvents(
   apiKey: string,
+  memberId: string,
   fromPage: number,
   toPage: number,
   pageText: string,
-): Promise<{ ok: true; events: unknown[]; usage: unknown } | { ok: false; reason: ScanFailReason }> {
+): Promise<{ ok: true; events: unknown[]; usage: unknown; cost_jpy: number | null } | { ok: false; reason: ScanFailReason }> {
   const client = new Anthropic({ apiKey })
 
   let response: Anthropic.Message
   try {
     response = await client.messages.create({
-      model: 'claude-opus-5',
+      model: KOUHOU_SCAN_MODEL,
       max_tokens: 12000,
       output_config: {
         // 60秒以内に応答を返し切る必要があるため、抽出の深さより速度を優先する
@@ -207,8 +216,10 @@ async function extractEvents(
       messages: [{ role: 'user', content: buildInstruction(fromPage, toPage, pageText) }],
     })
   } catch (err) {
+    await recordScanUsage(memberId, null, classifyScanError(err, 'events/scan-pdf'))
     return { ok: false, reason: classifyScanError(err, 'events/scan-pdf') }
   }
+  const cost = await recordScanUsage(memberId, response.usage, null)
 
   const text = response.content.find((b) => b.type === 'text')
   if (!text || text.type !== 'text') return { ok: false, reason: 'parse' }
@@ -221,7 +232,37 @@ async function extractEvents(
     return { ok: false, reason: 'parse' }
   }
 
-  return { ok: true, events: Array.isArray(parsed.events) ? parsed.events : [], usage: response.usage }
+  return { ok: true, events: Array.isArray(parsed.events) ? parsed.events : [], usage: response.usage, cost_jpy: cost }
+}
+
+/**
+ * 1回の読み取りの使用量と推定費用を api_usage（purpose='event_scan_pdf'）に残す。
+ * 2026-09-16 中司さん指摘「API 利用料がかなり高かった」に対し、実費を管理画面で見られるようにするため。
+ * 記録に失敗しても読み取り結果は返す。戻り値は推定費用（円）。
+ */
+async function recordScanUsage(memberId: string, usage: Anthropic.Usage | null, error: string | null): Promise<number | null> {
+  try {
+    const aiUsage = usage
+      ? {
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          cache_creation_tokens: usage.cache_creation_input_tokens ?? 0,
+          cache_read_tokens: usage.cache_read_input_tokens ?? 0,
+        }
+      : null
+    const cost = aiUsage ? await estimateCost({ model: KOUHOU_SCAN_MODEL, usage: aiUsage }) : unavailableCost()
+    await recordApiUsage({
+      run_id: randomUUID(), case_id: null, subject_id: null, member_id: memberId,
+      provider: 'anthropic', model: KOUHOU_SCAN_MODEL, purpose: 'event_scan_pdf',
+      input_tokens: aiUsage?.input_tokens ?? null, output_tokens: aiUsage?.output_tokens ?? null,
+      cache_creation_tokens: aiUsage?.cache_creation_tokens ?? null, cache_read_tokens: aiUsage?.cache_read_tokens ?? null,
+      ...cost, error,
+    })
+    return cost.est_cost_jpy
+  } catch {
+    console.error('[events/scan-pdf] usage recording failed')
+    return null
+  }
 }
 
 export async function POST(request: Request): Promise<NextResponse<ScanPdfResult>> {
@@ -295,7 +336,7 @@ export async function POST(request: Request): Promise<NextResponse<ScanPdfResult
     })
   }
 
-  const result = await extractEvents(apiKey, fromPage, toPage, pageText)
+  const result = await extractEvents(apiKey, user.id, fromPage, toPage, pageText)
   if (!result.ok) return NextResponse.json(result)
 
   return NextResponse.json({
@@ -306,5 +347,6 @@ export async function POST(request: Request): Promise<NextResponse<ScanPdfResult
     to_page: toPage,
     events: result.events,
     usage: result.usage,
+    cost_jpy: result.cost_jpy,
   })
 }
