@@ -9,8 +9,24 @@ import { videoModerateAction } from './video-actions'
 import { adminVideoQueue } from '@/lib/talent-bank/video/jobs'
 import { introAdminAction } from './intro-actions'
 import { adminIntroQueue } from '@/lib/talent-bank/cbi-intro'
+
 const INTRO_STATUS: Record<string, string> = { draft: '下書き（本人には見えない）', owner_review: '本人の確認待ち', published: '掲載中', returned: '本人から差し戻し' }
 const VIDEO_STATUS: Record<string, string> = { owner_review: '本人の確認待ち（運営は先に見られる）', owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
+// 一覧の1行に出す短い言い方（長い説明は開いてから読む）
+const INTRO_SHORT: Record<string, string> = { draft: '下書き', owner_review: '確認待ち', published: '掲載中', returned: '差し戻し' }
+const VIDEO_SHORT: Record<string, string> = { owner_review: '本人確認待ち', owner_approved: '掲載待ち', published: '掲載中', failed: '失敗' }
+
+// 人ごとの並び順。運営がすぐ手を動かせる人を上に置く
+function rank(intro: { status: string } | null, videos: { status: string }[]) {
+  if (videos.some(v => v.status === 'owner_approved')) return 0   // 掲載ボタンを押すだけ
+  if (intro?.status === 'returned') return 1                      // 本人から直してほしい点が来ている
+  if (!intro) return 2                                            // 他己紹介が未作成
+  if (intro.status === 'draft') return 3                          // 下書きのまま止まっている
+  if (videos.some(v => v.status === 'failed')) return 4
+  return 5
+}
+const badge = (text: string, tone = '') => <span className={`rounded-full border px-2 py-0.5 text-xs font-normal ${tone}`}>{text}</span>
+
 export default async function TalentBankAdminPage() {
   const db = await createTalentBankClient()
   const { data } = await db.auth.getUser()
@@ -30,6 +46,16 @@ export default async function TalentBankAdminPage() {
     if (links.error) throw new Error('Review queue unavailable')
     return { version, tags: (tags.data ?? []).filter(t => links.data?.some(l => l.tag_id === t.id)) }
   }))
+
+  // 他己紹介と紹介動画を人ごとに1行へまとめる。プロフィールを取り下げた人でも、動画が残っていれば行を出す
+  const seen = new Set(intros.map(i => i.member.id))
+  const rows = [
+    ...intros.map(({ member, summary, intro }) => ({ id: member.id, name: member.display_name, summary, intro, videos: videos.filter(v => v.member_id === member.id) })),
+    ...[...new Set(videos.map(v => v.member_id))].filter(id => !seen.has(id))
+      .map(id => ({ id, name: names.get(id) ?? '（表示名なし）', summary: null, intro: null, videos: videos.filter(v => v.member_id === id) })),
+  ].sort((a, b) => rank(a.intro, a.videos) - rank(b.intro, b.videos) || String(a.name).localeCompare(String(b.name), 'ja'))
+  const todo = rows.filter(r => rank(r.intro, r.videos) <= 3).length
+
   return <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
     <Link href="/admin" className="text-sm underline">← 管理画面</Link><h1 className="text-2xl font-semibold">人材バンク・公開承認</h1>
     {!cards.length && <p>承認待ちのプロフィールはありません。</p>}
@@ -49,40 +75,70 @@ export default async function TalentBankAdminPage() {
       </ActionForm>
     </section>)}
 
-    <h2 className="text-xl font-semibold">他己紹介（CBI から見た○○さん）</h2>
-    <p className="text-sm text-muted-foreground">プロフィールを公開している人が並びます。「AIで下書き」→読んで直す→「本人に確認を依頼」。本人が承認すると紹介ページ（会員のみ）に載ります。</p>
-    {!intros.length && <p>プロフィールを公開している人はまだいません。</p>}
-    {intros.map(({ member, summary, intro }) => <section key={member.id} className="space-y-3 rounded-xl border p-4 text-sm">
-      <p className="font-medium">{member.display_name} <span className="rounded-full border px-2 py-0.5 text-xs font-normal">{intro ? INTRO_STATUS[intro.status] : '未作成'}</span></p>
-      {summary && <p className="text-muted-foreground">紹介文：{summary}</p>}
-      {intro?.status === 'returned' && intro.owner_comment && <p className="rounded border border-amber-500 p-2">本人から：{intro.owner_comment}</p>}
-      <ActionForm action={introAdminAction} successText="AI が下書きを書きました。下の欄で直せます。"><input type="hidden" name="memberId" value={member.id} />
-        <Button type="submit" name="intent" value="draft" variant="outline" size="sm">{intro ? 'AIで下書きを書き直す' : 'AIで下書き'}</Button>
-      </ActionForm>
-      <ActionForm key={`intro:${intro?.updated_at ?? 'none'}`} action={introAdminAction} successText="保存しました。"><input type="hidden" name="memberId" value={member.id} />
-        <textarea name="body" maxLength={400} rows={6} defaultValue={intro?.body ?? ''} className="w-full rounded border bg-background p-3" placeholder="AI の下書きを読んで直す（400字以内）" />
-        <label className="block">一読にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" name="intent" value="save" variant="outline">下書きとして保存</Button>
-          <Button type="submit" name="intent" value="request">本人に確認を依頼</Button>
-        </div>
-      </ActionForm>
-    </section>)}
+    <h2 className="text-xl font-semibold">メンバー（他己紹介と紹介動画）</h2>
+    <p className="text-sm text-muted-foreground">
+      1人1行です。名前を押すと、その人の他己紹介と紹介動画をまとめて扱えます。手を動かす番の人（掲載待ち・差し戻し・未作成）を上に並べています。
+    </p>
+    {!rows.length && <p>プロフィールを公開している人はまだいません。</p>}
+    {!!rows.length && <p className="text-sm">{rows.length}人中、{todo ? `${todo}人が対応待ちです。` : '対応待ちはありません。'}</p>}
 
-    <h2 className="text-xl font-semibold">紹介動画</h2>
-    {!videos.length && <p>動画はまだありません。</p>}
-    {videos.map(v => <section key={v.id} className="space-y-3 rounded-xl border p-4 text-sm">
-      <p><span className="rounded-full border px-2 py-0.5 text-xs">{VIDEO_STATUS[v.status] ?? v.status}</span> {names.get(v.member_id) ?? '（表示名なし）'}
-        <span className="text-muted-foreground">　{v.style}／{v.voice_name}／{v.bgm_credit}{v.duration_sec ? `／${Math.round(Number(v.duration_sec))}秒` : ''}</span></p>
-      {v.status === 'failed' && <p className="text-red-700">失敗の理由：{v.error}</p>}
-      {v.storage_path && <video controls playsInline preload="metadata" poster={`/api/talent-bank/video/${v.id}?thumb=1`} src={`/api/talent-bank/video/${v.id}`} className="w-full max-w-xs rounded-lg bg-black" />}
-      {v.status === 'owner_approved' && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
-        <label className="block">確認にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
-        <Button type="submit" name="intent" value="publish">紹介ページに掲載する</Button>
-      </ActionForm>}
-      {(v.status === 'published' || v.status === 'owner_approved') && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
-        <Button type="submit" name="intent" value="retire" variant="outline" size="sm">掲載を下げる</Button>
-      </ActionForm>}
-    </section>)}
+    <div className="divide-y rounded-xl border">
+      {rows.map(({ id, name, summary, intro, videos: own }) => {
+        const latest = own[0]  // adminVideoQueue は新しい順
+        return <details key={id} className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-3 p-3 hover:bg-muted/50">
+            {latest?.storage_path
+              ? <img src={`/api/talent-bank/video/${latest.id}?thumb=1`} alt="" className="h-14 w-9 shrink-0 rounded bg-black object-cover" />
+              : <span className="flex h-14 w-9 shrink-0 items-center justify-center rounded border border-dashed text-[10px] text-muted-foreground">動画<br />なし</span>}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{name}</span>
+              <span className="mt-1 flex flex-wrap items-center gap-1">
+                {badge(`紹介文 ${intro ? INTRO_SHORT[intro.status] ?? intro.status : '未作成'}`, intro?.status === 'published' ? 'text-green-700' : intro ? '' : 'text-amber-700')}
+                {latest && badge(`動画 ${VIDEO_SHORT[latest.status] ?? latest.status}`, latest.status === 'published' ? 'text-green-700' : latest.status === 'failed' ? 'text-red-700' : '')}
+                {own.length > 1 && badge(`動画 ほか${own.length - 1}本`)}
+              </span>
+            </span>
+            <span aria-hidden className="shrink-0 text-muted-foreground transition-transform group-open:rotate-90">›</span>
+          </summary>
+
+          <div className="space-y-4 border-t p-4 text-sm">
+            <section className="space-y-3">
+              <h3 className="font-medium">他己紹介（CBI から見た{name}さん） {badge(intro ? INTRO_STATUS[intro.status] ?? intro.status : '未作成')}</h3>
+              {summary && <p className="text-muted-foreground">紹介文：{summary}</p>}
+              {intro?.status === 'returned' && intro.owner_comment && <p className="rounded border border-amber-500 p-2">本人から：{intro.owner_comment}</p>}
+              <ActionForm action={introAdminAction} successText="AI が下書きを書きました。下の欄で直せます。"><input type="hidden" name="memberId" value={id} />
+                <Button type="submit" name="intent" value="draft" variant="outline" size="sm">{intro ? 'AIで下書きを書き直す' : 'AIで下書き'}</Button>
+              </ActionForm>
+              <ActionForm key={`intro:${intro?.updated_at ?? 'none'}`} action={introAdminAction} successText="保存しました。"><input type="hidden" name="memberId" value={id} />
+                <textarea name="body" maxLength={400} rows={6} defaultValue={intro?.body ?? ''} className="w-full rounded border bg-background p-3" placeholder="AI の下書きを読んで直す（400字以内）" />
+                <label className="block">一読にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" name="intent" value="save" variant="outline">下書きとして保存</Button>
+                  <Button type="submit" name="intent" value="request">本人に確認を依頼</Button>
+                </div>
+              </ActionForm>
+            </section>
+
+            <section className="space-y-3 border-t pt-4">
+              <h3 className="font-medium">紹介動画</h3>
+              {!own.length && <p className="text-muted-foreground">動画はまだありません。</p>}
+              {own.map(v => <div key={v.id} className="space-y-3 rounded-lg border p-3">
+                <p>{badge(VIDEO_STATUS[v.status] ?? v.status)}
+                  <span className="text-muted-foreground">　{v.style}／{v.voice_name}／{v.bgm_credit}{v.duration_sec ? `／${Math.round(Number(v.duration_sec))}秒` : ''}</span></p>
+                {v.status === 'failed' && <p className="text-red-700">失敗の理由：{v.error}</p>}
+                {v.storage_path && <video controls playsInline preload="none" poster={`/api/talent-bank/video/${v.id}?thumb=1`} src={`/api/talent-bank/video/${v.id}`} className="w-full max-w-xs rounded-lg bg-black" />}
+                {v.status === 'owner_approved' && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
+                  <label className="block">確認にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
+                  <Button type="submit" name="intent" value="publish">紹介ページに掲載する</Button>
+                </ActionForm>}
+                {(v.status === 'published' || v.status === 'owner_approved') && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
+                  <Button type="submit" name="intent" value="retire" variant="outline" size="sm">掲載を下げる</Button>
+                </ActionForm>}
+              </div>)}
+            </section>
+          </div>
+        </details>
+      })}
+    </div>
   </main>
 }
