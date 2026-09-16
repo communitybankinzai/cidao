@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
+import { Sheet } from '@/components/ui/sheet'
 import {
   FREEFREE_CATEGORIES,
   FREEFREE_POSTER_KINDS,
@@ -27,11 +28,21 @@ export type FreefreeRow = {
 
 type SortKey = 'newest' | 'expiring_soon'
 
+const SORT_LABEL: Record<SortKey, string> = {
+  newest: '新着順',
+  expiring_soon: '締切が近い順',
+}
+
+/** 一度に描画する件数。スマホで縦に積みすぎないよう区切る */
+const PAGE_SIZE = 20
+
 export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
   const [posterFilter, setPosterFilter] = useState<FreefreePosterKind | 'all'>('all')
   const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [visible, setVisible] = useState(PAGE_SIZE)
 
   const filtered = useMemo(() => {
     const now = Date.now()
@@ -65,68 +76,163 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
 
   const hasActiveFilter = posterFilter !== 'all' || categoryFilter !== 'all' || search.trim().length > 0 || sort !== 'newest'
 
+  const resetFilters = () => {
+    setPosterFilter('all')
+    setCategoryFilter('all')
+    setSearch('')
+    setSort('newest')
+  }
+
+  // 適用中の条件。シートを閉じたあとも一覧の上に残して、何で絞ったか分かるようにする
+  const activeChips: { label: string; clear: () => void }[] = []
+  if (posterFilter !== 'all') {
+    activeChips.push({
+      label: freefreePosterKindMeta(posterFilter).badge,
+      clear: () => setPosterFilter('all'),
+    })
+  }
+  if (categoryFilter !== 'all') {
+    activeChips.push({
+      label: freefreeCategoryLabel(categoryFilter),
+      clear: () => setCategoryFilter('all'),
+    })
+  }
+
+  // 条件を変えたら先頭から見せ直す。
+  // effect で setState するとレンダーが二重に走るため、React 公式の
+  // 「前回値をレンダー中に比べる」書き方でリセットする
+  const filterKey = [posterFilter, categoryFilter, search, sort].join('')
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey)
+    setVisible(PAGE_SIZE)
+  }
+
+  const shown = filtered.slice(0, visible)
+  const rest = filtered.length - shown.length
+
   return (
     <div className="space-y-4">
-      <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-4">
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-slate-500 mr-1">掲載者:</span>
-          <Chip active={posterFilter === 'all'} onClick={() => setPosterFilter('all')} label={`すべて (${rows.length})`} />
-          {FREEFREE_POSTER_KINDS.filter((k) => (posterCounts[k.key] ?? 0) > 0).map((k) => (
-            <Chip
-              key={k.key}
-              active={posterFilter === k.key}
-              onClick={() => setPosterFilter(k.key)}
-              label={`${k.badge} (${posterCounts[k.key] ?? 0})`}
-              className={posterFilter === k.key ? '' : k.badgeClass}
-            />
-          ))}
-        </div>
+      <div className="space-y-2">
+        <input
+          type="search"
+          placeholder="🔍 タイトル・本文・場所・組織名で検索"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+        />
 
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-slate-500 mr-1">カテゴリ:</span>
-          <Chip active={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')} label="すべて" />
-          {FREEFREE_CATEGORIES.map((c) => (
-            <Chip key={c.key} active={categoryFilter === c.key} onClick={() => setCategoryFilter(c.key)} label={c.label} />
-          ))}
-        </div>
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <input
-            type="search"
-            placeholder="🔍 タイトル・本文・場所・組織名で検索"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-w-[200px] rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm"
-          />
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm"
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            data-instant="true"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm hover:border-slate-400 dark:hover:border-slate-500 transition"
           >
-            <option value="newest">新着順</option>
-            <option value="expiring_soon">締切が近い順</option>
-          </select>
-          {hasActiveFilter && (
-            <button
-              type="button"
-              onClick={() => { setPosterFilter('all'); setCategoryFilter('all'); setSearch(''); setSort('newest') }}
-              className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
-            >
-              フィルタを解除
-            </button>
-          )}
+            <span aria-hidden>⚙️</span>
+            <span>絞り込み・並び替え</span>
+            {activeChips.length > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold flex items-center justify-center">
+                {activeChips.length}
+              </span>
+            )}
+          </button>
+          <span className="ml-auto text-xs text-slate-500 shrink-0">
+            {filtered.length} / {rows.length} 件
+          </span>
         </div>
 
-        <div className="text-xs text-slate-500">
-          {filtered.length} / {rows.length} 件
-        </div>
+        {(activeChips.length > 0 || sort !== 'newest') && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeChips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                onClick={c.clear}
+                data-instant="true"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+              >
+                {c.label}
+                <span aria-hidden className="opacity-70">✕</span>
+              </button>
+            ))}
+            {sort !== 'newest' && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {SORT_LABEL[sort]}
+              </span>
+            )}
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                data-instant="true"
+                className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+              >
+                すべて解除
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      <Sheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="絞り込み・並び替え"
+        footer={
+          <button
+            type="button"
+            onClick={() => setSheetOpen(false)}
+            data-instant="true"
+            className="w-full h-11 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold"
+          >
+            {filtered.length} 件を見る
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <section>
+            <h3 className="text-[11px] font-semibold text-slate-400 tracking-wide mb-1.5">掲載者</h3>
+            <div className="flex flex-wrap gap-2">
+              <Chip active={posterFilter === 'all'} onClick={() => setPosterFilter('all')} label={`すべて (${rows.length})`} />
+              {FREEFREE_POSTER_KINDS.filter((k) => (posterCounts[k.key] ?? 0) > 0).map((k) => (
+                <Chip
+                  key={k.key}
+                  active={posterFilter === k.key}
+                  onClick={() => setPosterFilter(k.key)}
+                  label={`${k.badge} (${posterCounts[k.key] ?? 0})`}
+                  className={posterFilter === k.key ? '' : k.badgeClass}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[11px] font-semibold text-slate-400 tracking-wide mb-1.5">カテゴリ</h3>
+            <div className="flex flex-wrap gap-2">
+              <Chip active={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')} label="すべて" />
+              {FREEFREE_CATEGORIES.map((c) => (
+                <Chip key={c.key} active={categoryFilter === c.key} onClick={() => setCategoryFilter(c.key)} label={c.label} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[11px] font-semibold text-slate-400 tracking-wide mb-1.5">並び替え</h3>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+                <Chip key={k} active={sort === k} onClick={() => setSort(k)} label={SORT_LABEL[k]} />
+              ))}
+            </div>
+          </section>
+        </div>
+      </Sheet>
 
       {filtered.length === 0 ? (
         <p className="text-slate-400 text-center py-12">該当する掲載はありません</p>
       ) : (
         <ul className="grid md:grid-cols-2 gap-3">
-          {filtered.map((p) => {
+          {shown.map((p) => {
             const meta = freefreePosterKindMeta(p.posterKind)
             const daysLeft = p.expires_at
               ? Math.ceil((new Date(p.expires_at).getTime() - Date.now()) / 86400_000)
@@ -172,6 +278,17 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
           })}
         </ul>
       )}
+
+      {rest > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+          data-instant="true"
+          className="w-full h-12 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium hover:border-slate-400 dark:hover:border-slate-500 transition"
+        >
+          もっと見る（残り {rest} 件）
+        </button>
+      )}
     </div>
   )
 }
@@ -181,6 +298,7 @@ function Chip({ active, onClick, label, className }: { active: boolean; onClick:
     <button
       type="button"
       onClick={onClick}
+      data-instant="true"
       className={
         active
           ? 'px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900'

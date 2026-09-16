@@ -267,6 +267,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <button
             type="button"
             onClick={() => { setQuery(''); setOrgFilter('all'); setTypeFilter(null); setOnlineOnly(false) }}
+            data-instant="true"
             className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
           >
             フィルタを解除
@@ -330,6 +331,7 @@ function PickerPopover({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
+        data-instant="true"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={ariaLabel}
@@ -365,6 +367,7 @@ function PickerCell({
       type="button"
       onClick={onClick}
       aria-current={selected ? 'true' : undefined}
+      data-instant="true"
       className={`rounded-md py-2 text-sm tabular-nums transition ${
         selected
           ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
@@ -477,6 +480,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
     <button
       type="button"
       onClick={onClick}
+      data-instant="true"
       className={`px-2.5 py-1 rounded-full text-xs border transition ${
         active
           ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'

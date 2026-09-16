@@ -5,10 +5,14 @@ import Link from 'next/link'
 import { PROPOSAL_CATEGORIES, categoryLabel } from '@/lib/categories'
 import { Avatar } from '@/components/ui/avatar'
 import { OrgLogo } from '@/components/ui/org-logo'
+import { Sheet } from '@/components/ui/sheet'
 import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
 import { matchesSearch } from '@/lib/search-normalize'
 
 const MEMBERS_PREVIEW = 5
+
+/** 一度に描画する件数。スマホで全件（257件・約63画面）を積むと目的の団体まで届かないため区切る */
+const PAGE_SIZE = 20
 
 type OrgCategory = { category: string; is_primary: boolean }
 type MemberView = { display_name: string; avatar_url: string | null }
@@ -93,6 +97,8 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
   const [statusFilter, setStatusFilter] = useState<OrgStatus | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [openOrg, setOpenOrg] = useState<Org | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [visible, setVisible] = useState(PAGE_SIZE)
 
   const typeCounts = useMemo(() => {
     const c: Record<string, number> = {}
@@ -164,9 +170,49 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
 
   const hasActiveFilter = !!query || !!typeFilter || !!legalFormFilter || regFilter !== 'all' || !!categoryFilter || !!statusFilter
 
+  const resetFilters = () => {
+    setQuery('')
+    setTypeFilter(null)
+    setLegalFormFilter(null)
+    setRegFilter('all')
+    setCategoryFilter(null)
+    setStatusFilter(null)
+  }
+
+  // 適用中の条件。シートを閉じたあとも「何で絞っているか」が一覧の上に残るようにする
+  const activeChips: { label: string; clear: () => void }[] = []
+  if (typeFilter) activeChips.push({ label: TYPE_LABEL[typeFilter] ?? typeFilter, clear: () => setTypeFilter(null) })
+  if (regFilter !== 'all') {
+    activeChips.push({
+      label: regFilter === 'registered' ? '市登録あり' : '市登録なし',
+      clear: () => setRegFilter('all'),
+    })
+  }
+  if (legalFormFilter) {
+    activeChips.push({
+      label: LEGAL_FORM_LABEL[legalFormFilter] ?? legalFormFilter,
+      clear: () => setLegalFormFilter(null),
+    })
+  }
+  if (statusFilter) activeChips.push({ label: STATUS_LABEL[statusFilter], clear: () => setStatusFilter(null) })
+  if (categoryFilter) activeChips.push({ label: categoryLabel(categoryFilter), clear: () => setCategoryFilter(null) })
+
+  // 条件を変えたら先頭から見せ直す。
+  // effect で setState するとレンダーが二重に走るため、React 公式の
+  // 「前回値をレンダー中に比べる」書き方でリセットする
+  const filterKey = [query, typeFilter, legalFormFilter, regFilter, categoryFilter, statusFilter, sortKey].join('')
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey)
+    setVisible(PAGE_SIZE)
+  }
+
+  const shown = filtered.slice(0, visible)
+  const rest = filtered.length - shown.length
+
   return (
-    <div className="space-y-5">
-      <div className="space-y-3">
+    <div className="space-y-4">
+      <div className="space-y-2">
         <input
           type="search"
           value={query}
@@ -175,8 +221,88 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
 
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            data-instant="true"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm hover:border-slate-400 dark:hover:border-slate-500 transition"
+          >
+            <span aria-hidden>⚙️</span>
+            <span>絞り込み・並び替え</span>
+            {activeChips.length > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold flex items-center justify-center">
+                {activeChips.length}
+              </span>
+            )}
+          </button>
+          <span className="ml-auto text-xs text-slate-500 shrink-0">
+            {filtered.length} / {orgs.length} 団体
+          </span>
+        </div>
+
+        {(activeChips.length > 0 || sortKey !== 'name') && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeChips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                onClick={c.clear}
+                data-instant="true"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+              >
+                {c.label}
+                <span aria-hidden className="opacity-70">✕</span>
+              </button>
+            ))}
+            {sortKey !== 'name' && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {SORT_LABEL[sortKey]}
+              </span>
+            )}
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                data-instant="true"
+                className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+              >
+                すべて解除
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Sheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="絞り込み・並び替え"
+        footer={
+          <div className="flex items-center gap-3">
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                data-instant="true"
+                className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline shrink-0"
+              >
+                条件を消す
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSheetOpen(false)}
+              data-instant="true"
+              className="ml-auto flex-1 h-11 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold"
+            >
+              {filtered.length} 団体を見る
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <FilterGroup title="種別">
             <FilterChip active={typeFilter === null} onClick={() => setTypeFilter(null)}>
               すべての種別
             </FilterChip>
@@ -189,9 +315,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                 </FilterChip>
               )
             })}
-          </div>
+          </FilterGroup>
 
-          <div className="flex flex-wrap gap-1.5">
+          <FilterGroup title="印西市への登録">
             <FilterChip active={regFilter === 'all'} onClick={() => setRegFilter('all')}>
               市登録 不問
             </FilterChip>
@@ -201,9 +327,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
             <FilterChip active={regFilter === 'unregistered'} onClick={() => setRegFilter(regFilter === 'unregistered' ? 'all' : 'unregistered')}>
               市登録なし <span className="text-slate-400">{regCounts.unregistered}</span>
             </FilterChip>
-          </div>
+          </FilterGroup>
 
-          <div className="flex flex-wrap gap-1.5">
+          <FilterGroup title="法人格">
             <FilterChip active={legalFormFilter === null} onClick={() => setLegalFormFilter(null)}>
               法人格 不問
             </FilterChip>
@@ -216,9 +342,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                 </FilterChip>
               )
             })}
-          </div>
+          </FilterGroup>
 
-          <div className="flex flex-wrap gap-1.5">
+          <FilterGroup title="CiDAO での登録状態">
             <FilterChip active={statusFilter === null} onClick={() => setStatusFilter(null)}>
               登録状態 不問
             </FilterChip>
@@ -231,9 +357,9 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                 </FilterChip>
               )
             })}
-          </div>
+          </FilterGroup>
 
-          <div className="flex flex-wrap gap-1.5">
+          <FilterGroup title="活動の分野">
             <FilterChip active={categoryFilter === null} onClick={() => setCategoryFilter(null)}>
               すべての分野
             </FilterChip>
@@ -250,32 +376,17 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                 </FilterChip>
               )
             })}
-          </div>
-        </div>
-      </div>
+          </FilterGroup>
 
-      <div className="text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap">
-        <span>{filtered.length} / {orgs.length} 団体</span>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">並び替え:</span>
+          <FilterGroup title="並び替え">
             {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
               <FilterChip key={k} active={sortKey === k} onClick={() => setSortKey(k)}>
                 {SORT_LABEL[k]}
               </FilterChip>
             ))}
-          </div>
-          {hasActiveFilter && (
-            <button
-              type="button"
-              onClick={() => { setQuery(''); setTypeFilter(null); setLegalFormFilter(null); setRegFilter('all'); setCategoryFilter(null); setStatusFilter(null) }}
-              className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
-            >
-              フィルタを解除
-            </button>
-          )}
+          </FilterGroup>
         </div>
-      </div>
+      </Sheet>
 
       {filtered.length === 0 ? (
         <p className="text-slate-400 text-center py-12">
@@ -283,7 +394,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
         </p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((o) => {
+          {shown.map((o) => {
             const cats = o.organization_categories ?? []
             const primary = cats.find((c) => c.is_primary) ?? cats[0]
             const extra = cats.filter((c) => c !== primary)
@@ -359,6 +470,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                           <button
                             type="button"
                             onClick={() => setOpenOrg(o)}
+                            data-instant="true"
                             className="text-[10px] px-2 py-1 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
                           >
                             ほか {overflow} 名
@@ -368,6 +480,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                           <button
                             type="button"
                             onClick={() => setOpenOrg(o)}
+                            data-instant="true"
                             className="text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
                           >
                             一覧
@@ -381,6 +494,17 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
             )
           })}
         </ul>
+      )}
+
+      {rest > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+          data-instant="true"
+          className="w-full h-12 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium hover:border-slate-400 dark:hover:border-slate-500 transition"
+        >
+          もっと見る（残り {rest} 団体）
+        </button>
       )}
 
       {openOrg && <MembersModal org={openOrg} onClose={() => setOpenOrg(null)} />}
@@ -429,6 +553,7 @@ function MembersModal({ org, onClose }: { org: Org; onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
+            data-instant="true"
             className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 shrink-0"
             aria-label="閉じる"
           >
@@ -462,11 +587,22 @@ function MembersModal({ org, onClose }: { org: Org; onClose: () => void }) {
   )
 }
 
+/** 絞り込みシートの中で、条件のかたまりごとに見出しを付ける */
+function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold text-slate-400 tracking-wide mb-1.5">{title}</h3>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </section>
+  )
+}
+
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-instant="true"
       className={
         'text-xs px-2.5 py-1 rounded-full border transition ' +
         (active

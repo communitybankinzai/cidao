@@ -58,6 +58,10 @@ export function ButtonFeedback() {
       const href = btn.getAttribute('href') ?? ''
       // ページ内リンク・新しいタブで開くリンクは待ち時間がないので出さない
       if (href.startsWith('#') || btn.getAttribute('target') === '_blank') return
+      // その場で表示が変わるだけのボタン（絞り込みチップ・シートの開閉など）は対象外。
+      // 「処理中」は 6 秒間 pointer-events を切るため、連続でタップする操作が
+      // 固まったように見えてしまう（data-instant="true" を付けて除外する）
+      if (btn.dataset.instant === 'true') return
       if (href || btn.tagName === 'BUTTON') busy(btn, 6000)
     }
 

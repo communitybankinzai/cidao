@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { NotificationBell } from '@/components/NotificationBell'
 import { HomeButton } from '@/components/HomeButton'
+import { BottomNav } from '@/components/BottomNav'
 import { AdminLink } from '@/components/AdminLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 import { PageViewTracker } from '@/components/PageViewTracker'
@@ -52,13 +53,18 @@ export default function RootLayout({
       <head>
         <meta name="google" content="notranslate" />
       </head>
-      <body className="min-h-full flex flex-col">
+      {/* 下端に固定した BottomNav に本文が隠れないよう、その高さ（56px）＋ホームバー分を空ける */}
+      <body
+        className="min-h-full flex flex-col"
+        style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))' }}
+      >
         <ButtonFeedback />
         <PageViewTracker />
         <HomeButton />
         <AdminLink />
         <NotificationBell />
         {children}
+        <BottomNav />
       </body>
     </html>
   )
