@@ -98,8 +98,9 @@ def compose_photo(src, dst, margin, fit_ratio):
     cover = ImageOps.fit(im, (cw, ch), method=Image.LANCZOS)
     if im.width / im.height > fit_ratio:
         canvas = cover.filter(ImageFilter.GaussianBlur(50)).point(lambda v: int(v * 0.5))
-        fit = im.copy()
-        fit.thumbnail((int(cw * 0.9), int(ch * 0.55)), Image.LANCZOS)
+        # 小さい画像（アイコン 256px など）も枠いっぱいまで拡大する。thumbnail は縮めるだけで、
+        # 2026-09-16 に「画像が小さくて動画にする意味がない」と指摘された原因だった
+        fit = ImageOps.contain(im, (int(cw * 0.92), int(ch * 0.58)), Image.LANCZOS)
         canvas.paste(fit, ((cw - fit.width) // 2, (ch - fit.height) // 2))
     else:
         canvas = cover
