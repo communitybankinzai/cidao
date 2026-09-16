@@ -163,6 +163,16 @@ def caption_png(scene, st, dst):
     im.save(dst)
 
 
+def stock_badge(dst_png):
+    """Openverse から補った画像の場面に「イメージ画像」の小さな表示を付ける（本人の活動写真と誤解させないため）。"""
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    f = font('gothic_b', 30)
+    d.rounded_rectangle([W - 260, 300, W - 40, 350], radius=12, fill=(0, 0, 0, 140))
+    d.text((W - 150, 325), 'イメージ画像', font=f, fill=(255, 255, 255, 230), anchor='mm')
+    im.save(dst_png)
+
+
 def zoompan(motion, frames, amount):
     c = "ih/2-(ih/zoom/2)"
     if motion == 'in':
@@ -250,8 +260,15 @@ def scene_clip(st, i, scene, voice, work):
           f"[1:v]format=rgba,fade=t=in:st=0.15:d={a}:alpha=1[h];"
           f"[2:v]format=rgba,fade=t=in:st={0.15 + a * 0.6:.2f}:d={a}:alpha=1[c];"
           f"[base][h]overlay=x='-(1-min(max(t-0.15,0)/{a},1))*260':y=0:eval=frame[b1];"
-          f"[b1][c]overlay=x=0:y='(1-min(max(t-{0.15 + a * 0.6:.2f},0)/{a},1))*70':eval=frame,format=yuv420p[v]")
+          f"[b1][c]overlay=x=0:y='(1-min(max(t-{0.15 + a * 0.6:.2f},0)/{a},1))*70':eval=frame")
     inputs = ['-i', bg, '-loop', '1', '-framerate', str(FPS), '-i', head, '-loop', '1', '-framerate', str(FPS), '-i', cap]
+    if scene.get('stock'):
+        badge = os.path.join(work, f"{i:02d}_badge.png")
+        stock_badge(badge)
+        fc += "[b2];[b2][3:v]overlay=0:0,format=yuv420p[v]"
+        inputs += ['-loop', '1', '-framerate', str(FPS), '-i', badge]
+    else:
+        fc += ",format=yuv420p[v]"
     out = os.path.join(work, f"{i:02d}_clip.mp4")
     run(['ffmpeg', '-y', '-loglevel', 'error', *inputs, '-filter_complex', fc, '-map', '[v]', '-t', f"{dur:.3f}",
          '-r', str(FPS), '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', out])
@@ -266,10 +283,20 @@ def credits_clip(style, st, job, work):
     sub = (255, 255, 255) if style == 'cool' else (90, 70, 58)
     d.text((W // 2, 850), 'CiDAO 人材バンクで相談できます', font=font('gothic_b', 48), fill=sub, anchor='mm')
     f = font('gothic_r', 38)
-    lines = [f"ナレーション　VOICEVOX:{job['voice']['name']}", job['bgm']['credit'], 'Community Bank INZAI 人材バンク']
+    lines = [f"ナレーション　VOICEVOX:{job['voice']['name']}", job['bgm']['credit']]
+    # イメージ画像（Openverse）のクレジット。CC BY は表示が条件。長い題名は切る
+    seen = set()
+    for s in job['scenes']:
+        st_ = s.get('stock')
+        if st_ and st_['url'] not in seen:
+            seen.add(st_['url'])
+            text = st_['attribution'] or f"{st_.get('creator', '')} ({st_['license']})"
+            lines.append('写真　' + (text if len(text) <= 44 else text[:43] + '…'))
+    lines.append('Community Bank INZAI 人材バンク')
     muted = (190, 190, 190) if style == 'cool' else (120, 100, 88)
+    fs = font('gothic_r', 30) if len(lines) > 4 else f
     for k, line in enumerate(lines):
-        d.text((W // 2, 1150 + k * 66), line, font=f, fill=muted, anchor='mm')
+        d.text((W // 2, 1150 + k * (52 if len(lines) > 4 else 66)), line, font=fs, fill=muted, anchor='mm')
     card = os.path.join(work, 'credits.jpg')
     im.save(card, quality=92)
     dur = 3.6

@@ -10,7 +10,8 @@ const structured = (over: Record<string, string> = {}) => ({ runId: 'run-1', str
   heading_2: 'できること', narration_2: 'エーアイの活用。', subtitle_2: 'AIの活用。',
   heading_3: '相談', narration_3: '平日に相談できます。', subtitle_3: '平日に相談できます。',
   heading_4: '想い', narration_4: 'ワクワクしたら、動く。それが、近道。', subtitle_4: 'ワクワクしたら、動く。それが、近道。',
-  heading_5: '', narration_5: '', subtitle_5: '', ...over } })
+  heading_5: '', narration_5: '', subtitle_5: '',
+  search_1: 'leather wallet handmade', search_2: 'laptop community meeting', search_3: 'calendar desk weekday', search_4: 'sunrise path walking', search_5: '', ...over } })
 const base = { memberId: 'm1', subjectId: 's1', caseId: 'v1', photos: ['photos/m1/a.jpg', 'photos/m1/b.jpg'] }
 beforeEach(() => { mocks.callAI.mockReset().mockResolvedValue(structured()) })
 
@@ -54,6 +55,18 @@ it('drops empty AI scenes and skips unanswered facts', async () => {
   expect(plan.script.scenes.map(s => s.id)).toEqual(['title', 'activities', 'request', 'cta'])
   const prompt = JSON.parse(mocks.callAI.mock.calls[0][0].prompt)
   expect(prompt.facts).toHaveLength(2)
+})
+
+it('asks for stock images only when the member has at most one photo, and keeps search words plain', async () => {
+  const one = await planVideoScript({ ...base, photos: ['photos/m1/avatar.jpg'], fields: fields(), faceMode: 'photo' })
+  expect(one.script.use_stock).toBe(true)
+  expect(one.script.scenes.find(s => s.id === 'activities')?.query).toBe('leather wallet handmade')
+  expect(one.script.scenes.find(s => s.id === 'title')?.query).toBeUndefined()
+  const two = await planVideoScript({ ...base, fields: fields(), faceMode: 'photo' })
+  expect(two.script.use_stock).toBeUndefined()
+  mocks.callAI.mockResolvedValue(structured({ search_1: '印西 leather; DROP' }))
+  const odd = await planVideoScript({ ...base, photos: ['p'], fields: fields(), faceMode: 'photo' })
+  expect(odd.script.scenes.find(s => s.id === 'activities')?.query).toBe('leather DROP')
 })
 
 it('refuses without photos and falls back to safe defaults for unexpected AI choices', async () => {

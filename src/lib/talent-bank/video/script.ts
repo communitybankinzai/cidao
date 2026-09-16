@@ -7,8 +7,12 @@ import type { ProfileFields } from '../types'
 
 export type VideoStyle = keyof typeof catalog.styles
 export type Mood = keyof typeof catalog.moods
-export type Scene = { id: string; heading: string; narration: string; subtitle: string; photo: string; words?: string[] }
-export type VideoScript = { name: string; scenes: Scene[] }
+// query：本人の写真が1枚以下のとき、Actions 側が Openverse（CC0／パブリックドメイン／CC BY）で探す画像の検索語（英語）。
+// stock：使った画像の出どころ（Actions が書き戻す）。動画には「イメージ画像」の表示と、終了カードにクレジットが入る
+export type Scene = { id: string; heading: string; narration: string; subtitle: string; photo: string; words?: string[]; query?: string
+  stock?: { attribution: string; license: string; url: string } }
+export type VideoScript = { name: string; scenes: Scene[]; use_stock?: boolean }
+export const STOCK_MAX_PHOTOS = 1  // 本人の写真がこの枚数以下なら、場面の画像を Openverse で補う（2026-09-16 中司さん決定）
 export type ScriptPlan = {
   style: VideoStyle; voice: { name: string; speaker: number; speed: number }
   bgm: { mood: Mood; file: string; credit: string }; script: VideoScript; runId: string
@@ -51,11 +55,11 @@ export async function planVideoScript({ memberId, subjectId, caseId, fields, fac
   const slots = [1, 2, 3, 4, 5]
   const str = { type: 'string' } as const
   const schema = { type: 'object', additionalProperties: false,
-    required: ['style', 'voice', 'mood', 'name_reading', ...slots.flatMap(n => [`heading_${n}`, `narration_${n}`, `subtitle_${n}`])],
+    required: ['style', 'voice', 'mood', 'name_reading', ...slots.flatMap(n => [`heading_${n}`, `narration_${n}`, `subtitle_${n}`, `search_${n}`])],
     properties: {
       style: { type: 'string', enum: ['oshare', 'cool'] }, voice: { type: 'string', enum: catalog.voices.map(v => v.name) },
       mood: { type: 'string', enum: MOOD_KEYS }, name_reading: str,
-      ...Object.fromEntries(slots.flatMap(n => [[`heading_${n}`, str], [`narration_${n}`, str], [`subtitle_${n}`, str]])),
+      ...Object.fromEntries(slots.flatMap(n => [[`heading_${n}`, str], [`narration_${n}`, str], [`subtitle_${n}`, str], [`search_${n}`, str]])),
     } }
   const ai = await callAI({ memberId, subjectId, caseId, operation: 'extractStructured', purpose: 'video_script',
     system: [
@@ -66,6 +70,7 @@ export async function planVideoScript({ memberId, subjectId, caseId, fields, fac
       'voice はナレーションの声を1人選ぶ（明るい内容は 春日部つむぎ・ずんだもん・四国めたん、落ち着いた内容は 玄野武宏・青山龍星・冥鳴ひまり、子ども向けは 九州そら が向く）。',
       `mood は BGM の気分を1つ選ぶ：${MOOD_KEYS.map(k => `${k}＝${catalog.moods[k]}`).join('、')}。`,
       'name_reading は表示名の読み（カタカナ）。',
+      'search_N は、その場面の雰囲気に合う写真を探すための英語の検索語（2〜4語・一般名詞だけ。例 "leather wallet handmade"、"community workshop adults"）。人名・地名・団体名・商品名は入れない。',
     ].join('\n'),
     prompt: JSON.stringify({ name, facts: items.map(({ label, text }) => ({ label, text })) }), schema, maxTokens: 2048,
   })
@@ -82,7 +87,8 @@ export async function planVideoScript({ memberId, subjectId, caseId, fields, fac
     const n = i + 1
     const narration = clipText(out[`narration_${n}`], 200)
     const subtitle = clipText(out[`subtitle_${n}`], 200) || narration
-    return { id: item.id, heading: clipText(out[`heading_${n}`], 20) || item.label, narration, subtitle }
+    const query = clipText(out[`search_${n}`], 60).replace(/[^A-Za-z0-9 ,-]/g, '').trim()
+    return { id: item.id, heading: clipText(out[`heading_${n}`], 20) || item.label, narration, subtitle, ...(query ? { query } : {}) }
   }).filter(s => s.narration)
   if (!body.length) throw new ProfileError('invalid_response')
   const scenes: Omit<Scene, 'photo'>[] = [
@@ -100,5 +106,6 @@ export async function planVideoScript({ memberId, subjectId, caseId, fields, fac
     for (const s of withPhotos) if (wordy.has(s.id)) s.words = s.id === 'title' ? ['印西で活躍する人。', name] : splitWords(s.subtitle)
   }
   return { style, voice: { name: voice.name, speaker: voice.speaker, speed: voice.speed },
-    bgm: { mood, file: bgm.file, credit: bgm.credit }, script: { name, scenes: withPhotos }, runId: ai.runId }
+    bgm: { mood, file: bgm.file, credit: bgm.credit },
+    script: { name, scenes: withPhotos, ...(photos.length <= STOCK_MAX_PHOTOS ? { use_stock: true } : {}) }, runId: ai.runId }
 }
