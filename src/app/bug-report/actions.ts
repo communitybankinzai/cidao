@@ -3,12 +3,15 @@
 import { randomUUID } from 'crypto'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { insertNotification } from '@/lib/notify'
 
 /**
  * 不具合・要望レポートを受け付ける。
  *
  * - bug_reports に1行 INSERT（RLS: anon/authenticated どちらも可、reporter_idは自分のみ）
  * - 管理者メール(ADMIN_NOTIFY_EMAIL)へ Resend で通知
+ * - あわせて運営（admin_role 持ち）のベルにもアプリ内通知を出す（2026-09-16 事業主決定）。
+ *   メールを見落としてもアプリで気づけるようにするため。一般メンバーには出さない
  * - 通知結果の書き戻しはUPDATE policyがadmin限定のため service_role 経由（best-effort）
  */
 const ADMIN_NOTIFY_EMAIL = process.env.ADMIN_NOTIFY_EMAIL ?? 'communitybankinzai@gmail.com'
@@ -126,9 +129,19 @@ export async function submitBugReport(input: {
         .from('bug_reports')
         .update({ email_sent_at: emailSentAt, email_error: emailError })
         .eq('id', reportId)
+
+      // 運営だけのベル通知。見出しに本文は入れない（中身は管理画面で読む）。
+      // 報告者が運営本人のときは、その人には出ない（insertNotification が actor と recipient の一致を弾く）
+      const { data: admins } = await admin.from('members').select('id, deleted_at').not('admin_role', 'is', null)
+      await Promise.allSettled((admins ?? []).filter(a => !a.deleted_at).map(a =>
+        insertNotification({
+          recipientId: a.id, actorId: user?.id ?? null, kind: 'system',
+          title: `【${SOURCE_LABEL[input.source]}】${CATEGORY_LABEL[input.category]}の報告が届きました`,
+          linkUrl: '/admin/bug-reports',
+        })))
     }
   } catch {
-    // best-effort。通知の書き戻し失敗は投稿自体の成否に影響させない
+    // best-effort。通知の書き戻し・ベル通知の失敗は投稿自体の成否に影響させない
   }
 
   return { ok: true, id: reportId, emailSent: !!emailSentAt }
