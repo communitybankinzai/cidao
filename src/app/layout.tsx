@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { NotificationBell } from '@/components/NotificationBell'
-import { HomeButton } from '@/components/HomeButton'
+import { TopBarSpacer } from '@/components/TopBarSpacer'
 import { BottomNav } from '@/components/BottomNav'
 import { AdminLink } from '@/components/AdminLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
@@ -56,7 +56,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ButtonFeedback />
         <PageViewTracker />
-        <HomeButton />
+        <TopBarSpacer />
         <AdminLink />
         <NotificationBell />
         {children}
