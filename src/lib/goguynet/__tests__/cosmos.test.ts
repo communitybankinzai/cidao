@@ -126,7 +126,12 @@ function fakeDb(existing: CosmosExistingRow[] = [], others: OtherEventRow[] = []
   }
   return { db, inserted, updated }
 }
-const fetchPosts = (async () => new Response(JSON.stringify(posts), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+// 号外NET の URL にだけ固定記事を返し、他の媒体（ちいき新聞）は0件
+const fetchPosts = (async (input: RequestInfo | URL) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const body = url.startsWith('https://kamagaya-shiroi-inzai.goguynet.jp/') ? posts : []
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+}) as unknown as typeof fetch
 const NOW = new Date('2026-09-01T03:00:00Z') // 2026-09-01 JST（ランタンフェス・カラオケ決勝が未来）
 
 describe('syncGoguynetCosmos', () => {

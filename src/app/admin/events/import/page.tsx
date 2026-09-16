@@ -27,7 +27,11 @@ export default async function AdminEventImportPage() {
       .order('started_at', { ascending: false })
       .limit(14),
   ])
-  const [{ data: cosmosRuns }, cosmosCandidates] = await Promise.all([
+  // 広報いんざい読み取りの推定費用（api_usage・purpose=event_scan_pdf。2026-09-16 から記録）
+  const monthStartJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+  monthStartJst.setDate(1)
+  monthStartJst.setHours(0, 0, 0, 0)
+  const [{ data: cosmosRuns }, cosmosCandidates, { data: scanUsage }, { data: cityRuns }] = await Promise.all([
     supabase
       .from('event_sync_runs')
       .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
@@ -35,7 +39,18 @@ export default async function AdminEventImportPage() {
       .order('started_at', { ascending: false })
       .limit(14),
     listCosmosCandidates(),
+    supabase.from('api_usage').select('est_cost_jpy, created_at, model').eq('purpose', 'event_scan_pdf').limit(2000),
+    supabase
+      .from('event_sync_runs')
+      .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
+      .eq('source', 'inzai-city-calendar')
+      .order('started_at', { ascending: false })
+      .limit(14),
   ])
+  const scanRows = (scanUsage ?? []) as { est_cost_jpy: number | null; created_at: string; model: string }[]
+  const scanCostTotal = scanRows.reduce((s, r) => s + (r.est_cost_jpy ?? 0), 0)
+  const scanCostMonth = scanRows.filter((r) => new Date(r.created_at) >= monthStartJst).reduce((s, r) => s + (r.est_cost_jpy ?? 0), 0)
+  const scanCallsMonth = scanRows.filter((r) => new Date(r.created_at) >= monthStartJst).length
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -70,14 +85,17 @@ export default async function AdminEventImportPage() {
 
         <section className="space-y-3 border-t border-slate-200 dark:border-slate-800 pt-8">
           <div className="space-y-1">
-            <h2 className="text-xl font-serif font-bold">コスモスパレット（号外NET の記事から候補・毎朝 自動）</h2>
+            <h2 className="text-xl font-serif font-bold">候補の自動取り込み（毎朝）</h2>
             <p className="text-xs text-slate-500">
-              コスモスパレットの催しは公式サイトにほとんど載らないため、地域メディア「号外NET 印西版」の記事を毎朝 06:25 に読み、
-              題名・日時・会場・入場料・記事URLだけを候補（下書き）にします。記事の本文や写真は転記しません。
-              下の候補を確認して「公開」か「見送り」を押してください。見送ったものは翌日以降も再登場しません。
+              コスモスパレットの催しは公式サイトにほとんど載らないため、地域メディア「号外NET 印西版」「ちいき新聞」の記事を毎朝 06:25 に読み、
+              市公式サイトの「イベント・お知らせ」カレンダーを 06:30 に読んで、題名・日時・会場・入場料・出典URLだけを候補（下書き）にします。
+              記事の本文や写真は転記しません。下の候補を確認して「公開」か「見送り」を押してください。見送ったものは翌日以降も再登場しません。
             </p>
           </div>
-          <InzaiBunkaSyncRuns runs={(cosmosRuns ?? []) as SyncRunRow[]} subject="号外NET の記事" unit="件" />
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">号外NET・ちいき新聞（コスモスパレット）</p>
+          <InzaiBunkaSyncRuns runs={(cosmosRuns ?? []) as SyncRunRow[]} subject="地域メディアの記事" unit="件" />
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 pt-2">市公式サイト（イベント・お知らせ）</p>
+          <InzaiBunkaSyncRuns runs={(cityRuns ?? []) as SyncRunRow[]} subject="市サイト" unit="件" />
           <h3 className="text-sm font-semibold pt-2">確認待ちの候補 {cosmosCandidates.length} 件</h3>
           <CosmosCandidates candidates={cosmosCandidates} />
         </section>
@@ -85,7 +103,10 @@ export default async function AdminEventImportPage() {
         <section className="space-y-3 border-t border-slate-200 dark:border-slate-800 pt-8">
           <div className="space-y-1">
             <h2 className="text-xl font-serif font-bold">広報いんざいから取り込む</h2>
-            <p className="text-xs text-slate-500">取り込み実績: {kouhouCount ?? 0} 件</p>
+            <p className="text-xs text-slate-500">
+              取り込み実績: {kouhouCount ?? 0} 件 ／ AI 読み取りの推定費用: 今月 {Math.round(scanCostMonth)} 円（{scanCallsMonth} 回）・累計 {Math.round(scanCostTotal)} 円
+              <span className="ml-1 text-slate-400">（2026-09-16 から記録。1号は30ページを7ページずつ4〜5回に分けて読み、1回ごとに費用を残します）</span>
+            </p>
           </div>
           <KouhouPdfImport />
         </section>

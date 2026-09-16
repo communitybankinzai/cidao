@@ -16,6 +16,16 @@ export type CosmosCandidateRow = {
   description: string
   proxy_source_url: string | null
   created_at: string
+  external_source: string
+  external_source_id: string
+}
+
+/** 情報源の表示名（external_source_id の接頭辞で媒体を見分ける） */
+function sourceLabel(r: { external_source: string; external_source_id: string }): string {
+  if (r.external_source === 'inzai-city-calendar') return '市サイト'
+  if (r.external_source_id.startsWith('chiicomi:')) return 'ちいき新聞'
+  if (r.external_source_id.startsWith('goguynet:')) return '号外NET'
+  return r.external_source
 }
 
 const fmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })
@@ -56,7 +66,10 @@ export function CosmosCandidates({ candidates }: { candidates: CosmosCandidateRo
             <li key={r.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 space-y-0.5">
-                  <p className="font-semibold">{r.title}</p>
+                  <p className="font-semibold">
+                    <span className="mr-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-600 dark:bg-slate-800 dark:text-slate-300">{sourceLabel(r)}</span>
+                    {r.title}
+                  </p>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
                     {fmt.format(new Date(r.start_at))}〜{fmtHm.format(new Date(r.end_at))}
                     {assumed && <span className="ml-1 rounded bg-amber-100 px-1 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">時間は仮</span>}

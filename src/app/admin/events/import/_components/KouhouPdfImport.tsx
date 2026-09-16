@@ -46,6 +46,8 @@ type ScanResponse = {
   from_page?: number
   to_page?: number
   events?: ScannedEvent[]
+  /** この呼び出しの推定費用（円）。サーバーが api_usage に記録した値 */
+  cost_jpy?: number | null
 }
 
 const REASON_MESSAGES: Record<string, string> = {
@@ -113,6 +115,8 @@ export function KouhouPdfImport() {
     const collected: Row[] = []
     let fromPage = 1
     let totalPages = 0
+    let costJpy = 0
+    let calls = 0
 
     try {
       for (let pass = 0; pass < MAX_PASSES; pass++) {
@@ -138,6 +142,8 @@ export function KouhouPdfImport() {
 
         const docId = data.doc_id ?? 'kouhou'
         totalPages = data.total_pages ?? totalPages
+        if (typeof data.cost_jpy === 'number') costJpy += data.cost_jpy
+        calls++
         const events = Array.isArray(data.events) ? data.events : []
 
         for (const ev of events) {
@@ -206,6 +212,9 @@ export function KouhouPdfImport() {
 
       if (collected.length === 0 && newNotices.length === 0) {
         newNotices.push('参加できるイベントが見つかりませんでした。')
+      }
+      if (calls > 0) {
+        newNotices.push(`AI 読み取りの推定費用: 約${Math.round(costJpy)}円（${calls}回）。管理画面の累計にも記録しました。`)
       }
     } catch {
       newNotices.push('読み取り中に通信エラーが発生しました')
