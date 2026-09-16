@@ -67,6 +67,12 @@ export function BottomNav() {
 
   return (
     <>
+      {/* タブは fixed で浮いているため、ページ末尾がタブの下に隠れないよう同じ高さを空ける */}
+      <div
+        aria-hidden
+        className="shrink-0"
+        style={{ height: 'calc(3.5rem + env(safe-area-inset-bottom))' }}
+      />
       <nav
         aria-label="主要メニュー"
         className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur"
