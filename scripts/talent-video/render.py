@@ -108,8 +108,72 @@ def compose_photo(src, dst, margin, fit_ratio):
     canvas.save(dst, quality=92)
 
 
+# 日本語の改行位置の決まりごと（2026-09-16 追加）。以前は入るだけ詰めて文字の途中で折っていたため、
+# 「自宅／を事務所に」のように語と助詞が切り離されて読みにくかった。
+PARTICLES = set('はがのにをへとでやもかばねよさぞぜ')          # 行頭に置きたくない助詞
+# 直後で切ってよいのは格助詞だけにする。「か」「も」「や」は送り仮名（活か・読みやすい）にも現れるため、
+# ここに入れると「活か｜した」のように語の途中で切れてしまう（2026-09-16 修正）
+CASE_PARTICLES = set('はがのにをへとで')
+NO_LINE_START = set('、。！？」』）】〉》・…ー〜々ぁぃぅぇぉっゃゅょゎ,.!?:;')  # 行頭に置けない文字
+NO_LINE_END = set('「『（【〈《')                              # 行末に置けない文字
+
+
+def char_class(ch):
+    """改行してよいかの判断に使う文字の種類。同じ種類が続くところは語の途中とみなす。"""
+    if 'ァ' <= ch <= 'ヶ' or ch in 'ーヽヾ・':
+        return 'katakana'
+    if 'ぁ' <= ch <= 'ゖ':
+        return 'hiragana'
+    if '一' <= ch <= '龥' or ch == '々':
+        return 'kanji'
+    if ch.isalnum():
+        return 'latin'
+    return 'other'
+
+
+def best_cut(s, n):
+    """s の先頭 n 文字までなら入るとき、いちばん読みやすい切れ目を返す。
+
+    助詞・読点の直後で切ることを優先し、助詞や閉じ記号で行を始めない。
+    カタカナ語・英数字の途中、送り仮名の途中、かぎかっこの中では切らない。近い位置ほど有利にする。
+    """
+    cands = list(range(n, 0, -1))
+    quote = s.rfind('「', 1, n + 1)       # かぎかっこが始まる手前も候補にする（中で切らずに済むように）
+    if quote > 0 and quote not in cands:
+        cands.append(quote)
+    best, best_score = n, -10 ** 6
+    for p in cands:
+        head, tail = s[p - 1], s[p]
+        hc, tc = char_class(head), char_class(tail)
+        # 「翻訳がで｜きます」のように、前後がひらがなだけのところは助詞なのか語の途中なのか見分けられない。
+        # 助詞の手前が漢字・カタカナ（名詞の終わり）のときだけ、助詞として扱う
+        ambiguous = tc == 'hiragana' and (char_class(s[p - 2]) if p >= 2 else 'other') == 'hiragana'
+        score = -(n - p) * 0.25
+        if tail in NO_LINE_START or tail in PARTICLES or head in NO_LINE_END:
+            score -= 100
+        elif hc == tc and hc in ('katakana', 'latin'):
+            score -= 100                  # カタカナ語・英単語の途中
+        elif hc == 'hiragana' and tc == 'hiragana' and (head not in CASE_PARTICLES or ambiguous):
+            score -= 8                    # 「活か｜した」のような語の途中
+        elif hc == 'kanji' and tc == 'hiragana':
+            score -= 6                    # 送り仮名を切り離さない
+        elif hc == 'kanji' and tc == 'kanji':
+            score -= 3                    # 「通｜訳」のような熟語の途中
+        if head in '、。！？':
+            score += 4
+        elif head in CASE_PARTICLES and not ambiguous:
+            score += 3
+        if tail in '「『（':
+            score += 3
+        if s[:p].count('「') > s[:p].count('」'):
+            score -= 5
+        if score > best_score:
+            best_score, best = score, p
+    return best
+
+
 def wrap(draw, text, f, max_w):
-    """読点・句点のあとで改行することを優先する。1句が長すぎるときだけ文字の途中で折る。"""
+    """読点・句点のあとで改行することを優先する。1句が長すぎるときは語と助詞の区切りで折る。"""
     phrases, cur = [], ''
     for ch in text:
         cur += ch
@@ -126,12 +190,16 @@ def wrap(draw, text, f, max_w):
         if line:
             lines.append(line)
             line = ''
-        for ch in ph:
-            if line and draw.textlength(line + ch, font=f) > max_w:
-                lines.append(line)
-                line = ch
-            else:
-                line += ch
+        while draw.textlength(ph, font=f) > max_w:
+            n = 1
+            while n < len(ph) and draw.textlength(ph[:n + 1], font=f) <= max_w:
+                n += 1
+            if n >= len(ph):
+                break
+            cut = best_cut(ph, n)
+            lines.append(ph[:cut])
+            ph = ph[cut:]
+        line = ph
     if line:
         lines.append(line)
     return lines
@@ -195,25 +263,56 @@ def split_words(text):
     return parts or [text]
 
 
+def bad_breaks(groups):
+    """見苦しい改行の数。行頭が助詞や閉じ記号になったもの、カタカナ語・英単語を途中で割ったものを数える。"""
+    n = 0
+    for g in groups:
+        for prev, line in zip(g, g[1:]):
+            if line[0] in NO_LINE_START or line[0] in PARTICLES:
+                n += 1
+            elif char_class(line[0]) in ('katakana', 'latin') and char_class(prev[-1]) == char_class(line[0]):
+                n += 1
+    return n
+
+
+def words_layout(d, words, st):
+    """句ごとの行の組を返す。見苦しい改行が無くなるまで文字を小さくし、必ず枠内に収める。
+
+    以前は1句を1行で描き、縮小も 60px で頭打ちだったため、長い句が画面の左右にはみ出していた（2026-09-16 修正）。
+    """
+    size = st.get('words_size', 112)
+    fallback = None
+    while True:
+        f = font(st['head_font'], size)
+        groups = [wrap(d, w, f, W - 160) for w in words]
+        bad = bad_breaks(groups)
+        if not bad and sum(len(g) for g in groups) <= len(words) * 2:
+            return f, size, groups
+        if fallback is None or bad < fallback[0]:
+            fallback = (bad, f, size, groups)
+        if size <= 56:
+            return fallback[1], fallback[2], fallback[3]
+        size -= 4
+
+
 def words_png(scene, st, k, dst):
     """大きな文字の場面：k 番目の句だけを描いた透明画像。句は画面中央に上から順に並べ、最後の句を差し色にする。"""
     im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     words = scene['words']
-    size = st.get('words_size', 112)
-    f = font(st['head_font'], size)
-    while max(d.textlength(w, font=f) for w in words) > W - 160 and size > 60:
-        size -= 4
-        f = font(st['head_font'], size)
+    f, size, groups = words_layout(d, words, st)
     lh = int(size * 1.45)
-    y = (H - lh * len(words)) // 2 - 80 + k * lh
+    total = sum(len(g) for g in groups)
+    y = (H - lh * total) // 2 - 80 + lh * sum(len(g) for g in groups[:k])
     if k == 0:
         d.text((80, 96), st['label'], font=font('gothic_r', 36), fill=st['accent'])
         d.rectangle([80, 150, 80 + 90, 158], fill=st['accent'])
     fill = st['accent'] if k == len(words) - 1 else (255, 255, 255, 255)
-    for dx, dy in ((4, 4), (2, 2)):
-        d.text((W // 2 + dx, y + dy), words[k], font=f, fill=(0, 0, 0, 160), anchor='mt')
-    d.text((W // 2, y), words[k], font=f, fill=fill, anchor='mt')
+    for j, line in enumerate(groups[k]):
+        top = y + j * lh
+        for dx, dy in ((4, 4), (2, 2)):
+            d.text((W // 2 + dx, top + dy), line, font=f, fill=(0, 0, 0, 160), anchor='mt')
+        d.text((W // 2, top), line, font=f, fill=fill, anchor='mt')
     im.save(dst)
 
 

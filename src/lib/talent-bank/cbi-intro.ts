@@ -37,12 +37,14 @@ export async function adminIntroQueue(adminId: string) {
   if (!ids.length) return []
   const [members, versions, intros] = await Promise.all([
     db.from('members').select('id, display_name, self_introduction').in('id', ids).is('deleted_at', null),
-    db.from('talent_profile_versions').select('profile_id, summary_long, fields_json').in('id', (profiles.data ?? []).map(p => p.current_version_id!)),
+    db.from('talent_profile_versions').select('id, summary_long, fields_json').in('id', (profiles.data ?? []).map(p => p.current_version_id!)),
     db.from('member_cbi_intros').select('*').in('member_id', ids),
   ])
   if (members.error || versions.error || intros.error) throw new ProfileError('intro_unavailable')
+  // 本人の公開中の版を、版の id で突き合わせる。以前は版を何とも比べておらず、全員に先頭の版の紹介文が出ていた（2026-09-16 修正）
+  const currentVersionId = new Map((profiles.data ?? []).map(p => [p.member_id, p.current_version_id]))
   return (members.data ?? []).map(member => {
-    const version = versions.data?.find(v => (profiles.data ?? []).some(p => p.member_id === member.id && p.current_version_id && v))  // 1人1件
+    const version = versions.data?.find(v => v.id === currentVersionId.get(member.id))
     return { member, summary: version?.summary_long ?? null, intro: (intros.data ?? []).find(i => i.member_id === member.id) ?? null }
   })
 }
