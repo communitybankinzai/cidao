@@ -201,6 +201,7 @@ function TabChip({
     <button
       type="button"
       onClick={onClick}
+      data-instant="true"
       className={`text-xs px-3 py-1.5 rounded-full border transition ${
         active ? activeStyle : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400'
       }`}

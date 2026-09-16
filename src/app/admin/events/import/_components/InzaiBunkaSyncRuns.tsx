@@ -34,7 +34,7 @@ function summarize(runs: SyncRunRow[]) {
   return { latest, hours, stale: hours > 30 }
 }
 
-export function InzaiBunkaSyncRuns({ runs }: { runs: SyncRunRow[] }) {
+export function InzaiBunkaSyncRuns({ runs, subject = '文化ホール', unit = '件' }: { runs: SyncRunRow[]; subject?: string; unit?: string }) {
   const { latest, hours, stale } = summarize(runs)
 
   return (
@@ -58,7 +58,7 @@ export function InzaiBunkaSyncRuns({ runs }: { runs: SyncRunRow[] }) {
             </span>
           </p>
           <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-            文化ホールで {latest.fetched?.merged ?? 0} 件を見て、今日以降 {latest.fetched?.future ?? 0} 件のうち
+            {subject}で {latest.fetched?.merged ?? 0} {unit}を見て、今日以降 {latest.fetched?.future ?? 0} {unit}のうち
             新規 {latest.inserted}・更新 {latest.updated}・変更なし {latest.unchanged}・手動登録と重複 {latest.duplicates}・除外 {latest.skipped}
           </p>
           {latest.errors && latest.errors.length > 0 && (
@@ -71,7 +71,7 @@ export function InzaiBunkaSyncRuns({ runs }: { runs: SyncRunRow[] }) {
         </div>
       ) : (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
-          ⚠️ まだ一度も実行記録がありません（2026-09-16 導入。初回の記録は次の 06:20 以降に入ります）
+          ⚠️ まだ一度も実行記録がありません（2026-09-16 導入。初回の記録は次の朝の定期実行以降に入ります）
         </div>
       )}
 

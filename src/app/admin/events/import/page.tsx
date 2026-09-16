@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { BulkFlyerImport } from './_components/BulkFlyerImport'
 import { KouhouPdfImport } from './_components/KouhouPdfImport'
 import { InzaiBunkaSyncRuns, type SyncRunRow } from './_components/InzaiBunkaSyncRuns'
+import { CosmosCandidates } from './_components/CosmosCandidates'
+import { listCosmosCandidates } from './actions'
 
 export default async function AdminEventImportPage() {
   const supabase = await createClient()
@@ -24,6 +26,15 @@ export default async function AdminEventImportPage() {
       .eq('source', 'inzai-bunka-calendar')
       .order('started_at', { ascending: false })
       .limit(14),
+  ])
+  const [{ data: cosmosRuns }, cosmosCandidates] = await Promise.all([
+    supabase
+      .from('event_sync_runs')
+      .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
+      .eq('source', 'goguynet-cosmos')
+      .order('started_at', { ascending: false })
+      .limit(14),
+    listCosmosCandidates(),
   ])
 
   return (
@@ -55,6 +66,20 @@ export default async function AdminEventImportPage() {
             </p>
           </div>
           <InzaiBunkaSyncRuns runs={(bunkaRuns ?? []) as SyncRunRow[]} />
+        </section>
+
+        <section className="space-y-3 border-t border-slate-200 dark:border-slate-800 pt-8">
+          <div className="space-y-1">
+            <h2 className="text-xl font-serif font-bold">コスモスパレット（号外NET の記事から候補・毎朝 自動）</h2>
+            <p className="text-xs text-slate-500">
+              コスモスパレットの催しは公式サイトにほとんど載らないため、地域メディア「号外NET 印西版」の記事を毎朝 06:25 に読み、
+              題名・日時・会場・入場料・記事URLだけを候補（下書き）にします。記事の本文や写真は転記しません。
+              下の候補を確認して「公開」か「見送り」を押してください。見送ったものは翌日以降も再登場しません。
+            </p>
+          </div>
+          <InzaiBunkaSyncRuns runs={(cosmosRuns ?? []) as SyncRunRow[]} subject="号外NET の記事" unit="件" />
+          <h3 className="text-sm font-semibold pt-2">確認待ちの候補 {cosmosCandidates.length} 件</h3>
+          <CosmosCandidates candidates={cosmosCandidates} />
         </section>
 
         <section className="space-y-3 border-t border-slate-200 dark:border-slate-800 pt-8">

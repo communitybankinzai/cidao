@@ -65,12 +65,13 @@ function absUrl(src: string): string {
  * 「2026年10月6日(火), 11月10日(火), 12月10日(木)」「2026年10月1日(木) 〜 2027年3月31日(水)」を日付配列に。
  * 年の無い要素は直前の年を引き継ぎ、月が前の要素より小さくなったら翌年とみなす。
  */
-export function parseDateText(text: string): { dates: string[]; isRange: boolean } {
+export function parseDateText(text: string, defaultYear: number | null = null): { dates: string[]; isRange: boolean } {
   const norm = text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
   const isRange = /[〜～~]/.test(norm)
   const re = /(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日/g
   const dates: string[] = []
-  let year: number | null = null
+  // 年が無い表記（「9月13日（日）」）は defaultYear（記事の公開年など）を使う。文化ホール一覧は先頭に必ず年が付く
+  let year: number | null = defaultYear
   let prevMonth = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(norm)) !== null) {

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { NotificationBell } from '@/components/NotificationBell'
 import { HomeButton } from '@/components/HomeButton'
+import { BottomNav } from '@/components/BottomNav'
 import { AdminLink } from '@/components/AdminLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 import { PageViewTracker } from '@/components/PageViewTracker'
@@ -59,6 +60,7 @@ export default function RootLayout({
         <AdminLink />
         <NotificationBell />
         {children}
+        <BottomNav />
       </body>
     </html>
   )

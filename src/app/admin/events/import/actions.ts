@@ -13,6 +13,7 @@
 //   同じチラシ・同じ号を再取り込みしても二重登録にならない（GAS が Drive fileId で行っていたのと同じ役割）。
 
 import { revalidatePath } from 'next/cache'
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 
@@ -147,4 +148,86 @@ export async function importScannedEvents(items: ImportItem[]): Promise<ImportRe
   revalidatePath('/events')
   revalidatePath('/admin/events')
   return results
+}
+
+// ---------------------------------------------------------------------------
+// 号外NET から拾ったコスモスパレットの催し候補（external_source='goguynet-cosmos'・status='draft'）
+// 下書きは RLS 上、作った bot 以外には見えないので、運営確認のうえ service_role で読み書きする。
+// ---------------------------------------------------------------------------
+
+const COSMOS_SOURCE = 'goguynet-cosmos'
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) throw new Error('service role が設定されていません')
+  return createSupabaseAdmin(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+async function requireAdmin(): Promise<string> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+  const { data: isAdmin, error } = await supabase.rpc('is_admin')
+  if (error || !isAdmin) throw new Error('権限がありません')
+  return user.id
+}
+
+export type CosmosCandidateRow = {
+  id: string
+  title: string
+  start_at: string
+  end_at: string
+  location: string | null
+  fee: number | null
+  description: string
+  proxy_source_url: string | null
+  created_at: string
+}
+
+/** 確認待ちの候補（今日以降・開催日順） */
+export async function listCosmosCandidates(): Promise<CosmosCandidateRow[]> {
+  await requireAdmin()
+  const { data, error } = await serviceClient()
+    .from('events')
+    .select('id, title, start_at, end_at, location, fee, description, proxy_source_url, created_at')
+    .eq('external_source', COSMOS_SOURCE)
+    .eq('status', 'draft')
+    .gte('start_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+    .order('start_at', { ascending: true })
+    .limit(50)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CosmosCandidateRow[]
+}
+
+async function setCosmosCandidateStatus(id: string, status: 'open' | 'cancelled'): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireAdmin()
+    const service = serviceClient()
+    const { data, error } = await service
+      .from('events')
+      .update({ status })
+      .eq('id', id)
+      .eq('external_source', COSMOS_SOURCE)
+      .eq('status', 'draft')
+      .select('id')
+    if (error) return { ok: false, error: error.message }
+    if (!data || data.length === 0) return { ok: false, error: 'この候補はすでに処理済みです（画面を更新してください）' }
+    revalidatePath('/events')
+    revalidatePath('/admin/events')
+    revalidatePath('/admin/events/import')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** 候補を公開イベントにする */
+export async function publishCosmosCandidate(id: string) {
+  return setCosmosCandidateStatus(id, 'open')
+}
+
+/** 候補を見送る（cancelled のまま残すので、翌日以降の同期で再び候補にならない） */
+export async function dismissCosmosCandidate(id: string) {
+  return setCosmosCandidateStatus(id, 'cancelled')
 }
