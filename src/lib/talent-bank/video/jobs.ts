@@ -166,6 +166,13 @@ export async function ownerRespondVideo({ memberId, videoId, approve, comment }:
     await Promise.allSettled((admins.data ?? []).filter(a => !a.deleted_at).map(a =>
       notify(a.id, '紹介動画が本人に承認されました。管理画面で確認して掲載してください', '/admin/talent-bank')))
   } else {
+    // 本人が書いた「直してほしい点」は、以前はどこにも出ず運営に届いていなかった（2026-09-16 修正）。
+    // 通知に本文は入れない（管理画面で読む）
+    if (patch.owner_comment) {
+      const admins = await db.from('members').select('id, deleted_at').not('admin_role', 'is', null)
+      await Promise.allSettled((admins.data ?? []).filter(a => !a.deleted_at).map(a =>
+        notify(a.id, '紹介動画に本人から直してほしい点が届きました', '/admin/talent-bank')))
+    }
     await queueVideo({ memberId, trigger: 'manual' }).catch(() => null)  // 作り直し：上限内なら新しく積む
   }
 }
@@ -192,9 +199,14 @@ export async function retireVideo({ actorId, videoId, asAdmin }: { actorId: stri
 }
 export async function adminVideoQueue(adminId: string) {
   await adminClient(adminId)
-  const r = await service().from('talent_videos').select('*').in('status', ['owner_review', 'owner_approved', 'published', 'failed']).order('created_at', { ascending: false }).limit(50)
-  if (r.error) throw new ProfileError('storage_unavailable')
-  return r.data ?? []
+  const db = service()
+  const [live, commented] = await Promise.all([
+    db.from('talent_videos').select('*').in('status', ['owner_review', 'owner_approved', 'published', 'failed']).order('created_at', { ascending: false }).limit(50),
+    // 本人が「直してほしい点」を書いて作り直したもの。取り下げ済みでも、書いた文章を運営が読めるように出す（2026-09-16）
+    db.from('talent_videos').select('*').eq('status', 'retired').not('owner_comment', 'is', null).order('retired_at', { ascending: false }).limit(20),
+  ])
+  if (live.error || commented.error) throw new ProfileError('storage_unavailable')
+  return [...(live.data ?? []), ...(commented.data ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
 }
 export async function publishedVideo(memberId: string) {
   const r = await service().from('talent_videos').select('id, duration_sec, thumb_path').eq('member_id', memberId).eq('status', 'published').maybeSingle()

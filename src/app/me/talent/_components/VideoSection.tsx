@@ -42,13 +42,16 @@ export default function VideoSection({ photos, faceMode, videos, published }: {
         <video controls playsInline preload="metadata" poster={`/api/talent-bank/video/${v.id}?thumb=1`} src={`/api/talent-bank/video/${v.id}`} className="w-full max-w-xs rounded-lg bg-black" />
         <p><a href={`/api/talent-bank/video/${v.id}?download=1`} className="underline">スマホに保存する（mp4）</a></p>
         {v.status === 'owner_review' && <>
+          <p className="rounded border border-amber-500/60 p-2">
+            写真を足すと、もっと良くなります。上の「1. 写真」から活動や作品の写真を足すと、その写真で自動的に作り直します。
+          </p>
           <ActionForm action={videoAction} successText="承認しました。運営が確認して掲載します。">
             <input type="hidden" name="intent" value="approve" /><input type="hidden" name="videoId" value={v.id} />
             <Button type="submit" className="w-full">この動画を公開してよい</Button>
           </ActionForm>
-          <ActionForm action={videoAction} successText="作り直します（10〜20分ほど）。">
+          <ActionForm action={videoAction} successText="作り直します（10〜20分ほど）。書いてくださった内容は運営にも届きます。">
             <input type="hidden" name="intent" value="redo" /><input type="hidden" name="videoId" value={v.id} />
-            <label className="block">直してほしい点（任意）<textarea name="comment" maxLength={1000} rows={2} className="mt-1 w-full rounded border bg-background p-2" /></label>
+            <label className="block">直してほしい点・運営への質問（任意・運営に届きます）<textarea name="comment" maxLength={1000} rows={2} className="mt-1 w-full rounded border bg-background p-2" /></label>
             <Button type="submit" variant="outline">作り直す（声・曲・型は選び直されます）</Button>
           </ActionForm>
         </>}

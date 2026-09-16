@@ -11,15 +11,16 @@ import { introAdminAction } from './intro-actions'
 import { adminIntroQueue } from '@/lib/talent-bank/cbi-intro'
 
 const INTRO_STATUS: Record<string, string> = { draft: '下書き（本人には見えない）', owner_review: '本人の確認待ち', published: '掲載中', returned: '本人から差し戻し' }
-const VIDEO_STATUS: Record<string, string> = { owner_review: '本人の確認待ち（運営は先に見られる）', owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗' }
+const VIDEO_STATUS: Record<string, string> = { owner_review: '本人の確認待ち（運営は先に見られる）', owner_approved: '本人承認済み・掲載待ち', published: '掲載中', failed: '作成失敗', retired: '本人が作り直しを希望（この動画は取り下げ済み）' }
 // 一覧の1行に出す短い言い方（長い説明は開いてから読む）
 const INTRO_SHORT: Record<string, string> = { draft: '下書き', owner_review: '確認待ち', published: '掲載中', returned: '差し戻し' }
-const VIDEO_SHORT: Record<string, string> = { owner_review: '本人確認待ち', owner_approved: '掲載待ち', published: '掲載中', failed: '失敗' }
+const VIDEO_SHORT: Record<string, string> = { owner_review: '本人確認待ち', owner_approved: '掲載待ち', published: '掲載中', failed: '失敗', retired: '本人から要望' }
 
 // 人ごとの並び順。運営がすぐ手を動かせる人を上に置く
-function rank(intro: { status: string } | null, videos: { status: string }[]) {
+function rank(intro: { status: string } | null, videos: { status: string; owner_comment: string | null }[]) {
   if (videos.some(v => v.status === 'owner_approved')) return 0   // 掲載ボタンを押すだけ
   if (intro?.status === 'returned') return 1                      // 本人から直してほしい点が来ている
+  if (videos.some(v => v.status === 'retired' && v.owner_comment)) return 1  // 動画にも本人からの要望が来ている
   if (!intro) return 2                                            // 他己紹介が未作成
   if (intro.status === 'draft') return 3                          // 下書きのまま止まっている
   if (videos.some(v => v.status === 'failed')) return 4
@@ -95,6 +96,7 @@ export default async function TalentBankAdminPage() {
               <span className="mt-1 flex flex-wrap items-center gap-1">
                 {badge(`紹介文 ${intro ? INTRO_SHORT[intro.status] ?? intro.status : '未作成'}`, intro?.status === 'published' ? 'text-green-700' : intro ? '' : 'text-amber-700')}
                 {latest && badge(`動画 ${VIDEO_SHORT[latest.status] ?? latest.status}`, latest.status === 'published' ? 'text-green-700' : latest.status === 'failed' ? 'text-red-700' : '')}
+                {own.some(v => v.status === 'retired' && v.owner_comment) && badge('本人からの要望あり', 'text-amber-700')}
                 {own.length > 1 && badge(`動画 ほか${own.length - 1}本`)}
               </span>
             </span>
@@ -126,6 +128,7 @@ export default async function TalentBankAdminPage() {
                 <p>{badge(VIDEO_STATUS[v.status] ?? v.status)}
                   <span className="text-muted-foreground">　{v.style}／{v.voice_name}／{v.bgm_credit}{v.duration_sec ? `／${Math.round(Number(v.duration_sec))}秒` : ''}</span></p>
                 {v.status === 'failed' && <p className="text-red-700">失敗の理由：{v.error}</p>}
+                {v.owner_comment && <p className="rounded border border-amber-500 p-2">本人から：{v.owner_comment}</p>}
                 {v.storage_path && <video controls playsInline preload="none" poster={`/api/talent-bank/video/${v.id}?thumb=1`} src={`/api/talent-bank/video/${v.id}`} className="w-full max-w-xs rounded-lg bg-black" />}
                 {v.status === 'owner_approved' && <ActionForm action={videoModerateAction}><input type="hidden" name="videoId" value={v.id} />
                   <label className="block">確認にかかった分数（必須）<input type="number" name="minutes" min={0} max={1440} step={1} required className="mt-2 block w-full rounded border bg-background p-3" /></label>
