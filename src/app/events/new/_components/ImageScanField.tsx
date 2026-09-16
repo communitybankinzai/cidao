@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 
 type Occurrence = { start_at: string; end_at: string }
 
@@ -274,11 +275,10 @@ export function ImageScanField({
             ? 'チラシ画像（アップロード + AI 自動入力、ドラッグ&ドロップ可）'
             : 'チラシ画像（アップロードのみ、ドラッグ&ドロップ可）'}
         </label>
-        <input
+        <FilePickButton
           ref={inputRef}
-          type="file"
+          label="📷 チラシ画像を選ぶ"
           accept="image/jpeg,image/png,image/webp,image/gif"
-          className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-amber-200 dark:file:bg-amber-800 file:text-amber-900 dark:file:text-amber-100"
           onChange={(e) => {
             const f = e.target.files?.[0]
             if (f) void handleFile(f)

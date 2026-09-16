@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { resizeImagePreserveAspect } from '@/lib/image-resize'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 
 export type ScannedFreefree = {
   title?: string
@@ -89,9 +90,9 @@ export default function FreefreeFlyerScan({
         写真を1枚選ぶと、AIが読み取ってタイトル・本文・カテゴリ・場所を下の欄に入れます。
         読み取った内容はそのまま掲載されるわけではないので、必ずご自身で確認・修正してください。
       </p>
-      <input
+      <FilePickButton
         ref={inputRef}
-        type="file"
+        label="📷 チラシ・写真を選ぶ"
         accept="image/jpeg,image/png,image/webp,image/gif"
         disabled={status === 'loading'}
         onChange={(e) => {
@@ -99,7 +100,6 @@ export default function FreefreeFlyerScan({
           if (inputRef.current) inputRef.current.value = ''
           if (f) handleFile(f)
         }}
-        className="text-sm"
       />
       {message && (
         <p

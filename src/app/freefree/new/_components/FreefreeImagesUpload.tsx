@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { resizeImagePreserveAspect } from '@/lib/image-resize'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 
 const MAX_IMAGES = 3
 const INPUT_MAX_BYTES = 20 * 1024 * 1024
@@ -92,13 +93,12 @@ export default function FreefreeImagesUpload({ userId, maxImages = MAX_IMAGES }:
 
       {urls.length < maxImages && (
         <div>
-          <input
+          <FilePickButton
             ref={inputRef}
-            type="file"
+            label="📷 画像を追加"
             accept="image/jpeg,image/png,image/webp,image/gif"
             onChange={handleAdd}
             disabled={uploading}
-            className="text-sm"
           />
           {uploading && <p className="text-xs text-slate-500 mt-1">アップロード中…</p>}
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar } from '@/components/ui/avatar'
+import { FilePickButton } from '@/components/ui/file-pick-button'
 import { resizeImageToSquare } from '@/lib/image-resize'
 
 const INPUT_MAX_BYTES = 20 * 1024 * 1024 // 20MB（変換前の上限）
@@ -359,24 +360,13 @@ export default function AvatarUpload({
       </div>
       <div className="flex-1 min-w-0 space-y-2">
         <div className="flex items-center gap-3 flex-wrap">
-          <label className="inline-flex items-center cursor-pointer text-sm">
-            <span className={
-              'px-3 py-1.5 rounded border text-sm ' +
-              (busy
-                ? 'border-slate-300 bg-slate-100 text-slate-500 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800'
-                : 'border-slate-300 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700')
-            }>
-              {stageLabel()}
-            </span>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileInput}
-              disabled={busy}
-              className="hidden"
-            />
-          </label>
+          <FilePickButton
+            ref={inputRef}
+            label={stageLabel()}
+            accept="image/*"
+            onChange={handleFileInput}
+            disabled={busy}
+          />
           {url && !busy && (
             <button
               type="button"
