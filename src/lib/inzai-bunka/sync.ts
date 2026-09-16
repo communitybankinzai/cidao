@@ -62,7 +62,8 @@ export type EventRow = {
   external_source: string
   external_source_id: string
   flyer_image_url: string | null
-  status: 'open'
+  /** 文化ホール同期は即公開（open）。号外NET の候補は運営確認待ち（draft） */
+  status: 'open' | 'draft'
 }
 
 export type OtherEventRow = {
@@ -139,15 +140,20 @@ export function isSimilarTitle(a: string, b: string): boolean {
   return (2 * common) / (bx.size + by.size) >= 0.5
 }
 
-/** 同じ日（JST）に文化ホールで似た題名の既存イベントがあれば返す */
-export function findManualDuplicate(e: BunkaCalendarEntry, others: OtherEventRow[]): OtherEventRow | null {
+/** 同じ日（JST）に placeRe に合う会場で似た題名の既存イベントがあれば返す */
+export function findDuplicateEvent(e: BunkaCalendarEntry, others: OtherEventRow[], placeRe: RegExp): OtherEventRow | null {
   for (const o of others) {
     if (todayJst(new Date(o.start_at)) !== e.date) continue
     const place = `${o.location ?? ''} ${o.organizer_name_text ?? ''}`
-    if (!/文化ホール/.test(place)) continue
+    if (!placeRe.test(place)) continue
     if (isSimilarTitle(e.title, o.title)) return o
   }
   return null
+}
+
+/** 同じ日（JST）に文化ホールで似た題名の既存イベントがあれば返す */
+export function findManualDuplicate(e: BunkaCalendarEntry, others: OtherEventRow[]): OtherEventRow | null {
+  return findDuplicateEvent(e, others, /文化ホール/)
 }
 
 async function fetchText(fetchFn: typeof fetch, url: string): Promise<string> {
