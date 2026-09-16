@@ -13,7 +13,8 @@ export async function POST(request: Request) {
   const db = createTalentBankServiceClient()
   const [profiles, videos] = await Promise.all([
     db.from('talent_profiles').select('member_id').not('current_version_id', 'is', null).order('updated_at'),
-    db.from('talent_videos').select('member_id').neq('status', 'failed'),
+    // 失敗・取り下げ済みは「動画が無い」扱い（作り直しの対象）
+    db.from('talent_videos').select('member_id').in('status', ['queued', 'rendering', 'owner_review', 'owner_approved', 'published']),
   ])
   if (profiles.error || videos.error) return NextResponse.json({ error: 'storage' }, { status: 500 })
   const has = new Set((videos.data ?? []).map(v => v.member_id))
