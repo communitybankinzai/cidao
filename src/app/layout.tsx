@@ -5,6 +5,7 @@ import { NotificationBell } from '@/components/NotificationBell'
 import { TopBarSpacer } from '@/components/TopBarSpacer'
 import { BottomNav } from '@/components/BottomNav'
 import { AdminLink } from '@/components/AdminLink'
+import { ContactLink } from '@/components/ContactLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 import { PageViewTracker } from '@/components/PageViewTracker'
 
@@ -57,6 +58,7 @@ export default function RootLayout({
         <ButtonFeedback />
         <PageViewTracker />
         <TopBarSpacer />
+        <ContactLink />
         <AdminLink />
         <NotificationBell />
         {children}
