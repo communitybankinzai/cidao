@@ -286,7 +286,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
         </>
       ) : (
-        <ListView events={filtered} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} />
+        <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} />
       )}
       </div>
     </div>
@@ -698,7 +698,7 @@ function RevealItem({
   )
 }
 
-function ListView({ events, organizerLabel, orgInfo, canEditRow }: { events: EventRow[]; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean }) {
+function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean }) {
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const groups = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
@@ -720,26 +720,10 @@ function ListView({ events, organizerLabel, orgInfo, canEditRow }: { events: Eve
     return <p className="text-slate-400 text-center py-12">該当するイベントがありません</p>
   }
 
-  const thisMonthKey = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit' }).format(new Date())
+  const thisMonthKey = today.slice(0, 7)
 
-  return (
-    <div className="space-y-3">
-      {groups.map(([key, g]) => (
-        <details
-          key={key}
-          open={key === thisMonthKey}
-          onToggle={() => requestReveal()}
-          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden"
-        >
-          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
-            <span>{g.label}</span>
-            <span className="flex items-center gap-2 text-xs font-normal text-slate-500">
-              {g.items.length}件
-              <span className="inline-block transition-transform group-open:rotate-180">▾</span>
-            </span>
-          </summary>
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {g.items.map((e) => {
+  // 1件分の行（今月の「終了した分」と「今日以降」で同じ見た目を使う）
+  const renderItem = (e: EventRow) => {
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
               return (
                 <RevealItem key={e.id} id={e.id} fromLeft={false} itemsRef={itemsRef}>
@@ -781,10 +765,45 @@ function ListView({ events, organizerLabel, orgInfo, canEditRow }: { events: Eve
                   </div>
                 </RevealItem>
               )
-            })}
-          </ul>
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map(([key, g]) => {
+        // 今月は「今日より前」を畳み、今日以降を先頭に出す（月末のイベントを見るのに月初からスクロールしなくて済むように。2026-09-17 中司さん指示）
+        const isThisMonth = key === thisMonthKey
+        const past = isThisMonth ? g.items.filter((e) => ymdFmt.format(new Date(e.start_at)) < today) : []
+        const upcoming = isThisMonth ? g.items.filter((e) => ymdFmt.format(new Date(e.start_at)) >= today) : g.items
+        return (
+        <details
+          key={key}
+          open={isThisMonth}
+          onToggle={() => requestReveal()}
+          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden"
+        >
+          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
+            <span>{g.label}</span>
+            <span className="flex items-center gap-2 text-xs font-normal text-slate-500">
+              {g.items.length}件
+              <span className="inline-block transition-transform group-open:rotate-180">▾</span>
+            </span>
+          </summary>
+          {past.length > 0 && (
+            <details className="group/past border-b border-slate-100 dark:border-slate-800" onToggle={() => requestReveal()}>
+              <summary className="cursor-pointer select-none px-4 py-2 text-xs text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 flex items-center justify-between">
+                <span>終了した {past.length} 件（{Number(ymdFmt.format(new Date(past[0].start_at)).slice(8, 10))}日〜{Number(ymdFmt.format(new Date(past[past.length - 1].start_at)).slice(8, 10))}日）を表示</span>
+                <span className="inline-block transition-transform group-open/past:rotate-180">▾</span>
+              </summary>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 opacity-70">{past.map(renderItem)}</ul>
+            </details>
+          )}
+          {isThisMonth && upcoming.length === 0 && (
+            <p className="px-4 py-3 text-xs text-slate-500">今月の今日以降のイベントはありません（来月は下の月をタップ）</p>
+          )}
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">{upcoming.map(renderItem)}</ul>
         </details>
-      ))}
+        )
+      })}
     </div>
   )
 }
