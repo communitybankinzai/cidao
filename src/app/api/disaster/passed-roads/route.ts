@@ -1,0 +1,208 @@
+// 防災MAP「通れた道」API。
+// GET : 印西市域の GPS 軌跡を返す（GitHub Pages の災害MAPが読む）。
+//       6時間以内＝「いま通れた道」／それ以前＝「冠水時に通れた実績」の判定は画面側で行う。
+// POST: 閲覧者のスマホが記録した軌跡を保存する（匿名・端末IDと IP ハッシュで間隔制限）。
+// テーブル未作成時は 503 でマイグレーション実行の案内を返す（timeline と同じ流儀）。
+
+import { createHash } from 'node:crypto'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
+
+const PUBLIC_ORIGINS = new Set([
+  'https://communitybankinzai.github.io',
+  'http://127.0.0.1:4173',
+  'http://localhost:4173',
+  'http://127.0.0.1:8766',
+  'http://localhost:8766',
+])
+
+const MIGRATION_HINT = 'disaster_passed_roads table not found. Run migration 20260918100000.'
+
+// 印西市とその周辺（kansui/route.ts と同じ枠）
+const WEST = 140.03
+const SOUTH = 35.72
+const EAST = 140.34
+const NORTH = 35.92
+
+const MIN_POINTS = 3
+const MAX_POINTS = 2000
+const MIN_LENGTH_M = 50
+const MAX_LENGTH_M = 30000
+const MAX_NOTE = 200
+const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
+const LIST_LIMIT = 2000
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get('origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': PUBLIC_ORIGINS.has(origin) ? origin : 'https://communitybankinzai.github.io',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+    'Cache-Control': 'no-store',
+  }
+}
+
+function json(request: Request, body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: corsHeaders(request) })
+}
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) return null
+  return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+function isMissingTable(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false
+  if (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST200') return true
+  return /relation .* does not exist|could not find the table|schema cache/i.test(error.message ?? '')
+}
+
+type LatLon = [number, number]
+
+function insideInzai([lat, lon]: LatLon) {
+  return lon >= WEST && lon <= EAST && lat >= SOUTH && lat <= NORTH
+}
+
+// 2点間の距離（m）。短距離なので Haversine で十分
+function distanceM([lat1, lon1]: LatLon, [lat2, lon2]: LatLon) {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+function pathLengthM(path: LatLon[]) {
+  let total = 0
+  for (let i = 1; i < path.length; i += 1) total += distanceM(path[i - 1], path[i])
+  return total
+}
+
+// [[lat, lon], ...] を検証して小数6桁に丸める（約10cm。それ以上の精度は個人特定にも役立たない）
+function normalizePath(raw: unknown): LatLon[] | null {
+  if (!Array.isArray(raw) || raw.length < MIN_POINTS || raw.length > MAX_POINTS) return null
+  const out: LatLon[] = []
+  for (const point of raw) {
+    if (!Array.isArray(point) || point.length < 2) return null
+    const lat = Number(point[0])
+    const lon = Number(point[1])
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null
+    out.push([Math.round(lat * 1e6) / 1e6, Math.round(lon * 1e6) / 1e6])
+  }
+  return out
+}
+
+function ipHash(request: Request) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || ''
+  if (!ip) return ''
+  return createHash('sha256').update(`passed-roads:${ip}`).digest('hex').slice(0, 32)
+}
+
+export async function GET(request: Request) {
+  const supabase = serviceClient()
+  if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
+
+  const { data, error } = await supabase
+    .from('disaster_passed_roads')
+    .select('id, path, point_count, length_m, started_at, ended_at, note, created_at')
+    .eq('hidden', false)
+    .order('created_at', { ascending: false })
+    .limit(LIST_LIMIT)
+
+  if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
+  if (error) return json(request, { error: error.message }, 500)
+
+  return json(request, {
+    generatedAt: new Date().toISOString(),
+    count: data?.length ?? 0,
+    roads: (data ?? []).map((row) => ({
+      id: row.id,
+      path: row.path as LatLon[],
+      pointCount: row.point_count,
+      lengthM: Number(row.length_m),
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      note: row.note ?? '',
+      createdAt: row.created_at,
+    })),
+  })
+}
+
+export async function POST(request: Request) {
+  const supabase = serviceClient()
+  if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
+
+  let body: { deviceId?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
+  try {
+    body = (await request.json()) as typeof body
+  } catch {
+    return json(request, { error: 'invalid_json' }, 400)
+  }
+
+  const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim().slice(0, 64) : ''
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
+
+  const path = normalizePath(body.path)
+  if (!path) return json(request, { error: 'invalid_path', hint: `${MIN_POINTS}〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+  if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
+
+  const lengthM = pathLengthM(path)
+  if (lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
+  if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
+
+  const startedAt = new Date(String(body.startedAt ?? ''))
+  const endedAt = new Date(String(body.endedAt ?? ''))
+  const now = Date.now()
+  if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) return json(request, { error: 'invalid_time' }, 400)
+  if (endedAt.getTime() < startedAt.getTime()) return json(request, { error: 'invalid_time' }, 400)
+  // 端末時計のずれは許すが、1日以上ずれた記録は受けない（過去の記録を後から捏造させない）
+  if (Math.abs(now - endedAt.getTime()) > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+
+  const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
+  const hash = ipHash(request)
+
+  // 同じ端末または同じ IP からの連続投稿を抑える
+  const since = new Date(now - MIN_INTERVAL_SECONDS * 1000).toISOString()
+  const recentFilter = hash ? `device_id.eq.${deviceId},ip_hash.eq.${hash}` : `device_id.eq.${deviceId}`
+  const { data: recent, error: recentError } = await supabase
+    .from('disaster_passed_roads')
+    .select('id')
+    .or(recentFilter)
+    .gte('created_at', since)
+    .limit(1)
+  if (isMissingTable(recentError)) return json(request, { error: MIGRATION_HINT }, 503)
+  if (recentError) return json(request, { error: recentError.message }, 500)
+  if ((recent ?? []).length > 0) return json(request, { error: 'too_frequent', retryAfterSeconds: MIN_INTERVAL_SECONDS }, 429)
+
+  const { data: inserted, error } = await supabase
+    .from('disaster_passed_roads')
+    .insert({
+      device_id: deviceId,
+      path,
+      point_count: path.length,
+      length_m: Math.round(lengthM * 10) / 10,
+      started_at: startedAt.toISOString(),
+      ended_at: endedAt.toISOString(),
+      note,
+      ip_hash: hash,
+    })
+    .select('id, created_at')
+    .single()
+
+  if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
+  if (error) return json(request, { error: error.message }, 500)
+
+  return json(request, { ok: true, id: inserted?.id, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM) }, 201)
+}
+
+export function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) })
+}
