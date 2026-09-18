@@ -104,6 +104,74 @@ function normalizePath(raw: unknown, minPoints: number): LatLon[] | null {
   return out
 }
 
+// 記録時刻の最寄りアメダスの雨量。印西市内に観測点はないので周囲4地点から最寄りを選ぶ。
+// 「通れない」が冠水によるものか、工事・事故など別の理由かの目安に使う（確定ではない）。
+const AMEDAS_STATIONS = [
+  { code: '45061', name: '我孫子', lat: 35.8633, lon: 140.11 },
+  { code: '45116', name: '佐倉', lat: 35.7283, lon: 140.2117 },
+  { code: '45121', name: '成田', lat: 35.7633, lon: 140.385 },
+  { code: '45106', name: '船橋', lat: 35.7117, lon: 140.0433 },
+]
+type RainInfo = { station: string; at: string | null; r1h: number | null; r3h: number | null; r24h: number | null; verdict: 'flood_likely' | 'light_rain' | 'no_rain' | 'unknown' }
+
+function amedasFileUrl(code: string, jst: Date) {
+  const y = jst.getUTCFullYear()
+  const m = String(jst.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(jst.getUTCDate()).padStart(2, '0')
+  const h = String(Math.floor(jst.getUTCHours() / 3) * 3).padStart(2, '0')
+  return `https://www.jma.go.jp/bosai/amedas/data/point/${code}/${y}${m}${d}_${h}.json`
+}
+
+async function fetchAmedasBlock(code: string, jst: Date) {
+  const response = await fetch(amedasFileUrl(code, jst), {
+    headers: { Accept: 'application/json', 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) throw new Error(`amedas HTTP ${response.status}`)
+  return (await response.json()) as Record<string, Record<string, [number, number]>>
+}
+
+function pickValue(entry: Record<string, [number, number]> | undefined, key: string) {
+  const v = entry?.[key]
+  // 気象庁の値は [数値, 品質フラグ]。フラグ 0 だけを正常値として使う
+  if (!Array.isArray(v) || v[1] !== 0 || typeof v[0] !== 'number') return null
+  return v[0]
+}
+
+async function rainAt(point: LatLon, at: Date): Promise<RainInfo> {
+  const station = AMEDAS_STATIONS.reduce((best, s) =>
+    distanceM(point, [s.lat, s.lon]) < distanceM(point, [best.lat, best.lon]) ? s : best)
+  const unknown: RainInfo = { station: station.name, at: null, r1h: null, r3h: null, r24h: null, verdict: 'unknown' }
+  try {
+    // 気象庁の10分値は日本時間で3時間ごとのファイル。記録時刻以前で最新の行を使う
+    const jst = new Date(at.getTime() + 9 * 3600 * 1000)
+    const targetKey = jst.toISOString().replace(/[-:T]/g, '').slice(0, 12) + '00'
+    let block = await fetchAmedasBlock(station.code, jst)
+    let keys = Object.keys(block).filter((k) => k <= targetKey).sort()
+    if (!keys.length) {
+      // 3時間ブロックの先頭数分は前のファイルを見る
+      block = await fetchAmedasBlock(station.code, new Date(jst.getTime() - 3 * 3600 * 1000))
+      keys = Object.keys(block).filter((k) => k <= targetKey).sort()
+    }
+    const key = keys[keys.length - 1]
+    if (!key) return unknown
+    const entry = block[key]
+    const r1h = pickValue(entry, 'precipitation1h')
+    const r3h = pickValue(entry, 'precipitation3h')
+    const r24h = pickValue(entry, 'precipitation24h')
+    if (r1h === null && r3h === null && r24h === null) return unknown
+    const obsAt = new Date(`${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}T${key.slice(8, 10)}:${key.slice(10, 12)}:00+09:00`).toISOString()
+    let verdict: RainInfo['verdict'] = 'light_rain'
+    if ((r1h ?? 0) >= 5 || (r3h ?? 0) >= 10 || (r24h ?? 0) >= 30) verdict = 'flood_likely'
+    else if ((r1h ?? 0) === 0 && (r3h ?? 0) === 0 && (r24h ?? 0) === 0) verdict = 'no_rain'
+    return { station: station.name, at: obsAt, r1h, r3h, r24h, verdict }
+  } catch (error) {
+    console.error('[passed-roads/amedas]', error instanceof Error ? error.message : String(error))
+    return unknown
+  }
+}
+
 function ipHash(request: Request) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || ''
   if (!ip) return ''
@@ -120,7 +188,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('disaster_passed_roads')
-    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at')
+    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
     .eq('hidden', false)
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
@@ -129,6 +197,15 @@ export async function GET(request: Request) {
 
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
+
+  const rainOf = (row: { rain_station?: string; rain_at?: string | null; rain_1h_mm?: unknown; rain_3h_mm?: unknown; rain_24h_mm?: unknown; rain_verdict?: string }) => ({
+    station: row.rain_station ?? '',
+    at: row.rain_at ?? null,
+    r1h: row.rain_1h_mm === null || row.rain_1h_mm === undefined ? null : Number(row.rain_1h_mm),
+    r3h: row.rain_3h_mm === null || row.rain_3h_mm === undefined ? null : Number(row.rain_3h_mm),
+    r24h: row.rain_24h_mm === null || row.rain_24h_mm === undefined ? null : Number(row.rain_24h_mm),
+    verdict: row.rain_verdict ?? 'unknown',
+  })
 
   // みんつく運営など外部への提供用。GeoJSON は [経度, 緯度] の順
   if (format === 'geojson') {
@@ -148,6 +225,7 @@ export async function GET(request: Request) {
             recordedAt: row.ended_at,
             note: row.note ?? '',
             lengthM: Number(row.length_m),
+            rain: rainOf(row),
           },
         }
       }),
@@ -168,6 +246,7 @@ export async function GET(request: Request) {
       endedAt: row.ended_at,
       note: row.note ?? '',
       createdAt: row.created_at,
+      rain: rainOf(row),
     })),
   })
 }
@@ -222,6 +301,9 @@ export async function POST(request: Request) {
   if (recentError) return json(request, { error: recentError.message }, 500)
   if ((recent ?? []).length > 0) return json(request, { error: 'too_frequent', retryAfterSeconds: MIN_INTERVAL_SECONDS }, 429)
 
+  // 記録時刻の雨量（取れなくても保存は続ける）。線のときは終点で判定
+  const rain = await rainAt(path[path.length - 1], endedAt)
+
   const { data: inserted, error } = await supabase
     .from('disaster_passed_roads')
     .insert({
@@ -229,6 +311,12 @@ export async function POST(request: Request) {
       kind,
       source,
       path,
+      rain_station: rain.station,
+      rain_at: rain.at,
+      rain_1h_mm: rain.r1h,
+      rain_3h_mm: rain.r3h,
+      rain_24h_mm: rain.r24h,
+      rain_verdict: rain.verdict,
       point_count: path.length,
       length_m: Math.round(lengthM * 10) / 10,
       started_at: startedAt.toISOString(),
@@ -242,7 +330,7 @@ export async function POST(request: Request) {
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
 
-  return json(request, { ok: true, id: inserted?.id, kind, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM) }, 201)
+  return json(request, { ok: true, id: inserted?.id, kind, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM), rain }, 201)
 }
 
 export function OPTIONS(request: Request) {
