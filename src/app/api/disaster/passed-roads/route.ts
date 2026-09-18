@@ -4,6 +4,8 @@
 //       ?format=geojson で GeoJSON（みんつく千葉冠水マップ運営への提供用。kind=blocked で通れない地点だけ）。
 // POST: 閲覧者のスマホが記録した軌跡（kind=passed）または現在地1点（kind=blocked）を保存する
 //       （匿名・端末IDと IP ハッシュで間隔制限）。
+// DELETE: 自分の記録の取り消し（同じ端末ID・送信から10分以内だけ。行は消さず hidden=true にする）。
+//       誤タップやテスト送信で自宅の位置が公開されたままにならないようにするため。
 // テーブル未作成時は 503 でマイグレーション実行の案内を返す（timeline と同じ流儀）。
 
 import { createHash } from 'node:crypto'
@@ -37,12 +39,13 @@ const MAX_LENGTH_M = 30000
 const MAX_NOTE = 200
 const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
 const LIST_LIMIT = 2000
+const UNDO_WINDOW_SECONDS = 600 // 自分の記録を取り消せる時間
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') ?? ''
   return {
     'Access-Control-Allow-Origin': PUBLIC_ORIGINS.has(origin) ? origin : 'https://communitybankinzai.github.io',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
@@ -331,6 +334,35 @@ export async function POST(request: Request) {
   if (error) return json(request, { error: error.message }, 500)
 
   return json(request, { ok: true, id: inserted?.id, kind, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM), rain }, 201)
+}
+
+export async function DELETE(request: Request) {
+  const supabase = serviceClient()
+  if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id') ?? ''
+  const deviceId = (searchParams.get('deviceId') ?? '').trim().slice(0, 64)
+  if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
+
+  const { data: row, error: readError } = await supabase
+    .from('disaster_passed_roads')
+    .select('id, device_id, created_at, hidden')
+    .eq('id', id)
+    .maybeSingle()
+  if (isMissingTable(readError)) return json(request, { error: MIGRATION_HINT }, 503)
+  if (readError) return json(request, { error: readError.message }, 500)
+  if (!row) return json(request, { error: 'not_found' }, 404)
+  // 他人の記録は取り消せない。存在の有無も教えない
+  if (row.device_id !== deviceId) return json(request, { error: 'not_found' }, 404)
+  if (row.hidden) return json(request, { ok: true, alreadyHidden: true })
+  const ageSeconds = (Date.now() - new Date(row.created_at as string).getTime()) / 1000
+  if (ageSeconds > UNDO_WINDOW_SECONDS) return json(request, { error: 'too_late', undoWindowSeconds: UNDO_WINDOW_SECONDS }, 409)
+
+  const { error } = await supabase.from('disaster_passed_roads').update({ hidden: true }).eq('id', id)
+  if (error) return json(request, { error: error.message }, 500)
+  return json(request, { ok: true, id })
 }
 
 export function OPTIONS(request: Request) {
