@@ -1,7 +1,9 @@
-// 防災MAP「通れた道」API。
-// GET : 印西市域の GPS 軌跡を返す（GitHub Pages の災害MAPが読む）。
+// 防災MAP「通れた道」「通れない地点」API。
+// GET : 印西市域の記録を返す（GitHub Pages の災害MAPが読む）。
 //       6時間以内＝「いま通れた道」／それ以前＝「冠水時に通れた実績」の判定は画面側で行う。
-// POST: 閲覧者のスマホが記録した軌跡を保存する（匿名・端末IDと IP ハッシュで間隔制限）。
+//       ?format=geojson で GeoJSON（みんつく千葉冠水マップ運営への提供用。kind=blocked で通れない地点だけ）。
+// POST: 閲覧者のスマホが記録した軌跡（kind=passed）または現在地1点（kind=blocked）を保存する
+//       （匿名・端末IDと IP ハッシュで間隔制限）。
 // テーブル未作成時は 503 でマイグレーション実行の案内を返す（timeline と同じ流儀）。
 
 import { createHash } from 'node:crypto'
@@ -29,6 +31,7 @@ const NORTH = 35.92
 const MIN_POINTS = 3
 const MAX_POINTS = 2000
 const MIN_LENGTH_M = 50
+const KINDS = new Set(['passed', 'blocked'])
 const MAX_LENGTH_M = 30000
 const MAX_NOTE = 200
 const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
@@ -86,8 +89,8 @@ function pathLengthM(path: LatLon[]) {
 }
 
 // [[lat, lon], ...] を検証して小数6桁に丸める（約10cm。それ以上の精度は個人特定にも役立たない）
-function normalizePath(raw: unknown): LatLon[] | null {
-  if (!Array.isArray(raw) || raw.length < MIN_POINTS || raw.length > MAX_POINTS) return null
+function normalizePath(raw: unknown, minPoints: number): LatLon[] | null {
+  if (!Array.isArray(raw) || raw.length < minPoints || raw.length > MAX_POINTS) return null
   const out: LatLon[] = []
   for (const point of raw) {
     if (!Array.isArray(point) || point.length < 2) return null
@@ -110,21 +113,51 @@ export async function GET(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
 
-  const { data, error } = await supabase
+  const { searchParams } = new URL(request.url)
+  const kindParam = searchParams.get('kind') ?? ''
+  const format = searchParams.get('format') ?? 'json'
+
+  let query = supabase
     .from('disaster_passed_roads')
-    .select('id, path, point_count, length_m, started_at, ended_at, note, created_at')
+    .select('id, kind, path, point_count, length_m, started_at, ended_at, note, created_at')
     .eq('hidden', false)
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
+  if (KINDS.has(kindParam)) query = query.eq('kind', kindParam)
+  const { data, error } = await query
 
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
+
+  // みんつく運営など外部への提供用。GeoJSON は [経度, 緯度] の順
+  if (format === 'geojson') {
+    return json(request, {
+      type: 'FeatureCollection',
+      generatedAt: new Date().toISOString(),
+      source: 'CBI 印西市 災害状況整合MAP（閲覧者の匿名投稿・公式に確認された情報ではありません）',
+      features: (data ?? []).map((row) => {
+        const path = (row.path as LatLon[]).map(([lat, lon]) => [lon, lat])
+        return {
+          type: 'Feature',
+          id: row.id,
+          geometry: path.length === 1 ? { type: 'Point', coordinates: path[0] } : { type: 'LineString', coordinates: path },
+          properties: {
+            kind: row.kind,
+            recordedAt: row.ended_at,
+            note: row.note ?? '',
+            lengthM: Number(row.length_m),
+          },
+        }
+      }),
+    })
+  }
 
   return json(request, {
     generatedAt: new Date().toISOString(),
     count: data?.length ?? 0,
     roads: (data ?? []).map((row) => ({
       id: row.id,
+      kind: row.kind,
       path: row.path as LatLon[],
       pointCount: row.point_count,
       lengthM: Number(row.length_m),
@@ -140,7 +173,7 @@ export async function POST(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
 
-  let body: { deviceId?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
+  let body: { deviceId?: unknown; kind?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -150,12 +183,15 @@ export async function POST(request: Request) {
   const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim().slice(0, 64) : ''
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
 
-  const path = normalizePath(body.path)
-  if (!path) return json(request, { error: 'invalid_path', hint: `${MIN_POINTS}〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+  const kind = typeof body.kind === 'string' && KINDS.has(body.kind) ? body.kind : 'passed'
+  // 通れない地点は現在地1点だけ。通れた道は3点以上・50m以上の軌跡
+  const minPoints = kind === 'blocked' ? 1 : MIN_POINTS
+  const path = normalizePath(body.path, minPoints)
+  if (!path) return json(request, { error: 'invalid_path', hint: `${minPoints}〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
   if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
 
-  const lengthM = pathLengthM(path)
-  if (lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
+  const lengthM = kind === 'blocked' ? 0 : pathLengthM(path)
+  if (kind === 'passed' && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
   if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
 
   const startedAt = new Date(String(body.startedAt ?? ''))
@@ -186,6 +222,7 @@ export async function POST(request: Request) {
     .from('disaster_passed_roads')
     .insert({
       device_id: deviceId,
+      kind,
       path,
       point_count: path.length,
       length_m: Math.round(lengthM * 10) / 10,
@@ -200,7 +237,7 @@ export async function POST(request: Request) {
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
 
-  return json(request, { ok: true, id: inserted?.id, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM) }, 201)
+  return json(request, { ok: true, id: inserted?.id, kind, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM) }, 201)
 }
 
 export function OPTIONS(request: Request) {
