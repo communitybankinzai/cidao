@@ -32,6 +32,7 @@ const MIN_POINTS = 3
 const MAX_POINTS = 2000
 const MIN_LENGTH_M = 50
 const KINDS = new Set(['passed', 'blocked'])
+const SOURCES = new Set(['gps', 'map']) // gps=現地でGPS記録／map=地図の長押しで後から指定
 const MAX_LENGTH_M = 30000
 const MAX_NOTE = 200
 const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('disaster_passed_roads')
-    .select('id, kind, path, point_count, length_m, started_at, ended_at, note, created_at')
+    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at')
     .eq('hidden', false)
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
           geometry: path.length === 1 ? { type: 'Point', coordinates: path[0] } : { type: 'LineString', coordinates: path },
           properties: {
             kind: row.kind,
+            source: row.source,
             recordedAt: row.ended_at,
             note: row.note ?? '',
             lengthM: Number(row.length_m),
@@ -158,6 +160,7 @@ export async function GET(request: Request) {
     roads: (data ?? []).map((row) => ({
       id: row.id,
       kind: row.kind,
+      source: row.source,
       path: row.path as LatLon[],
       pointCount: row.point_count,
       lengthM: Number(row.length_m),
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
 
-  let body: { deviceId?: unknown; kind?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
+  let body: { deviceId?: unknown; kind?: unknown; source?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -184,14 +187,15 @@ export async function POST(request: Request) {
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
 
   const kind = typeof body.kind === 'string' && KINDS.has(body.kind) ? body.kind : 'passed'
-  // 通れない地点は現在地1点だけ。通れた道は3点以上・50m以上の軌跡
-  const minPoints = kind === 'blocked' ? 1 : MIN_POINTS
-  const path = normalizePath(body.path, minPoints)
-  if (!path) return json(request, { error: 'invalid_path', hint: `${minPoints}〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+  const source = typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : 'gps'
+  // 地点（1点）はどちらの種類でも可。線（通れた道の軌跡）は3点以上・50m以上
+  const path = normalizePath(body.path, 1)
+  if (!path) return json(request, { error: 'invalid_path', hint: `1〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+  if (path.length > 1 && path.length < MIN_POINTS) return json(request, { error: 'invalid_path', hint: `線は${MIN_POINTS}点以上` }, 400)
   if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
 
-  const lengthM = kind === 'blocked' ? 0 : pathLengthM(path)
-  if (kind === 'passed' && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
+  const lengthM = path.length === 1 ? 0 : pathLengthM(path)
+  if (path.length > 1 && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
   if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
 
   const startedAt = new Date(String(body.startedAt ?? ''))
@@ -223,6 +227,7 @@ export async function POST(request: Request) {
     .insert({
       device_id: deviceId,
       kind,
+      source,
       path,
       point_count: path.length,
       length_m: Math.round(lengthM * 10) / 10,
