@@ -270,14 +270,15 @@ export async function POST(request: Request) {
 
   const kind = typeof body.kind === 'string' && KINDS.has(body.kind) ? body.kind : 'passed'
   const source = typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : 'gps'
-  // 地点（1点）はどちらの種類でも可。線（通れた道の軌跡）は3点以上・50m以上
+  // 地点（1点）は従来どおり可。地図で描いた線は2点から、GPS軌跡は3点・50m以上。
   const path = normalizePath(body.path, 1)
   if (!path) return json(request, { error: 'invalid_path', hint: `1〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
-  if (path.length > 1 && path.length < MIN_POINTS) return json(request, { error: 'invalid_path', hint: `線は${MIN_POINTS}点以上` }, 400)
+  const minLinePoints = source === 'map' ? 2 : MIN_POINTS
+  if (path.length > 1 && path.length < minLinePoints) return json(request, { error: 'invalid_path', hint: `線は${minLinePoints}点以上` }, 400)
   if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
 
   const lengthM = path.length === 1 ? 0 : pathLengthM(path)
-  if (path.length > 1 && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
+  if (source === 'gps' && path.length > 1 && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
   if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
 
   const startedAt = new Date(String(body.startedAt ?? ''))
@@ -291,18 +292,26 @@ export async function POST(request: Request) {
   const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
   const hash = ipHash(request)
 
-  // 同じ端末または同じ IP からの連続投稿を抑える
+  // 同じ端末または同じ IP からの連続投稿を抑える（取消済みは再入力を妨げない）
   const since = new Date(now - MIN_INTERVAL_SECONDS * 1000).toISOString()
   const recentFilter = hash ? `device_id.eq.${deviceId},ip_hash.eq.${hash}` : `device_id.eq.${deviceId}`
   const { data: recent, error: recentError } = await supabase
     .from('disaster_passed_roads')
-    .select('id')
+    .select('id, created_at')
+    .eq('hidden', false)
     .or(recentFilter)
     .gte('created_at', since)
+    .order('created_at', { ascending: false })
     .limit(1)
   if (isMissingTable(recentError)) return json(request, { error: MIGRATION_HINT }, 503)
   if (recentError) return json(request, { error: recentError.message }, 500)
-  if ((recent ?? []).length > 0) return json(request, { error: 'too_frequent', retryAfterSeconds: MIN_INTERVAL_SECONDS }, 429)
+  if (recent?.length) {
+    const latestAt = new Date(recent[0].created_at).getTime()
+    const retryAfterSeconds = Number.isFinite(latestAt)
+      ? Math.max(1, Math.min(MIN_INTERVAL_SECONDS, Math.ceil((latestAt + MIN_INTERVAL_SECONDS * 1000 - now) / 1000)))
+      : MIN_INTERVAL_SECONDS
+    return json(request, { error: 'too_frequent', retryAfterSeconds }, 429)
+  }
 
   // 記録時刻の雨量（取れなくても保存は続ける）。線のときは終点で判定
   const rain = await rainAt(path[path.length - 1], endedAt)
