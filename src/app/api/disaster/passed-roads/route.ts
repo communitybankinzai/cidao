@@ -49,7 +49,8 @@ function isModerator(request: Request) {
   const given = request.headers.get('x-moderation-key') ?? ''
   return given.length >= 16 && given === key
 }
-const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
+// 同じ端末・同じ IP からの連続投稿の間隔（2026-09-21 に120秒→30秒。運営の合言葉付きの送信は判定しない）
+const MIN_INTERVAL_SECONDS = 30
 const LIST_LIMIT = 2000
 const UNDO_WINDOW_SECONDS = 600 // 自分の記録を取り消せる時間
 
@@ -308,25 +309,28 @@ export async function POST(request: Request) {
   const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
   const hash = ipHash(request)
 
-  // 同じ端末または同じ IP からの連続投稿を抑える（取消済みは再入力を妨げない）
-  const since = new Date(now - MIN_INTERVAL_SECONDS * 1000).toISOString()
-  const recentFilter = hash ? `device_id.eq.${deviceId},ip_hash.eq.${hash}` : `device_id.eq.${deviceId}`
-  const { data: recent, error: recentError } = await supabase
-    .from('disaster_passed_roads')
-    .select('id, created_at')
-    .eq('hidden', false)
-    .or(recentFilter)
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(1)
-  if (isMissingTable(recentError)) return json(request, { error: MIGRATION_HINT }, 503)
-  if (recentError) return json(request, { error: recentError.message }, 500)
-  if (recent?.length) {
-    const latestAt = new Date(recent[0].created_at).getTime()
-    const retryAfterSeconds = Number.isFinite(latestAt)
-      ? Math.max(1, Math.min(MIN_INTERVAL_SECONDS, Math.ceil((latestAt + MIN_INTERVAL_SECONDS * 1000 - now) / 1000)))
-      : MIN_INTERVAL_SECONDS
-    return json(request, { error: 'too_frequent', retryAfterSeconds }, 429)
+  // 同じ端末または同じ IP からの連続投稿を抑える（取消済みは再入力を妨げない）。
+  // 運営が続けて記録するときは止めない（合言葉が正しい送信だけ）
+  if (!isModerator(request)) {
+    const since = new Date(now - MIN_INTERVAL_SECONDS * 1000).toISOString()
+    const recentFilter = hash ? `device_id.eq.${deviceId},ip_hash.eq.${hash}` : `device_id.eq.${deviceId}`
+    const { data: recent, error: recentError } = await supabase
+      .from('disaster_passed_roads')
+      .select('id, created_at')
+      .eq('hidden', false)
+      .or(recentFilter)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (isMissingTable(recentError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (recentError) return json(request, { error: recentError.message }, 500)
+    if (recent?.length) {
+      const latestAt = new Date(recent[0].created_at).getTime()
+      const retryAfterSeconds = Number.isFinite(latestAt)
+        ? Math.max(1, Math.min(MIN_INTERVAL_SECONDS, Math.ceil((latestAt + MIN_INTERVAL_SECONDS * 1000 - now) / 1000)))
+        : MIN_INTERVAL_SECONDS
+      return json(request, { error: 'too_frequent', retryAfterSeconds }, 429)
+    }
   }
 
   // 記録時刻の雨量（取れなくても保存は続ける）。線のときは終点で判定
