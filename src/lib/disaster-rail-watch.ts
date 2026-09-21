@@ -136,8 +136,10 @@ export async function notifyCityTransitChange(
       `防災MAP：<a href="${MAP_URL}">${MAP_URL}</a>`,
     )
 
+    // CBI公式メールの自動仕分け（gas-mail-share/MailTriage.gs の RE_ACTION）は「警告」を含む件名を
+    // 「要対応＋★」にする。GAS はCBI公式アカウントの持ち物で手元から書き換えられないため、件名側で合わせる
     const subject = hasTransitDiff(diff)
-      ? '【要対応】防災MAP：市の公共交通の案内が更新されました（地図と食い違いあり）'
+      ? '【要対応・更新漏れ警告】防災MAP：市の公共交通の案内が更新されました（地図と食い違いあり）'
       : '防災MAP：市の公共交通の案内が更新されました（地図と一致）'
 
     const { Resend } = await import('resend')
