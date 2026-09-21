@@ -54,7 +54,12 @@ function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   if (!url || !key) return null
-  return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+  // 伏せた一覧は毎回読み直す。Next.js が fetch の結果を保存するため、指定しないと古い一覧のまま配信され続けた
+  // （2026-09-22：朝に伏せた3件が一般向けの配信から消えなかった）
+  return createSupabaseClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+  })
 }
 
 function isModerator(request: Request) {
