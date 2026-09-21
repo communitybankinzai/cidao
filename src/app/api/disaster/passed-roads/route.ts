@@ -195,6 +195,16 @@ function ipHash(request: Request) {
   return createHash('sha256').update(`passed-roads:${ip}`).digest('hex').slice(0, 32)
 }
 
+// 「今回の大雨」の開始日時（2026-09-22）。防災MAPは、これより後の「通れた道」を濃く、前を薄く描く。
+// 次の大雨のときは運営が合言葉つきで入れ替える（PATCH ?setting=eventStart）
+const EVENT_START_KEY = 'disaster_event_start'
+const EVENT_START_DEFAULT = '2026-09-20T15:00:00.000Z' // 2026-09-21 0:00（日本時間）・台風25号
+async function readEventStart(supabase: NonNullable<ReturnType<typeof serviceClient>>): Promise<string> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', EVENT_START_KEY).maybeSingle()
+  const at = (data?.value as { at?: string } | null)?.at
+  return at && !Number.isNaN(Date.parse(at)) ? at : EVENT_START_DEFAULT
+}
+
 export async function GET(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
@@ -252,8 +262,10 @@ export async function GET(request: Request) {
     })
   }
 
+  const eventStart = await readEventStart(supabase)
   return json(request, {
     generatedAt: new Date().toISOString(),
+    eventStart,
     count: data?.length ?? 0,
     roads: (data ?? []).map((row) => ({
       id: row.id,
@@ -419,7 +431,23 @@ export async function PATCH(request: Request) {
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   if (!isModerator(request)) return json(request, { error: 'forbidden' }, 403)
 
-  const id = new URL(request.url).searchParams.get('id') ?? ''
+  const params = new URL(request.url).searchParams
+  if (params.get('setting') === 'eventStart') {
+    let payload: { eventStart?: unknown }
+    try {
+      payload = await request.json()
+    } catch {
+      return json(request, { error: 'invalid_json' }, 400)
+    }
+    const at = new Date(String(payload.eventStart ?? ''))
+    if (Number.isNaN(at.getTime())) return json(request, { error: 'invalid_time' }, 400)
+    if (at.getTime() > Date.now() + 24 * 60 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
+    const { error: saveError } = await supabase.from('app_settings').upsert({ key: EVENT_START_KEY, value: { at: at.toISOString() } })
+    if (saveError) return json(request, { error: saveError.message }, 500)
+    return json(request, { ok: true, eventStart: at.toISOString() })
+  }
+
+  const id = params.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
 
   let body: { endedAt?: unknown; note?: unknown }
