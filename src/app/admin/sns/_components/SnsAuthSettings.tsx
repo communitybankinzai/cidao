@@ -254,10 +254,22 @@ function ThreadsSearchReauth({ search, app }: { search: SnsAuthStatus['threadsSe
   }
 
   if (search?.keywordSearchReady) {
+    // 設定済みでも再認証できるようにする（2026-09-21：Threads アプリ審査の録画で許可画面を映す必要があり、
+    // 設定済みの状態ではボタンが無く先へ進めなかった。トークンの取り直しにも使う）
     return (
-      <p className="text-xs text-emerald-600 dark:text-emerald-400">
-        ✓ 公開投稿検索 設定済み（@{search.username} / {new Date(search.savedAt).toLocaleDateString('ja-JP')} 保存・検索専用アプリ）
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+          ✓ 公開投稿検索 設定済み（@{search.username} / {new Date(search.savedAt).toLocaleDateString('ja-JP')} 保存・検索専用アプリ）
+        </p>
+        {app && (
+          <a
+            href="/api/admin/sns/threads-oauth/start"
+            className="inline-flex items-center rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-3 py-1.5 text-xs font-medium hover:opacity-85"
+          >
+            🔁 検索権限つきで再認証
+          </a>
+        )}
+      </div>
     )
   }
   return (
