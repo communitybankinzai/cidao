@@ -10,6 +10,7 @@
 // 内容は市民の投稿であり、公式に確認された通行止めではない。
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { isOnLand } from '@/lib/land-mask-chiba'
 
 const SOURCE_URL = 'https://mintsuku-chiba-kansuimap.com/data/hazard_reports.json'
 const SOURCE_PAGE = 'https://mintsuku-chiba-kansuimap.com/'
@@ -96,13 +97,14 @@ export function OPTIONS(request: Request) {
 
 type Road = { id?: number; status?: string; created_at?: string; geometry?: { type?: string; coordinates?: unknown } }
 
-function insideInzai(coordinates: unknown): boolean {
+// 範囲の四角の中で、しかも陸地にある点を1つでも含む投稿だけ残す（海の上の誤投稿を除く・2026-09-22）
+function insideArea(coordinates: unknown): boolean {
   if (!Array.isArray(coordinates)) return false
   for (const point of coordinates) {
     if (!Array.isArray(point) || point.length < 2) continue
     const [lon, lat] = point as [number, number]
     if (typeof lon !== 'number' || typeof lat !== 'number') continue
-    if (lon >= WEST && lon <= EAST && lat >= SOUTH && lat <= NORTH) return true
+    if (lon >= WEST && lon <= EAST && lat >= SOUTH && lat <= NORTH && isOnLand(lat, lon)) return true
   }
   return false
 }
@@ -124,7 +126,7 @@ export async function GET(request: Request) {
 
     const roads = (payload.roads ?? [])
       .filter((road) => road.status !== 'pending_delete')
-      .filter((road) => insideInzai(road.geometry?.coordinates))
+      .filter((road) => insideArea(road.geometry?.coordinates))
       .filter((road) => wantAll || !hiddenIds.has(Number(road.id)))
       .map((road) => ({
         hidden: hiddenIds.has(Number(road.id)),
