@@ -39,6 +39,15 @@ function areaTokens(text: string) {
   return AREA_TOKENS.filter((t) => text.includes(t))
 }
 
+// 放送文を文ごとに分ける（句点と改行）。「一部解除」の放送では、解除した文と継続する文が同じ放送に並ぶため、
+// 文ごとに見ないと取り違える（2026-09-22 7:00「土砂災害警戒区域の避難指示は解除…印旛沼の避難指示は継続中」で、
+// 継続中の印旛沼まで解除扱いにし、さらに「継続中」の文を新しい発令と数えた）
+function sentences(text: string) {
+  return text.split(/[。\n]/).map((x) => x.trim()).filter(Boolean)
+}
+const CANCEL_SENTENCE = /(緊急安全確保|避難指示|高齢者等避難)[^。\n]{0,20}?解除/
+const CONTINUE_SENTENCE = /継続|引き続き/
+
 export type EvacAlert = {
   level: number
   label: string
@@ -57,13 +66,21 @@ export function detectEvacAlerts(updates: OfficialUpdate[], now: number) {
   let cancelledAny = false
   for (const u of relevant) {
     const text = `${u.title}\n${u.message}`
-    const cancelled = text.match(CANCELLED)
-    if (cancelled) {
-      const tokens = areaTokens(text)
+    const parts = sentences(text)
+    const cancelParts = parts.filter((x) => CANCEL_SENTENCE.test(x))
+    if (cancelParts.length) {
+      // 解除した地域の語は、解除を述べた文からだけ拾う
+      const tokens = areaTokens(cancelParts.join('\n'))
       active = tokens.length ? active.filter((a) => !a.tokens.some((t) => tokens.includes(t))) : []
       cancelledAny = true
     }
-    const found = LEVELS.find((l) => text.replace(CANCELLED, '').includes(l.label))
+    // 新しい発令かどうかは、解除の文と「継続中」「引き続き」の文を除いて判断する
+    // （「避難指示を解除し、高齢者等避難を発令」のように同じ文に並ぶときは、解除した部分を除いた残りを見る）
+    const issueText = parts
+      .map((x) => (CANCEL_SENTENCE.test(x) ? x.replace(CANCELLED, '') : x))
+      .filter((x) => !CONTINUE_SENTENCE.test(x))
+      .join('\n')
+    const found = LEVELS.find((l) => issueText.includes(l.label))
     if (!found) continue
     active.push({
       level: found.level,
