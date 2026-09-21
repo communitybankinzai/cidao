@@ -15,11 +15,11 @@ const SOURCE_URL = 'https://mintsuku-chiba-kansuimap.com/data/hazard_reports.jso
 const SOURCE_PAGE = 'https://mintsuku-chiba-kansuimap.com/'
 const CACHE_SECONDS = 600
 
-// 印西市とその周辺（西・南・東・北）
-const WEST = 140.03
-const SOUTH = 35.72
-const EAST = 140.34
-const NORTH = 35.92
+// 千葉県全域を囲む四角（2026-09-22 に印西市周辺から拡大）
+const WEST = 139.70
+const SOUTH = 34.85
+const EAST = 140.90
+const NORTH = 36.15
 
 const ALLOWED_ORIGINS = new Set([
   'https://communitybankinzai.github.io',

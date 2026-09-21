@@ -24,11 +24,12 @@ const PUBLIC_ORIGINS = new Set([
 
 const MIGRATION_HINT = 'disaster_passed_roads table not found. Run migration 20260918100000.'
 
-// 印西市とその周辺（kansui/route.ts と同じ枠）
-const WEST = 140.03
-const SOUTH = 35.72
-const EAST = 140.34
-const NORTH = 35.92
+// kansui/route.ts と同じ枠
+// 千葉県全域を囲む四角（2026-09-22 に印西市周辺から拡大）
+const WEST = 139.70
+const SOUTH = 34.85
+const EAST = 140.90
+const NORTH = 36.15
 
 const MIN_POINTS = 3
 const MAX_POINTS = 2000
