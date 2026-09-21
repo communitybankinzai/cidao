@@ -7,7 +7,7 @@
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { RailApproval } from '@/lib/disaster-rail-watch'
-import type { RailEntry, RailStatus } from '@/lib/disaster-rail-status'
+import { isCitySourced, type RailEntry, type RailStatus } from '@/lib/disaster-rail-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +77,8 @@ export async function POST(request: Request) {
   if ('error' in r) return page('反映できません', `<p>${esc(r.error ?? '')}</p>`, 400)
   const next: RailStatus = {
     ...r.status,
-    railways: r.approval.railways,
+    // 市の発表の分だけ入れ替え、運営が確認して登録した事業者発表の項目は残す
+    railways: [...r.approval.railways, ...(r.status.railways ?? []).filter((x) => !isCitySourced(x))],
     updatedAt: r.approval.announcedAt,
     checkedAt: new Date().toISOString(),
   }

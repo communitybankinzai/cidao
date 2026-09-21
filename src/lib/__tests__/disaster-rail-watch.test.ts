@@ -62,6 +62,14 @@ describe('compareCityTransit', () => {
     expect(diff.missingRailways).toContain('北総線')
   })
 
+  it('運営が確認した事業者発表の項目は「市の文面から消えた」に入れない', () => {
+    const status: RailStatus = { ...STATUS_1200, railways: [
+      ...(STATUS_1200.railways ?? []),
+      { line: 'hokuso', from: '新鎌ヶ谷', to: '印旛日本医大', state: 'suspended', sourceType: 'operator' },
+    ] }
+    expect(compareCityTransit(PAGE_1800, status).goneFromPage).not.toContain('新鎌ヶ谷〜印旛日本医大')
+  })
+
   it('市の文面から消えた項目は「自動で外れる」として並べる', () => {
     const page = '災害時の公共交通のご案内\n現在、市内の鉄道・バスは平常どおり運行しています。'
     const diff = compareCityTransit(page, STATUS_1200)

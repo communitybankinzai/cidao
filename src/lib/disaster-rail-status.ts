@@ -14,6 +14,22 @@ export type RailEntry = {
   detail?: string
   announcedAt?: string
   expiresAt?: string
+  /**
+   * 出典の種類。既定（未指定）は市の「災害時の公共交通のご案内」。
+   * 'operator' は鉄道会社の発表を運営が確認して自分の言葉で登録したもの（2026-09-21：北総線と同じ線路の
+   * スカイアクセス線が市の案内に載らなかったため）。市のページとは照合せず、有効期限だけで消す。
+   * 事業者のページを機械で取得することはしない（北総鉄道は運行情報の転載・複写を禁じている）
+   */
+  sourceType?: 'city' | 'operator'
+  sourceLabel?: string
+  sourceUrl?: string
+  /** 地図の線の名前と違う路線名で見せたいとき（例：北総線の線路を走る成田スカイアクセス線） */
+  lineLabel?: string
+}
+
+/** 市のページと照合する項目か（運営が確認した事業者発表の項目は照合しない） */
+export function isCitySourced(entry: { sourceType?: string }) {
+  return entry.sourceType !== 'operator'
 }
 
 export type BusEntry = {
@@ -88,7 +104,7 @@ export function filterRailStatus(status: RailStatus, pageText: string, now = Dat
       cleared.push({ what: label, why: '発表から時間が経ったため' })
       return false
     }
-    if (pageText && !railStillInPage(entry, pageText)) {
+    if (pageText && isCitySourced(entry) && !railStillInPage(entry, pageText)) {
       cleared.push({ what: label, why: '市の案内から記述が消えたため' })
       return false
     }

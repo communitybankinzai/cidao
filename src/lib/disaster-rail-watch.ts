@@ -9,7 +9,7 @@
 
 import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { BusEntry, RailEntry, RailStatus } from '@/lib/disaster-rail-status'
+import { isCitySourced, type BusEntry, type RailEntry, type RailStatus } from '@/lib/disaster-rail-status'
 
 const SETTINGS_KEY = 'disaster_rail_status'
 const MAP_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/'
@@ -82,7 +82,7 @@ export function compareCityTransit(pageText: string, status: RailStatus): Transi
       diff.railwayStateChanged.push(`${rail.name}：市は「運転見合わせ」、地図は「遅れ」`)
     }
   }
-  for (const entry of status.railways ?? []) {
+  for (const entry of (status.railways ?? []).filter(isCitySourced)) {
     const from = String(entry.from ?? '')
     const to = String(entry.to ?? '')
     if (from && to && !(pageText.includes(from) && pageText.includes(to))) {
@@ -226,7 +226,7 @@ export async function handleCityTransitChange(
     // 鉄道の文が読み取れなかったときも作らない（読めなかった＝止まっていない、と誤って外す提案になるため）
     let approveUrl = ''
     const railUnreadable = parsed.unparsed.some((s) => RAIL_LINES.some((r) => r.pattern.test(s)))
-    const railChanged = !railUnreadable && parsed.railways.length > 0 && !sameRailways(status.railways ?? [], parsed.railways)
+    const railChanged = !railUnreadable && parsed.railways.length > 0 && !sameRailways((status.railways ?? []).filter(isCitySourced), parsed.railways)
     if (railChanged) {
       const token = randomBytes(24).toString('base64url')
       const approval: RailApproval = {
@@ -264,7 +264,7 @@ async function sendTransitMail(args: {
   const lines: string[] = []
 
   if (railChanged) {
-    const now = (status.railways ?? []).map(railLabel)
+    const now = (status.railways ?? []).filter(isCitySourced).map(railLabel)
     const next = parsed.railways.map(railLabel)
     lines.push(
       '<b>🚃 鉄道の運休が市の発表と違います。確認して反映してください。</b><br>' +

@@ -90,4 +90,22 @@ describe('filterRailStatus', () => {
     expect(r.railways).toHaveLength(1)
     expect(r.buses).toHaveLength(1)
   })
+
+  it('運営が確認した事業者発表の項目は、市の案内に無くても消さない（期限だけで消す）', () => {
+    const status: RailStatus = {
+      railways: [{
+        line: 'hokuso', from: '新鎌ヶ谷', to: '印旛日本医大', state: 'suspended',
+        sourceType: 'operator', lineLabel: '成田スカイアクセス線',
+        announcedAt: '2026-09-21T21:53:00+09:00', expiresAt: '2026-09-22T03:53:00+09:00',
+      }],
+    }
+    const at2200 = Date.parse('2026-09-21T22:00:00+09:00')
+    expect(filterRailStatus(status, PAGE_DISRUPTED, at2200).railways).toHaveLength(1)
+    expect(filterRailStatus(status, PAGE_RECOVERED, at2200).railways).toHaveLength(1)
+    const at0400 = Date.parse('2026-09-22T04:00:00+09:00')
+    const r = filterRailStatus(status, PAGE_DISRUPTED, at0400)
+    expect(r.railways).toHaveLength(0)
+    expect(r.cleared[0].why).toBe('発表から時間が経ったため')
+  })
 })
+
