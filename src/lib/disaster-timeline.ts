@@ -946,8 +946,49 @@ const cityMail: SourceParser = async (source) => {
   return drafts
 }
 
+// ---------------------------------------------------------------------------
+// city-page-watch: 固定URLのページ本文を見張る（市「災害時の公共交通のご案内」など）
+// ---------------------------------------------------------------------------
+// カテゴリ一覧に日付つきで並ばない常設ページは city-category-html では拾えない。
+// 同じ URL の本文が書き換わったときだけ 1 件を積む（本文ハッシュを external_key に入れる）。
+
+const cityPageWatch: SourceParser = async (source) => {
+  if (!source.url) throw new Error('URL が必要です')
+  const bodySelector = configString(source, 'bodySelector', '.mol_contents')
+  const root = parseHtml(await fetchText(source.url))
+  const node = root.querySelector(bodySelector)
+  const text = decodeEntities(node?.structuredText ?? node?.text ?? '').trim()
+  if (!text) throw new Error(`本文が取れません（セレクタ: ${bodySelector}）`)
+
+  // 平常時の文面まで毎回積まないよう、指定語を含むときだけ通す（未指定なら常に通す）
+  const keywords = configString(source, 'keywords').split(',').map((v) => v.trim()).filter(Boolean)
+  if (keywords.length && !keywords.some((word) => text.includes(word))) return []
+
+  const body = truncate(text)
+  const title = configString(source, 'title')
+    || root.querySelector('h1')?.text.trim()
+    || source.label
+  // 本文中の「令和8年9月21日 10時00分現在」を発表時刻として使う。無ければ取得時刻。
+  const stamp = text.normalize('NFKC').match(/(?:令和|R)\s*(?:\d{1,2}|元)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日[^\n]{0,16}現在/)
+  const occurredAt = (stamp && parseJapaneseDate(stamp[0])) || new Date().toISOString()
+  const hash = contentHash(title, body)
+
+  return [{
+    externalKey: `page:${source.url}#${hash.slice(0, 16)}`,
+    occurredAt,
+    title,
+    body,
+    url: source.url,
+    areaTag: '印西市',
+    changeType: 'new',
+    priority: 1,
+    raw: { hash, bodySelector, matchedKeywords: keywords.filter((word) => text.includes(word)) },
+  }]
+}
+
 const PARSERS: Record<string, SourceParser> = {
   'city-category-html': cityCategoryHtml,
+  'city-page-watch': cityPageWatch,
   'city-alert-xml': cityAlertXml,
   'jma-warning': jmaWarning,
   'jma-overview': jmaOverview,
@@ -963,6 +1004,7 @@ const PARSERS: Record<string, SourceParser> = {
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
   { id: 'city-category-html', label: '市サイト カテゴリ一覧（HTML）', help: 'config: baseUrl, bodySelector（既定 .mol_contents）' },
+  { id: 'city-page-watch', label: '市サイト 固定ページの本文監視（HTML）', help: '一覧に載らない常設ページ用（例: 災害時の公共交通のご案内 https://www.city.inzai.lg.jp/0000022520.html）。URL は監視するページ。config: bodySelector（既定 .mol_contents）、keywords（カンマ区切り・本文に含むときだけ取り込む）、title（既定はページ見出し）' },
   { id: 'city-alert-xml', label: '市 防災速報（XML）', help: 'config: baseUrl' },
   { id: 'jma-warning', label: '気象庁 警報・注意報', help: 'config: areaCode（印西市 1223100）' },
   { id: 'jma-overview', label: '気象庁 天気概況', help: 'config なし' },
