@@ -156,7 +156,8 @@ export function priorityLabelOf(item: MonitorItem): string {
 // 候補に入れないアカウント（2026-09-21 事業主指示「除外できるものは除外して」）。
 // その日の候補110件のうち95件がこの4つだった。警報の自動配信は公式発表の欄に気象庁から直接入るので重複、
 // communitybankinzai は CBI 自身の告知・警報の自動投稿。ハンドルは小文字で書く
-const EXCLUDED_ACCOUNTS = new Set(['ewrs.jp', 'anhsjapan.bsky.social', 'kishou.f5.si', 'communitybankinzai'])
+// ⚠ 2026-09-21 夜：Threads アプリ審査の録画のため communitybankinzai を一時的に外している。録画後に戻すこと
+const EXCLUDED_ACCOUNTS = new Set(['ewrs.jp', 'anhsjapan.bsky.social', 'kishou.f5.si'])
 
 function isExcludedAccount(item: MonitorItem): boolean {
   const handle = (item.username || usernameFromPermalink(item.permalink)).toLowerCase().replace(/^@/, '')
