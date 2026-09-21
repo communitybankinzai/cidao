@@ -38,6 +38,10 @@ export type AutoPostState = {
   hash: string
   updatedAt: string
   lastPostedAt?: string
+  /** 最後に投稿したときのレベル。同じレベルへの戻りは間隔をあける */
+  lastPostedLevel?: number
+  /** レベルが下がり始めた時刻。DROP_CONFIRM_MINUTES 続いてから解除を確定する */
+  droppedAt?: string
   history?: Array<{ at: string; level: number; kind: string; result?: unknown }>
 }
 
@@ -57,7 +61,8 @@ const DEFAULT_CONFIG: AutoPostConfig = {
   autoLevel: 4,
   approvalLevel: 3,
   media: ['threads'],
-  minIntervalMinutes: 30,
+  // 同じレベルへ戻ったときの再投稿の間隔。レベルが上がったときはこれを待たない
+  minIntervalMinutes: 180,
 }
 
 // 文言から警戒レベルを読む。気象庁の警報名には既に「レベル4」等が入っている
@@ -250,6 +255,67 @@ function hashOf(signals: Signal[], level: number) {
   return createHash('sha256').update(`${level}:${key}`, 'utf8').digest('hex').slice(0, 32)
 }
 
+/** レベルが下がってから、解除を確定するまでに待つ時間（すぐ戻る揺れで「下がりました」を出さない） */
+export const DROP_CONFIRM_MINUTES = 30
+
+export type AutoPostDecision =
+  | { action: 'none'; reason: string; state: AutoPostState }
+  | { action: 'skip'; reason: string; state: AutoPostState }
+  /** 解除を知らせる。previousLevel は下がる前のレベル */
+  | { action: 'cancel'; previousLevel: number; state: AutoPostState }
+  /** 投稿する（自動か承認待ちかは呼び出し側が level と autoLevel で決める） */
+  | { action: 'post'; state: AutoPostState }
+
+/**
+ * 投稿するかどうかだけを決める（DB も SNS も触らない。テストあり）。
+ *
+ * 2026-09-21 の台風25号で「同じような投稿が続く」と指摘されたため、次のように決め直した：
+ *   - 同じレベルが続いている間は黙る。警報の組み合わせが変わっただけでは出さない
+ *     （以前はタイトルの組み合わせのハッシュで判定しており、大雨→大雨＋洪水→大雨のたびに出ていた）
+ *   - 下がっても DROP_CONFIRM_MINUTES 続くまでは解除を確定しない（12:00 解除 → 12:10 再発表 が起きた）
+ *   - レベルが上がったときは間隔を待たずに出す（3→4 を待たせない）
+ *   - 前回と同じレベルへ戻ったときだけ minIntervalMinutes をあける
+ */
+export function decideAutoPost(
+  state: AutoPostState,
+  level: number,
+  hash: string,
+  config: Pick<AutoPostConfig, 'autoLevel' | 'approvalLevel' | 'minIntervalMinutes'>,
+  now = Date.now(),
+): AutoPostDecision {
+  const nowIso = new Date(now).toISOString()
+
+  if (level < state.level) {
+    if (!state.droppedAt) {
+      return { action: 'none', reason: 'drop pending', state: { ...state, droppedAt: nowIso } }
+    }
+    const droppedAt = Date.parse(state.droppedAt)
+    if (Number.isFinite(droppedAt) && now - droppedAt < DROP_CONFIRM_MINUTES * 60 * 1000) {
+      return { action: 'none', reason: 'drop pending', state }
+    }
+    const next: AutoPostState = { ...state, level, hash, updatedAt: nowIso, droppedAt: undefined }
+    if (state.level >= config.autoLevel) return { action: 'cancel', previousLevel: state.level, state: next }
+    return { action: 'none', reason: 'dropped', state: next }
+  }
+
+  // 同じか上がった：下がり待ちだったなら取り消す（揺れとして扱う）
+  const base: AutoPostState = state.droppedAt ? { ...state, droppedAt: undefined } : state
+
+  if (level < config.approvalLevel) return { action: 'none', reason: 'below threshold', state: base }
+  if (level <= base.level) return { action: 'none', reason: 'no change', state: base }
+
+  // ここに来るのはレベルが上がったときだけ
+  const raised: AutoPostState = { ...base, level, hash, updatedAt: nowIso }
+  const lastLevel = base.lastPostedLevel ?? 0
+  const lastAt = base.lastPostedAt ? Date.parse(base.lastPostedAt) : 0
+  const withinInterval = Number.isFinite(lastAt) && now - lastAt < config.minIntervalMinutes * 60 * 1000
+  if (level <= lastLevel && withinInterval) {
+    // 解除を確定したあと、間をおかず同じレベルへ戻った。レベルは上げて黙る（以後は no change になる）
+    return { action: 'skip', reason: 'min interval', state: raised }
+  }
+  return { action: 'post', state: raised }
+}
+
 async function readSetting<T>(supabase: SupabaseClient, key: string, fallback: T): Promise<T> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
   const value = data?.value as T | undefined
@@ -306,33 +372,34 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   const hash = hashOf(signals, level)
   const out: AutoPostOutcome = { ran: true, level, previousLevel: state.level, action: 'none' }
 
-  // 下がった（解除された）とき：レベル4以上から下がった場合だけ知らせる
-  if (level < state.level) {
-    await writeSetting(supabase, 'disaster_auto_post_state', {
-      ...state, level, hash, updatedAt: new Date().toISOString(),
-    })
-    if (state.level >= config.autoLevel) {
-      const text = [
-        `【印西市の警戒レベルが下がりました】（${jstLabel(new Date().toISOString())}時点）`,
-        '',
-        `警戒レベル${state.level}相当の情報は発表されなくなりました。`,
-        level > 0 ? `現在は警戒レベル${level}相当の情報が出ています。` : '現在、レベル3相当以上の情報は出ていません。',
-        '雨がやんだ後も、地盤が緩んでいる場所や増水した川には近づかないでください。',
-      ].join('\n') + FOOTER
-      const result = await dispatch(supabase, config.media, text.slice(0, 480))
-      out.action = 'cancelled'
-      out.result = result
-      await appendHistory(supabase, state, level, 'cancelled', result)
-    }
-    return out
+  const decision = decideAutoPost(state, level, hash, config)
+  const saveState = (next: AutoPostState) => writeSetting(supabase, 'disaster_auto_post_state', next)
+
+  if (decision.action === 'none') {
+    if (decision.state !== state) await saveState(decision.state)
+    return { ...out, action: 'none', reason: decision.reason }
+  }
+  if (decision.action === 'skip') {
+    await saveState(decision.state)
+    return { ...out, action: 'skipped', reason: decision.reason }
   }
 
-  if (level < config.approvalLevel) return { ...out, action: 'none', reason: 'below threshold' }
-  if (level <= state.level && hash === state.hash) return { ...out, action: 'none', reason: 'no change' }
-
-  const last = state.lastPostedAt ? Date.parse(state.lastPostedAt) : 0
-  if (Date.now() - last < config.minIntervalMinutes * 60 * 1000) {
-    return { ...out, action: 'skipped', reason: 'min interval' }
+  // 下がった（解除を確定した）とき：自動投稿レベル以上から下がった場合だけ知らせる
+  if (decision.action === 'cancel') {
+    await saveState(decision.state)
+    const previous = decision.previousLevel
+    const text = [
+      `【印西市の警戒レベルが下がりました】（${jstLabel(new Date().toISOString())}時点）`,
+      '',
+      `警戒レベル${previous}相当の情報は発表されなくなりました。`,
+      level > 0 ? `現在は警戒レベル${level}相当の情報が出ています。` : '現在、レベル3相当以上の情報は出ていません。',
+      '雨がやんだ後も、地盤が緩んでいる場所や増水した川には近づかないでください。',
+    ].join('\n') + FOOTER
+    const result = await dispatch(supabase, config.media, text.slice(0, 480))
+    out.action = 'cancelled'
+    out.result = result
+    await appendHistory(supabase, state, level, 'cancelled', result)
+    return out
   }
 
   const text = buildText(signals, level)
@@ -342,9 +409,7 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
     // まずテキストで速報を出す（速さを優先）。画像は撮影を待って後から Instagram へ。
     const result = await dispatch(supabase, config.media, text)
     const shot = await requestShot(supabase, text, signals)
-    await writeSetting(supabase, 'disaster_auto_post_state', {
-      ...state, level, hash, updatedAt: now, lastPostedAt: now,
-    })
+    await saveState({ ...decision.state, lastPostedAt: now, lastPostedLevel: level })
     await appendHistory(supabase, state, level, 'posted', { ...result, shot })
     return { ...out, action: 'posted', result: { ...result, shot } }
   }
@@ -359,9 +424,7 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
     expiresAt: new Date(Date.now() + 12 * 3600 * 1000).toISOString(),
     status: 'pending',
   })
-  await writeSetting(supabase, 'disaster_auto_post_state', {
-    ...state, level, hash, updatedAt: now,
-  })
+  await saveState(decision.state)
   const approveUrl = `${APPROVE_BASE}?token=${token}`
   await appendHistory(supabase, state, level, 'approval', { approveUrl })
   return { ...out, action: 'approval', approveUrl }
