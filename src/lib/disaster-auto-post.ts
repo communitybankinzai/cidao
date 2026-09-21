@@ -217,13 +217,20 @@ export function buildText(signals: Signal[], level: number): string {
   ]
   if (heads.length > 1) lines.push(`ほかに：${heads.slice(1, 3).join('／')}`)
   lines.push('')
-  for (const s of top.slice(0, 2)) {
+  // 気象庁の警報・注意報は同じ本文のまま何度も更新されるため、そのまま2件並べると
+  // まったく同じ引用が2回出る（2026-09-21 の投稿で実際に起きた）。
+  // 情報源と本文が同じものは1回にまとめ、違う中身を最大2件載せる。
+  const seen = new Set<string>()
+  for (const s of top) {
     const quoted = quoteOf(s)
-    if (quoted) {
-      lines.push(`■ ${s.source || '公式発表'}より`)
-      lines.push(quoted)
-      lines.push('')
-    }
+    if (!quoted) continue
+    const key = `${s.source}\n${quoted}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    lines.push(`■ ${s.source || '公式発表'}より`)
+    lines.push(quoted)
+    lines.push('')
+    if (seen.size >= 2) break
   }
   if (level >= 4) {
     lines.push('■ 警戒レベル4相当は「危険な場所から全員避難」の段階です。')
