@@ -59,7 +59,7 @@ function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') ?? ''
   return {
     'Access-Control-Allow-Origin': PUBLIC_ORIGINS.has(origin) ? origin : 'https://communitybankinzai.github.io',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, x-moderation-key',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
@@ -410,6 +410,71 @@ export async function DELETE(request: Request) {
   const { error } = await supabase.from('disaster_passed_roads').update({ hidden: true }).eq('id', id)
   if (error) return json(request, { error: error.message }, 500)
   return json(request, { ok: true, id })
+}
+
+// 運営が記録の時刻・メモを直す（2026-09-22）。道からずれた線を引き直すと、記録時刻が「引き直した時刻」になって
+// 実際の時刻と食い違うため、合言葉つきで上書きできるようにする。時刻を変えたら、その時刻の雨量を取り直す
+export async function PATCH(request: Request) {
+  const supabase = serviceClient()
+  if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
+  if (!isModerator(request)) return json(request, { error: 'forbidden' }, 403)
+
+  const id = new URL(request.url).searchParams.get('id') ?? ''
+  if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
+
+  let body: { endedAt?: unknown; note?: unknown }
+  try {
+    body = await request.json()
+  } catch {
+    return json(request, { error: 'invalid_json' }, 400)
+  }
+
+  const update: Record<string, unknown> = {}
+  if (typeof body.note === 'string') update.note = body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE)
+
+  let rainOut: RainInfo | null = null
+  if (body.endedAt !== undefined && body.endedAt !== null && body.endedAt !== '') {
+    const at = new Date(String(body.endedAt))
+    if (Number.isNaN(at.getTime())) return json(request, { error: 'invalid_time' }, 400)
+    if (at.getTime() > Date.now() + 10 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
+    if (Date.now() - at.getTime() > 7 * 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+
+    const { data: row, error: readError } = await supabase
+      .from('disaster_passed_roads')
+      .select('path, started_at, ended_at')
+      .eq('id', id)
+      .maybeSingle()
+    if (isMissingTable(readError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (readError) return json(request, { error: readError.message }, 500)
+    if (!row) return json(request, { error: 'not_found' }, 404)
+
+    // GPS の軌跡は所要時間を保つ（開始も同じだけずらす）
+    const shift = at.getTime() - new Date(String(row.ended_at)).getTime()
+    const started = new Date(new Date(String(row.started_at)).getTime() + (Number.isFinite(shift) ? shift : 0))
+    const path = row.path as LatLon[]
+    rainOut = await rainAt(path[path.length - 1], at)
+    Object.assign(update, {
+      started_at: (Number.isNaN(started.getTime()) ? at : started).toISOString(),
+      ended_at: at.toISOString(),
+      rain_station: rainOut.station,
+      rain_at: rainOut.at,
+      rain_1h_mm: rainOut.r1h,
+      rain_3h_mm: rainOut.r3h,
+      rain_24h_mm: rainOut.r24h,
+      rain_verdict: rainOut.verdict,
+    })
+  }
+  if (!Object.keys(update).length) return json(request, { error: 'nothing_to_update' }, 400)
+
+  const { data: updated, error } = await supabase
+    .from('disaster_passed_roads')
+    .update(update)
+    .eq('id', id)
+    .select('id')
+  if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
+  if (error) return json(request, { error: error.message }, 500)
+  if (!updated?.length) return json(request, { error: 'not_found' }, 404)
+  return json(request, { ok: true, id, endedAt: update.ended_at ?? null, note: update.note ?? null, rain: rainOut })
 }
 
 export function OPTIONS(request: Request) {
