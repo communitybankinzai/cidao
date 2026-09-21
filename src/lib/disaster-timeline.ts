@@ -7,6 +7,7 @@ import { priorityLabelOf, type MonitorItem } from './disaster-sns-monitor'
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
+import { notifyCityTransitChange } from '@/lib/disaster-rail-watch'
 
 export type SourceTrust = 'official' | 'semi-official' | 'unverified'
 export type ChangeType = 'new' | 'update' | 'cancel'
@@ -964,7 +965,9 @@ const cityPageWatch: SourceParser = async (source) => {
   const keywords = configString(source, 'keywords').split(',').map((v) => v.trim()).filter(Boolean)
   if (keywords.length && !keywords.some((word) => text.includes(word))) return []
 
-  const body = truncate(text)
+  // 運休の自動解除と更新通知がこの本文を突き合わせに使うため、ほかの情報源より長く残す。
+  // 600字で切ると、後ろに並んだ路線が「文面から消えた」と誤判定されて地図から外れる
+  const body = truncate(text, 3000)
   const title = configString(source, 'title')
     || root.querySelector('h1')?.text.trim()
     || source.label
@@ -1155,6 +1158,11 @@ export async function runDisasterTimeline(
       const drafts = await parser(source, { supabase })
       const counts = await upsertTimelineItems(supabase, source, drafts)
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: drafts.length, ...counts })
+      // 市の公共交通の案内が書き換わったら、地図の更新漏れを防ぐため運営へ知らせる
+      if (source.kind === 'city-page-watch' && counts.inserted > 0 && drafts[0]) {
+        const mail = await notifyCityTransitChange(supabase, drafts[0])
+        console.info(`[disaster-timeline] ${source.label} が更新されたため通知: ${mail}`)
+      }
       await supabase.from('disaster_info_sources').update({
         last_fetched_at: fetchedAt,
         last_status: 'success',
