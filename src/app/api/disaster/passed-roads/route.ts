@@ -121,13 +121,28 @@ function normalizePath(raw: unknown, minPoints: number): LatLon[] | null {
   return out
 }
 
-// 記録時刻の最寄りアメダスの雨量。印西市内に観測点はないので周囲4地点から最寄りを選ぶ。
-// 「通れない」が冠水によるものか、工事・事故など別の理由かの目安に使う（確定ではない）。
+// 記録時刻の最寄りアメダスの雨量。千葉県内で雨量を観測している18地点から最寄りを選ぶ
+// （2026-09-22 に千葉県全域へ広げたのに合わせて4地点から拡大。気象庁 amedastable.json の elems 2桁目＝降水量）。
+// 「通れない」が冠水によるものか、工事・事故など別の理由かの目安と、「通れた」ときの雨量の参考に使う（確定ではない）。
 const AMEDAS_STATIONS = [
   { code: '45061', name: '我孫子', lat: 35.8633, lon: 140.11 },
+  { code: '45081', name: '香取', lat: 35.8583, lon: 140.5017 },
+  { code: '45086', name: '東庄', lat: 35.795, lon: 140.6817 },
+  { code: '45106', name: '船橋', lat: 35.7117, lon: 140.0433 },
   { code: '45116', name: '佐倉', lat: 35.7283, lon: 140.2117 },
   { code: '45121', name: '成田', lat: 35.7633, lon: 140.385 },
-  { code: '45106', name: '船橋', lat: 35.7117, lon: 140.0433 },
+  { code: '45148', name: '銚子', lat: 35.7383, lon: 140.8567 },
+  { code: '45181', name: '横芝光', lat: 35.655, lon: 140.505 },
+  { code: '45212', name: '千葉', lat: 35.6017, lon: 140.1033 },
+  { code: '45261', name: '茂原', lat: 35.4367, lon: 140.2933 },
+  { code: '45282', name: '木更津', lat: 35.3617, lon: 139.94 },
+  { code: '45291', name: '牛久', lat: 35.3967, lon: 140.1483 },
+  { code: '45326', name: '坂畑', lat: 35.235, lon: 140.0983 },
+  { code: '45331', name: '大多喜', lat: 35.2517, lon: 140.215 },
+  { code: '45346', name: '鋸南', lat: 35.1217, lon: 139.8367 },
+  { code: '45361', name: '鴨川', lat: 35.1117, lon: 140.1 },
+  { code: '45371', name: '勝浦', lat: 35.15, lon: 140.3117 },
+  { code: '45401', name: '館山', lat: 34.9867, lon: 139.865 },
 ]
 type RainInfo = { station: string; at: string | null; r1h: number | null; r3h: number | null; r24h: number | null; verdict: 'flood_likely' | 'light_rain' | 'no_rain' | 'unknown' }
 
