@@ -480,7 +480,9 @@ export async function PATCH(request: Request) {
     const at = new Date(String(body.endedAt))
     if (Number.isNaN(at.getTime())) return json(request, { error: 'invalid_time' }, 400)
     if (at.getTime() > Date.now() + 10 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
-    if (Date.now() - at.getTime() > 7 * 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+    // 過去の日時は制限しない（2026-09-22）。みんつくの8月の豪雨の投稿などを運営が引き直し、当時の日時に戻すため。
+    // 2000年より前だけは入力の誤りとして断る。気象庁の10分値は数日分しか残らないので、古い日時の雨量は「不明」になる
+    if (at.getTime() < Date.UTC(2000, 0, 1)) return json(request, { error: 'invalid_time' }, 400)
 
     const { data: row, error: readError } = await supabase
       .from('disaster_passed_roads')
