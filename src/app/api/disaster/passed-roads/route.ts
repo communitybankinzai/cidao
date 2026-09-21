@@ -37,6 +37,18 @@ const KINDS = new Set(['passed', 'blocked'])
 const SOURCES = new Set(['gps', 'map']) // gps=現地でGPS記録／map=地図の長押しで後から指定
 const MAX_LENGTH_M = 30000
 const MAX_NOTE = 200
+
+// 運営（いたずら対応）用の合言葉。Vercel の環境変数 DISASTER_MODERATION_KEY に置く。
+// 一致したときだけ、端末IDと10分の制限なしで hidden を切り替えられる（行は消さない）。
+// 合言葉が未設定の環境では運営操作を一切受け付けない（事故防止）
+function isModerator(request: Request) {
+  // 専用の DISASTER_MODERATION_KEY があればそれを使い、無ければ既存の CRON_SECRET を使う
+  // （Vercel に新しい環境変数を足さずに運用を始めるため。専用キーを設定すればそちらが優先される）
+  const key = process.env.DISASTER_MODERATION_KEY || process.env.CRON_SECRET || ''
+  if (!key) return false
+  const given = request.headers.get('x-moderation-key') ?? ''
+  return given.length >= 16 && given === key
+}
 const MIN_INTERVAL_SECONDS = 120 // 同じ端末・同じ IP からの連続投稿の間隔
 const LIST_LIMIT = 2000
 const UNDO_WINDOW_SECONDS = 600 // 自分の記録を取り消せる時間
@@ -46,7 +58,7 @@ function corsHeaders(request: Request) {
   return {
     'Access-Control-Allow-Origin': PUBLIC_ORIGINS.has(origin) ? origin : 'https://communitybankinzai.github.io',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, x-moderation-key',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
     'Cache-Control': 'no-store',
@@ -189,12 +201,15 @@ export async function GET(request: Request) {
   const kindParam = searchParams.get('kind') ?? ''
   const format = searchParams.get('format') ?? 'json'
 
+  // 運営用：伏せた記録も含めて返す（合言葉が合っているときだけ）
+  const wantAll = searchParams.get('all') === '1' && isModerator(request)
+
   let query = supabase
     .from('disaster_passed_roads')
-    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
-    .eq('hidden', false)
+    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at, hidden, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
+  if (!wantAll) query = query.eq('hidden', false)
   if (KINDS.has(kindParam)) query = query.eq('kind', kindParam)
   const { data, error } = await query
 
@@ -249,6 +264,7 @@ export async function GET(request: Request) {
       endedAt: row.ended_at,
       note: row.note ?? '',
       createdAt: row.created_at,
+      hidden: Boolean(row.hidden),
       rain: rainOf(row),
     })),
   })
@@ -353,6 +369,23 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id') ?? ''
   const deviceId = (searchParams.get('deviceId') ?? '').trim().slice(0, 64)
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
+
+  // 運営（いたずら対応）：合言葉が合っていれば、端末IDと10分の制限なしで伏せる／戻す。
+  // 行は消さないので、繰り返すいたずらの端末はあとから追える
+  if (searchParams.get('moderate') === '1') {
+    if (!isModerator(request)) return json(request, { error: 'forbidden' }, 403)
+    const hide = searchParams.get('restore') !== '1'
+    const { data: updated, error: modError } = await supabase
+      .from('disaster_passed_roads')
+      .update({ hidden: hide })
+      .eq('id', id)
+      .select('id, hidden')
+    if (isMissingTable(modError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (modError) return json(request, { error: modError.message }, 500)
+    if (!updated?.length) return json(request, { error: 'not_found' }, 404)
+    return json(request, { ok: true, id, hidden: hide, moderated: true })
+  }
+
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
 
   const { data: row, error: readError } = await supabase
