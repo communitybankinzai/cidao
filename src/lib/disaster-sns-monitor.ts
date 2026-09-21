@@ -57,10 +57,14 @@ const LOCATION_WEAK = /中央北|中央南|亀成|内野|別所|原|原山|吉�
 // 「佐山」「島田」は全国に同名があるため八千代・交差点などの併記を条件にした。
 // 地図の範囲（東経140.03〜140.34・北緯35.72〜35.92）に収まる場所だけを入れること。
 // 手賀沼・手賀川は西端が範囲外だが、印西市と接し水位が印西に直結するので例外で入れた（2026-09-21）
+// 千葉ニュータウン界隈（2026-09-21 事業主指示「千葉ニュータウン界隈は含めて下さい」）。
+// ニュータウンは印西市・白井市・船橋市（小室）にまたがる。「桜台」「冨士」「根」「復」など
+// 全国に多い・1文字の町名は単独では拾わず、白井市・北総線の駅名・固有の町名に絞った
+const LOCATION_NEWTOWN = /白井市|西白井|白井駅|小室駅|小室町|船橋市小室|清水口|七次台|池の上|堀込|千葉ニュータウン中央|印西牧の原|印旛日本医大/
 const LOCATION_NEARBY = /手賀沼|手賀川|公津の杜|成田湯川|島田台|八千代[\s\S]{0,6}佐山|佐山[\s\S]{0,6}(交差点|八千代)|西白井|白井駅|船橋印西線|北千葉道路|国道464|464号/
 
 function hasLocationSignal(text: string): boolean {
-  if (LOCATION_CORE.test(text) || LOCATION_STRONG.test(text) || LOCATION_NEARBY.test(text)) return true
+  if (LOCATION_CORE.test(text) || LOCATION_STRONG.test(text) || LOCATION_NEWTOWN.test(text) || LOCATION_NEARBY.test(text)) return true
   // あいまい地名は市名等の併記が必要（例:「大森」だけでは東京都大田区と区別できない）
   return LOCATION_WEAK.test(text) && LOCATION_CORE.test(text)
 }
