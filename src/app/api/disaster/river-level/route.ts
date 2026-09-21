@@ -15,12 +15,21 @@
 // ⚠ 県の利用条件は未確認（2026-09-21 時点）。問い合わせ中。停止の要請があれば直ちに止めること。
 import { NextResponse } from 'next/server'
 
-const SOURCE_URL = 'http://suibo.bousai.pref.chiba.lg.jp/bousaip/river/graph_90_0.html'
-const SOURCE_PAGE = 'http://suibo.bousai.pref.chiba.lg.jp/bousaip/river/graph_90_0.html'
 const CACHE_SECONDS = 600
+const pageUrl = (no: number) => `http://suibo.bousai.pref.chiba.lg.jp/bousaip/river/graph_${no}_0.html`
 
-// ページから読めなかったときの基準値（2026-09-21 に県ページと国の観測所情報の両方で確認）
-const DEFAULT_LEVELS = { standby: 2.4, caution: 2.6, danger: 2.8 }
+// 印旛沼には「はんらん危険水位」が無い（県のページも「---」）。計画高水位 4.25m の
+// この高さ手前から「危険」とする（2026-09-21 事業主決定＝A案。市長の避難指示は 4.11m のとき）
+const PLAN_HIGH_MARGIN_M = 0.2
+
+type Levels = { standby: number | null; caution: number | null; danger: number | null; planHigh: number | null }
+
+// 県の水位グラフの番号と、ページから読めなかったときの基準値（2026-09-21 に県ページで確認）
+const STATIONS: { id: string; no: number; name: string; manager: string; fallback: Levels }[] = [
+  { id: 'teganuma', no: 90, name: '手賀沼', manager: '千葉県（柏土木事務所）', fallback: { standby: 2.4, caution: 2.6, danger: 2.8, planHigh: null } },
+  { id: 'nishi-inbanuma', no: 6, name: '西印旛沼', manager: '千葉県', fallback: { standby: 2.8, caution: 3.4, danger: null, planHigh: 4.25 } },
+  { id: 'kita-inbanuma', no: 7, name: '北印旛沼', manager: '千葉県', fallback: { standby: 2.8, caution: 3.4, danger: null, planHigh: 4.25 } },
+]
 
 const ALLOWED_ORIGINS = new Set([
   'https://communitybankinzai.github.io',
@@ -45,13 +54,16 @@ export function OPTIONS(request: Request) {
 
 type Reading = { time: string; level: number }
 
-function readLevel(html: string, label: string): number | null {
-  const m = html.match(new RegExp(`${label}[\\s\\S]{0,120}?([0-9]+\\.[0-9]+)m`))
-  return m ? Number(m[1]) : null
+// 「---」（基準なし）のときに次の行の数字を拾わないよう、ラベル直後の空白・タグだけを飛ばす。
+// 戻り値 undefined＝ラベル自体が無い、null＝基準なし（---）
+function readLevel(html: string, label: string): number | null | undefined {
+  const m = html.match(new RegExp(`${label}(?:\\s|&nbsp;|<[^>]*>)*([0-9]+\\.[0-9]+m|---)`))
+  if (!m) return undefined
+  return m[1] === '---' ? null : Number(m[1].slice(0, -1))
 }
 
 // 表は1行に「HH時の6値（00〜50分）」を左右2つ（0〜11時・12〜23時）並べている
-function parseTeganuma(html: string) {
+function parseStationPage(html: string, fallback: Levels) {
   const dateMatch = html.match(/(\d{4})年(\d{2})月(\d{2})日/)
   if (!dateMatch) throw new Error('観測日が読めません')
   const [, y, mo, d] = dateMatch
@@ -70,10 +82,15 @@ function parseTeganuma(html: string) {
   }
   readings.sort((a, b) => a.time.localeCompare(b.time))
 
-  const levels = {
-    standby: readLevel(html, '水防団待機水位') ?? DEFAULT_LEVELS.standby,
-    caution: readLevel(html, 'はん濫注意水位') ?? DEFAULT_LEVELS.caution,
-    danger: readLevel(html, 'はん濫危険水位') ?? DEFAULT_LEVELS.danger,
+  const pick = (label: string, fb: number | null) => {
+    const v = readLevel(html, label)
+    return v === undefined ? fb : v
+  }
+  const levels: Levels = {
+    standby: pick('水防団待機水位', fallback.standby),
+    caution: pick('はん濫注意水位', fallback.caution),
+    danger: pick('はん濫危険水位', fallback.danger),
+    planHigh: pick('計画高水位相当', fallback.planHigh),
   }
   return { readings, levels }
 }
@@ -147,21 +164,22 @@ async function loadToneFloodForecasts(): Promise<FloodForecast[]> {
   return results.sort((a, b) => b.level - a.level)
 }
 
-function stageOf(level: number, levels: { standby: number; caution: number; danger: number }) {
-  if (level >= levels.danger) return 'danger'
-  if (level >= levels.caution) return 'caution'
-  if (level >= levels.standby) return 'standby'
+function stageOf(level: number, levels: Levels) {
+  if (levels.danger !== null && level >= levels.danger) return 'danger'
+  if (levels.danger === null && levels.planHigh !== null && level >= levels.planHigh - PLAN_HIGH_MARGIN_M) return 'danger'
+  if (levels.caution !== null && level >= levels.caution) return 'caution'
+  if (levels.standby !== null && level >= levels.standby) return 'standby'
   return 'normal'
 }
 
-async function loadTeganuma() {
-  const response = await fetch(SOURCE_URL, {
+async function loadStation(cfg: (typeof STATIONS)[number]) {
+  const response = await fetch(pageUrl(cfg.no), {
     headers: { 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
     next: { revalidate: CACHE_SECONDS },
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   const html = new TextDecoder('shift_jis').decode(await response.arrayBuffer())
-  const { readings, levels } = parseTeganuma(html)
+  const { readings, levels } = parseStationPage(html, cfg.fallback)
   const latest = readings.at(-1) ?? null
   // 時刻で60分前以前の最新値との差（欠測があっても6つ前とは限らないため）
   let change1h: number | null = null
@@ -171,38 +189,50 @@ async function loadTeganuma() {
     if (past) change1h = Math.round((latest.level - past.level) * 100) / 100
   }
   return {
-    id: 'teganuma',
-    name: '手賀沼',
-    river: '手賀沼',
-    manager: '千葉県（柏土木事務所）',
+    id: cfg.id,
+    name: cfg.name,
+    river: cfg.name,
+    manager: cfg.manager,
     latest,
     change1h,
     stage: latest ? stageOf(latest.level, levels) : 'unknown',
     levels,
+    // 危険水位が無い観測所（印旛沼）だけ、計画高水位までの残り（m）
+    toPlanHigh:
+      latest && levels.danger === null && levels.planHigh !== null
+        ? Math.round((levels.planHigh - latest.level) * 100) / 100
+        : null,
+    sourceUrl: pageUrl(cfg.no),
     recent: readings.slice(-18),
   }
 }
 
-// 手賀沼（県）と利根川の洪水予報（気象庁）は別々に取り、片方が失敗しても他方は返す
+// 県の観測所（手賀沼・印旛沼）と利根川の洪水予報（気象庁）は別々に取り、一部が失敗しても残りは返す
 export async function GET(request: Request) {
-  const [tega, tone] = await Promise.allSettled([loadTeganuma(), loadToneFloodForecasts()])
+  const [tone, ...results] = await Promise.allSettled([loadToneFloodForecasts(), ...STATIONS.map(loadStation)])
+  const msg = (r: PromiseRejectedResult) => (r.reason instanceof Error ? r.reason.message : String(r.reason))
   const errors: string[] = []
-  if (tega.status === 'rejected') errors.push(`手賀沼: ${tega.reason instanceof Error ? tega.reason.message : String(tega.reason)}`)
-  if (tone.status === 'rejected') errors.push(`利根川の洪水予報: ${tone.reason instanceof Error ? tone.reason.message : String(tone.reason)}`)
+  const stations: Awaited<ReturnType<typeof loadStation>>[] = []
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') stations.push(r.value as Awaited<ReturnType<typeof loadStation>>)
+    else errors.push(`${STATIONS[i].name}: ${msg(r)}`)
+  })
+  if (tone.status === 'rejected') errors.push(`利根川の洪水予報: ${msg(tone)}`)
   if (errors.length) console.error('[disaster/river-level]', errors.join(' / '))
-  if (tega.status === 'rejected' && tone.status === 'rejected') {
+  if (!stations.length && tone.status === 'rejected') {
     return NextResponse.json({ error: errors.join(' / ') }, { status: 502, headers: corsHeaders(request) })
   }
   return NextResponse.json(
     {
       fetchedAt: new Date().toISOString(),
-      stations: tega.status === 'fulfilled' ? [tega.value] : [],
+      // 取れた観測所だけ（手賀沼・西印旛沼・北印旛沼の順）
+      stations,
       // null＝取得に失敗、[]＝発表されていない（平常）
       floodForecasts: tone.status === 'fulfilled' ? tone.value : null,
       errors,
-      source: { name: '千葉県 水防情報「水位グラフ:手賀沼」', url: SOURCE_PAGE },
+      source: { name: '千葉県 水防情報（雨量・水位情報）', url: 'http://suibo.bousai.pref.chiba.lg.jp/' },
       floodSource: { name: '気象庁 指定河川洪水予報（国土交通省と気象庁の共同発表）', url: JMA_FEED_URL },
-      note: '千葉県の観測値をCBIが読み取って表示しています。0.00と欠測は除いています。避難の判断は市の避難情報に従ってください。',
+      note: `千葉県の観測値をCBIが読み取って表示しています。0.00と欠測は除いています。印旛沼ははんらん危険水位が無いため、計画高水位の${PLAN_HIGH_MARGIN_M}m手前から「危険」としています（CBIの目安）。避難の判断は市の避難情報に従ってください。`,
     },
     { headers: { ...corsHeaders(request), 'Cache-Control': `public, max-age=300, s-maxage=${CACHE_SECONDS}` } },
   )
