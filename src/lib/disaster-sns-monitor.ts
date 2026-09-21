@@ -52,8 +52,14 @@ const LOCATION_CORE = /印西|千葉ニュータウン|千葉NT|印旛|本埜|�
 const LOCATION_STRONG = /つくりや台|吉高|多々羅田|宗甫|小林北|小林大門下|小林浅間|岩戸|師戸|平賀|平賀学園台|戸神台|木下|木下南|木下東|木刈|松虫|武西学園台|浦幡新田|浦部|浦部村新田|牧の原|牧の木戸|発作|結縁寺|若萩|草深|萩原|西の原|鎌苅|高花|高西新田|鹿黒|鹿黒南|六軒/
 const LOCATION_WEAK = /中央北|中央南|亀成|内野|別所|原|原山|吉田|和泉|大塚|大廻|大森|小倉|小倉台|小林|山田|平岡|戸神|東の原|松崎|松崎台|武西|泉|泉野|浅間前|瀬戸|牧の台|白幡|相嶋|竹袋|美瀬|舞姫|船尾|造谷/
 
+// 印西市の外だが、市境に近く印西の人がよく通る場所（2026-09-21 事業主判断「境に近い地名だけ足す」）。
+// 市名ごと（成田・白井・八千代）で拾うと空港など無関係な投稿が大量に混ざるので、場所を絞っている。
+// 「佐山」「島田」は全国に同名があるため八千代・交差点などの併記を条件にした。
+// 地図の範囲（東経140.03〜140.34・北緯35.72〜35.92）に収まる場所だけを入れること
+const LOCATION_NEARBY = /公津の杜|成田湯川|島田台|八千代[\s\S]{0,6}佐山|佐山[\s\S]{0,6}(交差点|八千代)|西白井|白井駅|船橋印西線|北千葉道路|国道464|464号/
+
 function hasLocationSignal(text: string): boolean {
-  if (LOCATION_CORE.test(text) || LOCATION_STRONG.test(text)) return true
+  if (LOCATION_CORE.test(text) || LOCATION_STRONG.test(text) || LOCATION_NEARBY.test(text)) return true
   // あいまい地名は市名等の併記が必要（例:「大森」だけでは東京都大田区と区別できない）
   return LOCATION_WEAK.test(text) && LOCATION_CORE.test(text)
 }
