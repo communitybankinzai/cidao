@@ -7,7 +7,7 @@ import { priorityLabelOf, type MonitorItem } from './disaster-sns-monitor'
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
-import { notifyCityTransitChange } from '@/lib/disaster-rail-watch'
+import { handleCityTransitChange } from '@/lib/disaster-rail-watch'
 
 export type SourceTrust = 'official' | 'semi-official' | 'unverified'
 export type ChangeType = 'new' | 'update' | 'cancel'
@@ -1158,9 +1158,10 @@ export async function runDisasterTimeline(
       const drafts = await parser(source, { supabase })
       const counts = await upsertTimelineItems(supabase, source, drafts)
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: drafts.length, ...counts })
-      // 市の公共交通の案内が書き換わったら、地図の更新漏れを防ぐため運営へ知らせる
+      // 市の公共交通の案内が書き換わったら、路線バスは自動で地図へ反映し、
+      // 鉄道は承認リンク付きで運営へ知らせる（disaster-rail-watch.ts）
       if (source.kind === 'city-page-watch' && counts.inserted > 0 && drafts[0]) {
-        const mail = await notifyCityTransitChange(supabase, drafts[0])
+        const mail = await handleCityTransitChange(supabase, drafts[0])
         console.info(`[disaster-timeline] ${source.label} が更新されたため通知: ${mail}`)
       }
       await supabase.from('disaster_info_sources').update({

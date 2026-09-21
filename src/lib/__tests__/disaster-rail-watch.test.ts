@@ -2,7 +2,7 @@
 // 2026-09-21 台風25号の実際の文面（12:00版・18:00版）を使う。
 
 import { describe, expect, it } from 'vitest'
-import { busNamesInPage, compareCityTransit, hasTransitDiff } from '@/lib/disaster-rail-watch'
+import { busNamesInPage, compareCityTransit, hasTransitDiff, parseCityTransit } from '@/lib/disaster-rail-watch'
 import type { RailStatus } from '@/lib/disaster-rail-status'
 
 const PAGE_1800 = [
@@ -67,5 +67,53 @@ describe('compareCityTransit', () => {
     const diff = compareCityTransit(page, STATUS_1200)
     expect(diff.goneFromPage).toContain('我孫子〜成田')
     expect(diff.goneFromPage).toContain('路線バス 六合路線')
+  })
+})
+
+const AT = '2026-09-21T09:00:00.000Z'
+
+describe('parseCityTransit（A案：バスは自動・鉄道は承認）', () => {
+  it('18:00版から、成田線の見合わせと路線バス5路線を読み取る', () => {
+    const r = parseCityTransit(PAGE_1800, AT)
+    expect(r.railways).toEqual([expect.objectContaining({ line: 'jr-narita-abiko', from: '成田', to: '我孫子', state: 'suspended' })])
+    expect(r.buses.map((b) => b.name)).toEqual([
+      '路線バス 六合路線（小林駅～印旛日本医大駅～京成佐倉駅）',
+      '路線バス 宗像路線（全線）',
+      '路線バス 順大線（平賀学園台～京成酒々井駅）',
+      '路線バス 神崎線（船尾車庫～八千代方面）',
+      '路線バス 印旛学園線（仲の台～京成酒々井駅西口）',
+    ])
+    expect(r.buses[1].detail).toBe('全線で運休しています。')
+    expect(r.buses[4].detail).toBe('区間運休です。')
+    expect(r.unparsed).toEqual([])
+  })
+
+  it('12:00版の「遅れと運休」（「送れ」の誤字あり）は遅れ・運休として読む', () => {
+    const page = 'JR成田線は、大雨の影響で、成田駅～我孫子駅間の上下線に送れと運休が出ています。'
+    expect(parseCityTransit(page, AT).railways[0].state).toBe('disrupted')
+  })
+
+  it('地図の路線データにない駅名は採用せず「読み取れなかった」に回す', () => {
+    const page = 'JR成田線は、佐倉駅～成田駅間で運転を見合わせています。'
+    const r = parseCityTransit(page, AT)
+    expect(r.railways).toEqual([])
+    expect(r.unparsed[0]).toContain('佐倉駅～成田駅間')
+  })
+
+  it('北総線の区間は北総線の線として読む', () => {
+    const page = '北総線は、線路冠水のため新鎌ヶ谷駅～印旛日本医大駅間で運転を見合わせています。'
+    expect(parseCityTransit(page, AT).railways).toEqual([expect.objectContaining({ line: 'hokuso', from: '新鎌ヶ谷', to: '印旛日本医大', state: 'suspended' })])
+  })
+
+  it('「千葉ニュータウン中央」のように長音を含む駅名も区間として読める', () => {
+    const page = '北総線は、千葉ニュータウン中央駅～印旛日本医大駅間で運転を見合わせています。'
+    expect(parseCityTransit(page, AT).railways[0]).toEqual(expect.objectContaining({ from: '千葉ニュータウン中央', to: '印旛日本医大' }))
+  })
+
+  it('運転再開の文は運休として拾わない', () => {
+    const page = 'JR成田線は、成田駅～我孫子駅間で運転を再開しました。'
+    const r = parseCityTransit(page, AT)
+    expect(r.railways).toEqual([])
+    expect(r.unparsed).toEqual([])
   })
 })

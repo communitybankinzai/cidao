@@ -7,8 +7,9 @@
 //
 // 判定（compareCityTransit）は純粋関数でテストあり。送信は失敗しても巡回を止めない。
 
+import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { RailStatus } from '@/lib/disaster-rail-status'
+import type { BusEntry, RailEntry, RailStatus } from '@/lib/disaster-rail-status'
 
 const SETTINGS_KEY = 'disaster_rail_status'
 const MAP_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/'
@@ -99,59 +100,209 @@ function escapeHtml(text: string) {
   return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
 }
 
-/** 本文が変わった公共交通ページについて、運営へメールを送る。例外は投げない。 */
-export async function notifyCityTransitChange(
+// ---------------------------------------------------------------------------
+// 市の文面を読み取って、地図に入れる形にする（2026-09-21 A案）
+//   路線バス：地図には文字で出すだけなので、読み取れたらその場で自動反映する
+//   鉄道　　：線を赤く塗るため、人が承認リンクを押したときだけ反映する
+// ---------------------------------------------------------------------------
+
+/** 地図の路線データ（site/inzai-disaster-map/rail-segments.json）にある駅。ここに無い駅名は採用しない */
+const LINE_STATIONS: Record<string, string[]> = {
+  'jr-narita-abiko': ['我孫子', '東我孫子', '湖北', '新木', '布佐', '木下', '小林', '安食', '下総松崎', '成田'],
+  hokuso: ['京成高砂', '新柴又', '矢切', '北国分', '秋山', '東松戸', '松飛台', '大町', '新鎌ヶ谷', '西白井', '白井', '小室', '千葉ニュータウン中央', '印西牧の原', '印旛日本医大'],
+}
+
+export type ParsedTransit = {
+  railways: RailEntry[]
+  buses: BusEntry[]
+  /** 運休らしい記述があるのに、地図に入れられる形で読み取れなかった文 */
+  unparsed: string[]
+}
+
+function railStateOf(text: string): string | null {
+  if (/再開|平常/.test(text) && !/見合わせ|運休/.test(text)) return null
+  if (/見合わせ|運転を取りやめ/.test(text)) return 'suspended'
+  const stop = /運休/.test(text)
+  const late = /遅れ|送れ|遅延/.test(text) // 市の文面に「送れ」の誤字があった（2026-09-21）
+  if (stop && late) return 'disrupted'
+  if (stop) return 'suspended'
+  if (late) return 'delayed'
+  return null
+}
+
+/** 市の「災害時の公共交通のご案内」の本文から、地図に入れる鉄道・路線バスを読み取る */
+export function parseCityTransit(pageText: string, announcedAt: string): ParsedTransit {
+  const out: ParsedTransit = { railways: [], buses: [], unparsed: [] }
+  const flat = pageText.replace(/\s+/g, ' ')
+
+  // 路線バス：「・六合路線（小林駅～…）【注意】区間運休」
+  for (const raw of pageText.split(/\n|(?=・)/)) {
+    const line = raw.trim()
+    const m = line.match(/^・\s*([^\s（(【]+?(?:線|路線))\s*([（(][^）)]*[）)])?\s*(.*)$/)
+    if (!m) continue
+    const rest = m[3] ?? ''
+    const detail = /区間運休/.test(rest) ? '区間運休です。' : /全線/.test(m[2] ?? '') ? '全線で運休しています。' : '運休しています。'
+    out.buses.push({ name: `路線バス ${m[1]}${m[2] ?? ''}`, state: 'suspended', detail, announcedAt })
+  }
+
+  // 鉄道：文ごとに路線名・区間・状態を読む
+  for (const sentence of flat.split(/。/)) {
+    const rail = RAIL_LINES.find((r) => r.pattern.test(sentence))
+    if (!rail) continue
+    const state = railStateOf(sentence)
+    if (!state) continue
+    const stations = rail.lineId ? LINE_STATIONS[rail.lineId] ?? [] : []
+    // 「〇〇駅～〇〇駅間」の前後を、地図の駅名一覧と突き合わせて決める。
+    // 正規表現で名前を切り出すと「線路冠水のため新鎌ヶ谷」のように前の語まで取り込むため。
+    // 区切りに「ー」は使わない（千葉ニュータウン中央 の中にあるため）
+    const pair = sentence.match(/(.*?)\s*[～〜~－]\s*(.*?)間/)
+    const longest = (list: string[]) => list.sort((a, b) => b.length - a.length)[0]
+    const before = (pair?.[1] ?? '').replace(/駅$/, '')
+    const after = pair?.[2] ?? ''
+    const from = longest(stations.filter((st) => before.endsWith(st)))
+    const to = longest(stations.filter((st) => after.startsWith(st)))
+    if (!rail.lineId || !from || !to) {
+      out.unparsed.push(`${sentence.trim()}。`)
+      continue
+    }
+    out.railways.push({ line: rail.lineId, from, to, state, detail: `${sentence.trim()}。`, announcedAt })
+  }
+  return out
+}
+
+function sameRailways(a: RailEntry[], b: RailEntry[]) {
+  const key = (r: RailEntry) => `${r.line}:${[r.from, r.to].sort().join('-')}:${r.state}`
+  const ka = a.map(key).sort().join('|')
+  const kb = b.map(key).sort().join('|')
+  return ka === kb
+}
+
+function railLabel(r: RailEntry) {
+  const state = { suspended: '運休・見合わせ', disrupted: '遅れ・運休', delayed: '遅れ', restored: '再開' }[String(r.state)] ?? String(r.state)
+  return `${r.from}〜${r.to}（${state}）`
+}
+
+const APPROVE_BASE = 'https://cidao.vercel.app/api/disaster/rail-status/approve'
+const APPROVAL_HOURS = 12
+
+export type RailApproval = {
+  railways: RailEntry[]
+  announcedAt: string
+  createdAt: string
+  expiresAt: string
+  status: 'pending' | 'applied' | 'expired'
+}
+
+/**
+ * 市の公共交通の案内が書き換わったときに呼ぶ（巡回から）。
+ * 路線バスは自動で反映し、鉄道は今の地図と違えば承認リンクを作ってメールする。例外は投げない。
+ */
+export async function handleCityTransitChange(
   supabase: SupabaseClient,
-  item: { title: string; body: string; url: string | null },
+  item: { title: string; body: string; url: string | null; occurredAt: string },
 ): Promise<string> {
   try {
-    const apiKey = process.env.RESEND_API_KEY ?? ''
-    const from = process.env.MAIL_FROM ?? ''
-    const to = process.env.DISASTER_NOTIFY_TO ?? process.env.COST_ALERT_TO ?? ''
-    if (!apiKey || !from || !to) return 'skipped: RESEND_API_KEY / MAIL_FROM / 通知先 が未設定'
-
     const { data } = await supabase.from('app_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle()
     const status = (data?.value ?? {}) as RailStatus
-    const diff = compareCityTransit(item.body, status)
+    const parsed = parseCityTransit(item.body, item.occurredAt)
 
-    const lines: string[] = []
-    if (hasTransitDiff(diff)) {
-      lines.push('<b>地図と市の発表に食い違いがあります。地図の更新をお願いします。</b>')
-      if (diff.missingRailways.length) lines.push(`🚃 地図にない鉄道：${diff.missingRailways.map(escapeHtml).join('、')}`)
-      if (diff.railwayStateChanged.length) lines.push(`🚃 状態が違う：${diff.railwayStateChanged.map(escapeHtml).join('、')}`)
-      if (diff.missingBuses.length) lines.push(`🚌 地図にない路線バス：${diff.missingBuses.map(escapeHtml).join('、')}`)
-      if (diff.goneFromPage.length) lines.push(`✅ 市の文面から消えた（地図からは自動で外れます）：${diff.goneFromPage.map(escapeHtml).join('、')}`)
+    // 1) 路線バス：自動で反映する。ただし「路線バス」「運休」と書いてあるのに1件も読めないときは、
+    //    読み取りの失敗とみなして今の登録を消さない
+    const mentionsBus = /路線バス/.test(item.body) && /運休/.test(item.body)
+    let busesApplied = false
+    if (parsed.buses.length || !mentionsBus) {
+      const before = (status.buses ?? []).map((b) => b.name).sort().join('|')
+      const after = parsed.buses.map((b) => b.name).sort().join('|')
+      // 路線が同じでも、発表時刻（地図の「〇時 市発表」）を新しくするため毎回書き込む
+      const next: RailStatus = { ...status, buses: parsed.buses, updatedAt: item.occurredAt, checkedAt: new Date().toISOString() }
+      await supabase.from('app_settings').upsert({ key: SETTINGS_KEY, value: next })
+      busesApplied = before !== after
     } else {
-      lines.push('地図の内容は市の発表と一致しています（念のため文面をご確認ください）。')
+      parsed.unparsed.push('（路線バスの運休が書かれていますが、路線名を読み取れませんでした）')
     }
-    const current = [
-      ...(status.railways ?? []).map((r) => `鉄道 ${r.from}〜${r.to}（${r.state}）`),
-      ...(status.buses ?? []).map((b) => String(b.name ?? '')),
-    ]
-    lines.push(`<b>地図がいま出している内容</b><br>${current.length ? current.map(escapeHtml).join('<br>') : '（なし）'}`)
-    lines.push(`<b>市の最新の文面</b><br>${escapeHtml(item.body).replace(/\n/g, '<br>')}`)
-    lines.push(
-      `更新のしかた：Claude Code に「運行情報を市の最新発表に合わせて」と伝えてください。<br>` +
-      `市のページ：<a href="${escapeHtml(item.url ?? '')}">${escapeHtml(item.url ?? '')}</a><br>` +
-      `防災MAP：<a href="${MAP_URL}">${MAP_URL}</a>`,
-    )
 
-    // CBI公式メールの自動仕分け（gas-mail-share/MailTriage.gs の RE_ACTION）は「警告」を含む件名を
-    // 「要対応＋★」にする。GAS はCBI公式アカウントの持ち物で手元から書き換えられないため、件名側で合わせる
-    const subject = hasTransitDiff(diff)
-      ? '【要対応・更新漏れ警告】防災MAP：市の公共交通の案内が更新されました（地図と食い違いあり）'
+    // 2) 鉄道：今の地図と違えば承認を作る
+    // 増えた・変わったときだけ承認を求める。消えたときは運休の自動解除（disaster-rail-status.ts）が外すので不要。
+    // 鉄道の文が読み取れなかったときも作らない（読めなかった＝止まっていない、と誤って外す提案になるため）
+    let approveUrl = ''
+    const railUnreadable = parsed.unparsed.some((s) => RAIL_LINES.some((r) => r.pattern.test(s)))
+    const railChanged = !railUnreadable && parsed.railways.length > 0 && !sameRailways(status.railways ?? [], parsed.railways)
+    if (railChanged) {
+      const token = randomBytes(24).toString('base64url')
+      const approval: RailApproval = {
+        railways: parsed.railways,
+        announcedAt: item.occurredAt,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + APPROVAL_HOURS * 3600 * 1000).toISOString(),
+        status: 'pending',
+      }
+      await supabase.from('app_settings').upsert({ key: `disaster_rail_approval:${token}`, value: approval })
+      approveUrl = `${APPROVE_BASE}?token=${token}`
+    }
+
+    return await sendTransitMail({ item, status, parsed, busesApplied, railChanged, approveUrl })
+  } catch (error) {
+    return `failed: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
+async function sendTransitMail(args: {
+  item: { body: string; url: string | null }
+  status: RailStatus
+  parsed: ParsedTransit
+  busesApplied: boolean
+  railChanged: boolean
+  approveUrl: string
+}): Promise<string> {
+  const { item, status, parsed, busesApplied, railChanged, approveUrl } = args
+  const apiKey = process.env.RESEND_API_KEY ?? ''
+  const from = process.env.MAIL_FROM ?? ''
+  const to = process.env.DISASTER_NOTIFY_TO ?? process.env.COST_ALERT_TO ?? ''
+  if (!apiKey || !from || !to) return 'skipped: RESEND_API_KEY / MAIL_FROM / 通知先 が未設定'
+
+  const needsHuman = railChanged || parsed.unparsed.length > 0
+  const lines: string[] = []
+
+  if (railChanged) {
+    const now = (status.railways ?? []).map(railLabel)
+    const next = parsed.railways.map(railLabel)
+    lines.push(
+      '<b>🚃 鉄道の運休が市の発表と違います。確認して反映してください。</b><br>' +
+      `地図の今：${now.length ? now.map(escapeHtml).join('、') : '（なし）'}<br>` +
+      `市の発表：${next.length ? next.map(escapeHtml).join('、') : '（なし＝地図から外します）'}<br>` +
+      `<a href="${approveUrl}" style="display:inline-block;margin-top:6px;padding:8px 14px;background:#b91c1c;color:#fff;border-radius:6px;text-decoration:none">内容を確認して反映する</a>` +
+      `（${APPROVAL_HOURS}時間有効。開いた先のボタンを押すまでは反映されません）`,
+    )
+  }
+  if (parsed.unparsed.length) {
+    lines.push(`<b>⚠ 読み取れなかった記述（地図には入れていません。必要なら Claude Code に伝えてください）</b><br>${parsed.unparsed.map(escapeHtml).join('<br>')}`)
+  }
+  if (busesApplied) {
+    lines.push(`<b>🚌 路線バスは自動で反映しました</b><br>${parsed.buses.length ? parsed.buses.map((b) => escapeHtml(String(b.name))).join('<br>') : '（運休の路線はなくなりました）'}`)
+  }
+  if (!needsHuman && !busesApplied) lines.push('地図の内容は市の発表と一致しています。対応は不要です。')
+
+  lines.push(`<b>市の最新の文面</b><br>${escapeHtml(item.body).replace(/\n/g, '<br>')}`)
+  lines.push(
+    `市のページ：<a href="${escapeHtml(item.url ?? '')}">${escapeHtml(item.url ?? '')}</a><br>` +
+    `防災MAP：<a href="${MAP_URL}">${MAP_URL}</a>`,
+  )
+
+  // CBI公式メールの自動仕分け（gas-mail-share/MailTriage.gs の RE_ACTION）は「警告」を含む件名を
+  // 「要対応＋★」にする。GAS はCBI公式アカウントの持ち物で手元から書き換えられないため、件名側で合わせる
+  const subject = needsHuman
+    ? '【要対応・更新漏れ警告】防災MAP：鉄道の運休の確認が必要です'
+    : busesApplied
+      ? '防災MAP：路線バスの運休を市の発表に合わせて自動更新しました'
       : '防災MAP：市の公共交通の案内が更新されました（地図と一致）'
 
-    const { Resend } = await import('resend')
-    const resend = new Resend(apiKey)
-    const { error } = await resend.emails.send({
-      from: from.includes('<') ? from : `CBI <${from}>`,
-      to,
-      subject,
-      html: `<p>${lines.join('</p><p>')}</p>`,
-    })
-    return error ? `send failed: ${error.message}` : 'sent'
-  } catch (error) {
-    return `send failed: ${error instanceof Error ? error.message : String(error)}`
-  }
+  const { Resend } = await import('resend')
+  const resend = new Resend(apiKey)
+  const { error } = await resend.emails.send({
+    from: from.includes('<') ? from : `CBI <${from}>`,
+    to,
+    subject,
+    html: `<p>${lines.join('</p><p>')}</p>`,
+  })
+  return error ? `send failed: ${error.message}` : 'sent'
 }
