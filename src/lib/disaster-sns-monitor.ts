@@ -49,8 +49,10 @@ type MonitorCredentials = Awaited<ReturnType<typeof loadSnsCredentials>> & {
 // STRONG: 単独で印西市内と判断してよい固有性の高い地名
 // WEAK  : 「印西」「千葉ニュータウン」等の併記があるときだけ場所語として扱う
 const LOCATION_CORE = /印西|千葉ニュータウン|千葉NT|印旛|本埜|北総線/
-const LOCATION_STRONG = /つくりや台|吉高|多々羅田|宗甫|小林北|小林大門下|小林浅間|岩戸|師戸|平賀|平賀学園台|戸神台|木下|木下南|木下東|木刈|松虫|武西学園台|浦幡新田|浦部|浦部村新田|牧の原|牧の木戸|発作|結縁寺|若萩|草深|萩原|西の原|鎌苅|高花|高西新田|鹿黒|鹿黒南|六軒/
-const LOCATION_WEAK = /中央北|中央南|亀成|内野|別所|原|原山|吉田|和泉|大塚|大廻|大森|小倉|小倉台|小林|山田|平岡|戸神|東の原|松崎|松崎台|武西|泉|泉野|浅間前|瀬戸|牧の台|白幡|相嶋|竹袋|美瀬|舞姫|船尾|造谷/
+const LOCATION_STRONG = /つくりや台|吉高|多々羅田|宗甫|小林北|小林大門下|小林浅間|岩戸|師戸|平賀|平賀学園台|戸神台|木下|木下南|木下東|木刈|松虫|武西学園台|浦幡新田|浦部|浦部村新田|牧の原|牧の木戸|結縁寺|若萩|草深|萩原|西の原|鎌苅|高花|高西新田|鹿黒|鹿黒南|六軒/
+// 「発作」は印西市発作（ほっさく）だが、「良性発作性頭位めまい症」のような医療の投稿に当たったため
+// 2026-09-21 に STRONG から移した（印西・千葉ニュータウン等の併記があるときだけ場所とみなす）
+const LOCATION_WEAK = /発作|中央北|中央南|亀成|内野|別所|原|原山|吉田|和泉|大塚|大廻|大森|小倉|小倉台|小林|山田|平岡|戸神|東の原|松崎|松崎台|武西|泉|泉野|浅間前|瀬戸|牧の台|白幡|相嶋|竹袋|美瀬|舞姫|船尾|造谷/
 
 // 印西市の外だが、市境に近く印西の人がよく通る場所（2026-09-21 事業主判断「境に近い地名だけ足す」）。
 // 市名ごと（成田・白井・八千代）で拾うと空港など無関係な投稿が大量に混ざるので、場所を絞っている。
@@ -151,7 +153,18 @@ export function priorityLabelOf(item: MonitorItem): string {
   return ''
 }
 
+// 候補に入れないアカウント（2026-09-21 事業主指示「除外できるものは除外して」）。
+// その日の候補110件のうち95件がこの4つだった。警報の自動配信は公式発表の欄に気象庁から直接入るので重複、
+// communitybankinzai は CBI 自身の告知・警報の自動投稿。ハンドルは小文字で書く
+const EXCLUDED_ACCOUNTS = new Set(['ewrs.jp', 'anhsjapan.bsky.social', 'kishou.f5.si', 'communitybankinzai'])
+
+function isExcludedAccount(item: MonitorItem): boolean {
+  const handle = (item.username || usernameFromPermalink(item.permalink)).toLowerCase().replace(/^@/, '')
+  return Boolean(handle) && EXCLUDED_ACCOUNTS.has(handle)
+}
+
 function matchesScope(item: MonitorItem): boolean {
+  if (isExcludedAccount(item)) return false
   const searchable = `${item.text}\n${item.commentsText}\n${item.locationName}`
   return (hasLocationSignal(searchable) || hasLocationSignal(item.query))
     && (DISASTER_SIGNAL.test(searchable) || DISASTER_SIGNAL.test(item.query))
