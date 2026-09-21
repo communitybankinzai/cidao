@@ -1,8 +1,8 @@
 // 手賀沼の水位（千葉県 水防情報「水位グラフ:手賀沼」）を読み取り、最新値と警戒段階を返す。
 //
 // 千葉県のページは http のみ・Shift_JIS の HTML で、閲覧者のブラウザ（https の防災MAP）からは直接読めない。
-// ここで受けて 10 分キャッシュする。**定期巡回はしない**（MAP が開かれたときだけ取りにいく）ので、
-// 閲覧者が何人でも県への取得は 10 分に 1 回まで＝1日最大 144 回。
+// ここで受けて 5 分キャッシュする（2026-09-21 夜に印旛沼の急な増水を受けて10分→5分）。**定期巡回はしない**（MAP が開かれたときだけ取りにいく）ので、
+// 閲覧者が何人でも県への取得は観測所ごとに 5 分に 1 回まで＝1日最大 288 回（県の観測値は10分ごと）。
 //
 // 利根川（国の観測所）の水位はここで取得しない。国の「川の防災情報」は利用規約で
 // 「定期的・定常的なデータ収集は控え、データ配信（有償）を使う」よう求めており、
@@ -15,7 +15,7 @@
 // ⚠ 県の利用条件は未確認（2026-09-21 時点）。問い合わせ中。停止の要請があれば直ちに止めること。
 import { NextResponse } from 'next/server'
 
-const CACHE_SECONDS = 600
+const CACHE_SECONDS = 300
 const pageUrl = (no: number) => `http://suibo.bousai.pref.chiba.lg.jp/bousaip/river/graph_${no}_0.html`
 
 // 印旛沼には「はんらん危険水位」が無い（県のページも「---」）。計画高水位 4.25m の
@@ -234,6 +234,6 @@ export async function GET(request: Request) {
       floodSource: { name: '気象庁 指定河川洪水予報（国土交通省と気象庁の共同発表）', url: JMA_FEED_URL },
       note: `千葉県の観測値をCBIが読み取って表示しています。0.00と欠測は除いています。印旛沼ははんらん危険水位が無いため、計画高水位の${PLAN_HIGH_MARGIN_M}m手前から「危険」としています（CBIの目安）。避難の判断は市の避難情報に従ってください。`,
     },
-    { headers: { ...corsHeaders(request), 'Cache-Control': `public, max-age=300, s-maxage=${CACHE_SECONDS}` } },
+    { headers: { ...corsHeaders(request), 'Cache-Control': `public, max-age=60, s-maxage=${CACHE_SECONDS}` } },
   )
 }
