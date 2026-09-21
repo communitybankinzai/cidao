@@ -16,7 +16,7 @@ const KEYWORD = /(緊急安全確保|避難指示|高齢者等避難)/
 const CANCELLED = /(緊急安全確保|避難指示|高齢者等避難)[^。\n]{0,20}?解除/g
 
 // 防災速報の日時は「2026/09/21 14:30:01」（日本時間・タイムゾーン表記なし）
-function parsePublishedAt(value: string) {
+export function parsePublishedAt(value: string) {
   const m = value.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/)
   if (!m) return NaN
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 9, +m[5], +(m[6] ?? 0))

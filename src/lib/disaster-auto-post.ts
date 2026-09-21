@@ -17,6 +17,8 @@
 import { createHash, randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadSnsCredentials, postToMedium } from '@/lib/sns-dispatch'
+import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
+import { detectEvacAlerts, parsePublishedAt } from '@/lib/inzai-evac-alert'
 import type { SnsMedium } from '@/lib/sns-template'
 
 const MAP_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/'
@@ -365,6 +367,26 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   })
 
   const signals = extractSignals(items)
+  // 避難指示などは解除されるまで続く。直近3時間の放送だけで数えると、発令中でもレベルが下がって見える
+  // （2026-09-21 22:40 に、18:55 の避難指示が発令中なのに「下がりました」と投稿した）。
+  // 地図の警告帯と同じ判定（解除の放送か、発表から24時間まで続く）で発令中のものを根拠に足す
+  let evacChecked = true
+  try {
+    const { alerts } = detectEvacAlerts(await fetchOfficialUpdates(), Date.now())
+    for (const a of alerts) {
+      const at = parsePublishedAt(a.publishedAt)
+      signals.push({
+        level: a.level,
+        title: a.title,
+        body: a.message,
+        source: '印西市 防災行政無線（発令中）',
+        occurredAt: Number.isFinite(at) ? new Date(at).toISOString() : new Date().toISOString(),
+      })
+    }
+    signals.sort((a, b) => b.level - a.level || b.occurredAt.localeCompare(a.occurredAt))
+  } catch {
+    evacChecked = false
+  }
   const level = signals.length ? signals[0].level : 0
   const state = await readSetting<AutoPostState>(supabase, 'disaster_auto_post_state', {
     level: 0, hash: '', updatedAt: new Date(0).toISOString(),
@@ -385,6 +407,10 @@ export async function runAutoPost(supabase: SupabaseClient): Promise<AutoPostOut
   }
 
   // 下がった（解除を確定した）とき：自動投稿レベル以上から下がった場合だけ知らせる
+  // 避難情報を確かめられなかったときは、誤って「下がりました」と出さないよう見送る（状態も変えない）
+  if (decision.action === 'cancel' && !evacChecked) {
+    return { ...out, action: 'skipped', reason: 'evac_check_failed' }
+  }
   if (decision.action === 'cancel') {
     await saveState(decision.state)
     const previous = decision.previousLevel
