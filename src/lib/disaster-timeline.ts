@@ -8,6 +8,12 @@ import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
 import { handleCityTransitChange } from '@/lib/disaster-rail-watch'
+import {
+  isRoadClosureKind,
+  loadExistingClosures,
+  scanRoadClosures,
+  syncRoadClosures,
+} from '@/lib/disaster-road-closures'
 
 export type SourceTrust = 'official' | 'semi-official' | 'unverified'
 export type ChangeType = 'new' | 'update' | 'cancel'
@@ -50,6 +56,10 @@ export type SourceRunResult = {
   updated: number
   unchanged: number
   error?: string
+  /** 通行止め（road-closure-*）で今回解除した件数 */
+  cleared?: number
+  /** 間隔を空けるため今回は読まなかった */
+  skipped?: boolean
 }
 
 export type TimelineRunResult = {
@@ -989,6 +999,39 @@ const cityPageWatch: SourceParser = async (source) => {
   }]
 }
 
+// ---------------------------------------------------------------------------
+// road-closure-*: 通行止め（役所の発表）→ disaster-road-closures.ts
+// ---------------------------------------------------------------------------
+
+const roadClosurePreview: SourceParser = async (source, context) => {
+  const existing = await loadExistingClosures(context.supabase, source.id)
+  const scan = await scanRoadClosures(source, existing)
+  return scan.active.map((item) => ({
+    externalKey: `closure:${item.key}`,
+    occurredAt: item.publishedAt ?? new Date().toISOString(),
+    title: `🚧 ${item.road || '道路'}${item.place ? `（${item.place}）` : ''}${item.inArea ? '' : '【周辺外・地図に出さない】'}`,
+    body: [item.reason && `理由: ${item.reason}`, item.municipality && `市町村: ${item.municipality}`, `役所の題名: ${item.sourceTitle}`, ...scan.notes]
+      .filter(Boolean).join('\n'),
+    url: item.url,
+    areaTag: item.municipality || null,
+    changeType: 'new' as const,
+    priority: 1,
+    raw: { cleared: scan.cleared },
+  }))
+}
+
+// 役所のサイトに負担をかけないよう、通行止めの情報源は前回から minIntervalMinutes（既定50分）空ける。
+// 巡回の last_fetched_at は成否に関わらず毎回更新されるので、x-timeline と同じく app_settings に置く
+async function roadClosureThrottled(supabase: SupabaseClient, source: InfoSource) {
+  const key = `road_closure_last_fetch:${source.id}`
+  const minMs = Math.max(Number(configString(source, 'minIntervalMinutes', '50')) || 50, 5) * 60 * 1000
+  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
+  const last = Date.parse(String((data?.value as { at?: string } | undefined)?.at ?? ''))
+  if (Number.isFinite(last) && Date.now() - last < minMs) return true
+  await supabase.from('app_settings').upsert({ key, value: { at: new Date().toISOString() } })
+  return false
+}
+
 const PARSERS: Record<string, SourceParser> = {
   'city-category-html': cityCategoryHtml,
   'city-page-watch': cityPageWatch,
@@ -1003,6 +1046,11 @@ const PARSERS: Record<string, SourceParser> = {
   'jma-xml-feed': jmaXmlFeed,
   'city-mail': cityMail,
   manual,
+  // 通行止め（役所の発表）。巡回では下の runDisasterTimeline が別の道（disaster_road_closures）で保存する。
+  // ここは管理画面の「テスト取得」用：DB には書かず、いま通行止めと読めた件を一覧で返す
+  'road-closure-kokudo': roadClosurePreview,
+  'road-closure-pref': roadClosurePreview,
+  'road-closure-inzai': roadClosurePreview,
 }
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
@@ -1018,6 +1066,9 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'chiba-hinan-list', label: '千葉県 避難情報一覧（市町村の開設・閉鎖）', help: 'URLは空でよい（https://www.bousai.pref.chiba.lg.jp/）。config: municipality（既定 印西市）' },
   { id: 'jma-xml-feed', label: '気象庁防災情報XML（記録的短時間大雨・洪水予報など）', help: 'URLは空でよい。config: feeds（既定 extra）、titles（拾う種類）、keywords（既定 千葉）、hours（既定 24）' },
   { id: 'city-mail', label: '印西市 防災メール（CBI公式Gmail）', help: 'URLは空でよい。config: query（Gmail検索式・既定は件名で広めに拾う。**最初のメールが届いたら差出人で絞ること**）、hours（既定48）。Vercel の GAS_MAIL_WEBAPP_URL / GAS_MAIL_PASSWORD が未設定だと何も取り込まない' },
+  { id: 'road-closure-kokudo', label: '通行止め：千葉国道事務所 記者発表', help: 'URL は https://www.ktr.mlit.go.jp/kisha/chiba_index.html 。同じ「国道＋区間」の最後の発表が通行止めなら通行止め中、解除の発表で解除。config: routes（地図に出す国道番号・カンマ区切り・既定 16,6）、minIntervalMinutes（既定50）。保存先は disaster_road_closures（タイムラインには積まない）' },
+  { id: 'road-closure-pref', label: '通行止め：千葉県 県管理道路通行規制', help: 'URL は https://www.pref.chiba.lg.jp/cate/baa/lifeline/kendou/index.html （出典リンク用）。一覧の本体 pl_6302/6301（通行止め）と pl_7310/7929（解除）を読む。config: areas（周辺とみなす市町村名・カンマ区切り）、closureLists・clearLists（一覧の本体URL・通常は空）、minIntervalMinutes' },
+  { id: 'road-closure-inzai', label: '通行止め：印西市（新着の通行止め記事）', help: 'URL は https://www.city.inzai.lg.jp/ 。新着の通行止め記事と「道路の通行止めの状況」ページを読み、記事の題名が「解除」になる・記事が消える・まとめページから消える で解除。config: statusUrls（まとめページ・通常は空で新着から自動）、minIntervalMinutes' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
@@ -1153,6 +1204,24 @@ export async function runDisasterTimeline(
     const source = toInfoSource(row as Record<string, unknown>)
     const fetchedAt = new Date().toISOString()
     try {
+      // 通行止め（役所の発表）はタイムラインに積まず、disaster_road_closures へ反映する
+      if (isRoadClosureKind(source.kind)) {
+        if (await roadClosureThrottled(supabase, source)) {
+          results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: true })
+          continue
+        }
+        const existing = await loadExistingClosures(supabase, source.id)
+        const scan = await scanRoadClosures(source, existing)
+        const counts = await syncRoadClosures(supabase, source.id, scan, existing)
+        results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared })
+        await supabase.from('disaster_info_sources').update({
+          last_fetched_at: fetchedAt,
+          last_status: 'success',
+          last_error: null,
+          updated_at: fetchedAt,
+        }).eq('id', source.id)
+        continue
+      }
       const parser = PARSERS[source.kind]
       if (!parser) throw new Error(`未対応の種別です: ${source.kind}`)
       const drafts = await parser(source, { supabase })
