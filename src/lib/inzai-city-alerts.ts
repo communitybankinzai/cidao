@@ -74,7 +74,10 @@ export async function fetchOfficialUpdates(options: {
   const baseUrl = options.baseUrl || CITY_ALERT_BASE_URL
   const sourceUrl = options.sourceUrl || CITY_PORTAL_URL
 
-  const indexResponse = await fetch(indexUrl, {
+  // 市のサーバーは同じアドレスへの応答を使い回し、新しい放送が一覧に出てこないことがある（2026-09-22 20:35 の放送が
+  // 20:37 時点でも一覧に無く、?t= を付けると出た）。毎回、時刻の引数を付けて読む
+  const bust = `${indexUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+  const indexResponse = await fetch(`${indexUrl}${bust}`, {
     headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
     cache: 'no-store',
   })
@@ -86,7 +89,7 @@ export async function fetchOfficialUpdates(options: {
   if (filenames.length === 0) return []
 
   const xmlDocuments = await Promise.all(filenames.map(async (filename) => {
-    const response = await fetch(`${baseUrl}${filename}`, {
+    const response = await fetch(`${baseUrl}${filename}${bust}`, {
       headers: { Accept: 'application/xml,text/xml', 'User-Agent': USER_AGENT },
       cache: 'no-store',
     })
