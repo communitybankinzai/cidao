@@ -106,7 +106,9 @@ const TOP = 'https://www.city.inzai.lg.jp/'
 const topPage = (items: Array<[string, string]>) => `<article class="new"><h2>新着情報</h2><div class="new_lower"><ul>${
   items.map(([href, title]) => `<li><div class="new_lst"><div class="date">9月21日</div><div class="list"><a href="${href}">${title}</a></div></div></li>`).join('')
 }</ul></div></article>`
-const detail = (h2: string) => `<div id="mol_contents" class="mol_contents"><h2>${h2}</h2><div class="mol_textblock"><p>本文</p></div></div>`
+const detail = (h2: string, pdf = '') => `<div id="mol_contents" class="mol_contents"><h2>${h2}</h2><div class="mol_textblock"><p>本文</p></div>${
+  pdf ? `<div class="mol_attachfileblock"><ul><li><a href="${pdf}"><img src="images/pdf.gif"> (通行止め区間：itizu.pdf)</a></li></ul><dl class="mol_attachfileblock_adobe"><dt><a href="http://www.adobe.com/jp/">Adobe</a></dt></dl></div>` : ''
+}</div>`
 const statusPage = (links: Array<[string, string]>) => `<div class="mol_contents"><h2>台風25号の影響による、道路の通行止めの状況</h2><div class="mol_textblock"><ul>${
   links.map(([href, t]) => `<li><a href="${href}" target="_blank">${t}<span class="newwindow">（別ウインドウで開く）</span></a></li>`).join('')
 }</ul></div></div>`
@@ -133,13 +135,14 @@ describe('印西市', () => {
         ['./0000022576.html', '道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。（令和8年9月21日更新）'],
         ['./0000022503.html', '大雨に係る避難所情報'],
       ]),
-      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。', './cmsfiles/contents/0000022/22576/itizu.pdf'),
       [D2]: detail('中平橋付近　道路冠水による通行止めについて'),
     })
     const scan = await scanInzai(source('road-closure-inzai', TOP, { statusUrls: STATUS }), [])
     // まとめページは 404 → 読めないので解除に使わない。新着の1件だけ
     expect(scan.active).toHaveLength(1)
     expect(scan.active[0]).toMatchObject({ road: '市道師戸・江川線', place: '一部区間', reason: '道路冠水', publishedAt: '2026-09-21T00:00:00+09:00' })
+    expect(scan.active[0].raw?.mapUrl).toBe('https://www.city.inzai.lg.jp/cmsfiles/contents/0000022/22576/itizu.pdf')
   })
 
   const onStatusRow = (url: string): ExistingClosure => ({

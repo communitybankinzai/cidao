@@ -386,6 +386,18 @@ export function parseInzaiDetailTitle(html: string) {
   return clean(body.querySelector('h2')?.innerHTML ?? root.querySelector('h1')?.innerHTML ?? '')
 }
 
+/** 記事に添付された位置図（PDF）。通行止め区間を赤線で描いた市の地図で、地図に線を引けない件の場所の手がかりになる */
+export function parseInzaiMapPdf(html: string, baseUrl: string) {
+  const root = parseHtml(html)
+  const body = root.querySelector('.mol_contents')
+  if (!body) return null
+  for (const a of body.querySelectorAll('.mol_attachfileblock a, a')) {
+    const href = a.getAttribute('href') ?? ''
+    if (/\.pdf(?:$|\?)/i.test(href)) return resolve(href, baseUrl)
+  }
+  return null
+}
+
 /** 「市道師戸・江川線の一部区間」や「道路冠水により、市道師戸・江川線の一部区間を通行止めに…」から路線と場所 */
 export function inzaiRoadOf(text: string) {
   const s = text.normalize('NFKC').replace(/\s+/g, '')
@@ -477,7 +489,7 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       url,
       sourceTitle: title,
       publishedAt: parseJpDate(listTitle) ?? parseJpDate(title),
-      raw: { statusUrl: statusUrl ?? null, onStatus: Boolean(onStatus || prevRaw.onStatus) },
+      raw: { statusUrl: statusUrl ?? null, onStatus: Boolean(onStatus || prevRaw.onStatus), mapUrl: parseInzaiMapPdf(page.text, url) },
     })
   }
   return { active, cleared, notes }

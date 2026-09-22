@@ -61,6 +61,7 @@ type Row = {
   cleared_at: string | null
   clear_reason: string | null
   path: unknown
+  raw: { mapUrl?: unknown } | null
 }
 
 export async function GET(request: Request) {
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
       .in('kind', ROAD_CLOSURE_KINDS as unknown as string[]),
     supabase
       .from('disaster_road_closures')
-      .select('id, source_id, road, place, reason, municipality, url, published_at, first_seen_at, last_seen_at, cleared_at, clear_reason, path')
+      .select('id, source_id, road, place, reason, municipality, url, published_at, first_seen_at, last_seen_at, cleared_at, clear_reason, path, raw')
       .eq('in_area', true)
       .or(`cleared_at.is.null,cleared_at.gte.${since}`)
       .order('published_at', { ascending: false, nullsFirst: false })
@@ -98,6 +99,8 @@ export async function GET(request: Request) {
       reason: row.reason,
       municipality: row.municipality,
       url: row.url,
+      // 役所が付けた位置図（印西市の記事の PDF など）。線の無い件の場所の手がかり
+      mapUrl: typeof row.raw?.mapUrl === 'string' && /^https:\/\//.test(row.raw.mapUrl) ? row.raw.mapUrl : null,
       publishedAt: row.published_at,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
