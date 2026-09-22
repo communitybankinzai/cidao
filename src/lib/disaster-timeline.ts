@@ -1059,6 +1059,7 @@ const PARSERS: Record<string, SourceParser> = {
   'road-closure-inzai': roadClosurePreview,
   'road-closure-inba': roadClosurePreview,
   'road-closure-mymap': roadClosurePreview,
+  'road-closure-sugumail': roadClosurePreview,
 }
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
@@ -1079,6 +1080,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'road-closure-inzai', label: '通行止め：印西市（新着の通行止め記事）', help: 'URL は https://www.city.inzai.lg.jp/ 。新着の通行止め記事と「道路の通行止めの状況」ページを読み、記事の題名が「解除」になる・記事が消える・まとめページから消える で解除。config: statusUrls（まとめページ・通常は空で新着から自動）、minIntervalMinutes' },
   { id: 'road-closure-inba', label: '通行止め：千葉県 印旛土木事務所（新着の通行規制情報）', help: 'URL は https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html 。新着の「通行規制情報」記事の「規制内容／規制区間／規制期間」を1規制＝1件で読む。期間が始まるまでは出さず、期間が過ぎる・記事から消える・記事が消える で解除。config: areas、pageUrls（新着に無い記事を足すとき）、minIntervalMinutes' },
   { id: 'road-closure-mymap', label: '通行止め：市の Google マイマップ（佐倉市など）', help: 'URL は地図が埋め込まれた市の号外ページ。埋め込みの mid を拾い KML を読んで、1 Placemark＝1件。前回あって今回の KML に無ければ解除。config: municipality（例 佐倉市）、indexPages（「通行止め」の号外を探す一覧ページ・カンマ区切り）、pages（号外ページを足すとき）、mid（号外から拾えないときの予備）、minIntervalMinutes' },
+  { id: 'road-closure-sugumail', label: '通行止め：自治体メール配信のバックナンバー（栄町さかえ情報メールなど）', help: 'URL はバックナンバー（例 https://plus.sugumail.com/usr/sakae/doc）。題名に「通行止」がある配信を道路名ごとに1件、同じ道路名の「解除」の配信で解除。押し出されても残し、maxAgeDays（既定14）で外す。config: municipality（例 栄町）、areas、maxAgeDays、minIntervalMinutes。解除と同時に伏せたい市民記録があれば、その行の raw.linkedPassedRoadIds に id を入れる' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
@@ -1269,7 +1271,7 @@ export async function runRoadClosures(supabase: SupabaseClient): Promise<SourceR
     .from('disaster_info_sources')
     .select('id, kind, label, url, config, trust, enabled')
     .eq('enabled', true)
-    .in('kind', ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap'])
+    .in('kind', ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail'])
   if (error) throw error
   return Promise.all((rows ?? []).map(async (row): Promise<SourceRunResult> => {
     const source = toInfoSource(row as Record<string, unknown>)

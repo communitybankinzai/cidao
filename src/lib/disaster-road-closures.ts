@@ -15,7 +15,7 @@
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap'] as const
+export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail'] as const
 export type RoadClosureKind = (typeof ROAD_CLOSURE_KINDS)[number]
 
 export function isRoadClosureKind(kind: string): kind is RoadClosureKind {
@@ -740,6 +740,82 @@ export async function scanMyMap(source: ClosureSource, existing: ExistingClosure
 }
 
 // ---------------------------------------------------------------------------
+// 自治体のメール配信のバックナンバー（栄町「さかえ情報メール」 https://plus.sugumail.com/usr/sakae/doc など）
+// ---------------------------------------------------------------------------
+// 1配信＝article.panel（日時 .small・題名 h3・本文 p・個別ページ data-href）。新しい順に並ぶ（2026-09-22 事業主指示で追加）。
+// 題名に「通行止」があり「解除」が無ければ通行止め、同じ道路名で「解除」の配信が後から出たら解除（announced）。
+// バックナンバーから押し出されただけでは解除しない。解除の配信が無いまま maxAgeDays（既定14日）たったら外す。
+
+export type MailNotice = { date: string | null; title: string; body: string; url: string | null }
+
+export function parseSugumail(html: string, baseUrl: string): MailNotice[] {
+  const root = parseHtml(html)
+  return root.querySelectorAll('article.panel').map((a) => {
+    const href = a.getAttribute('data-href') ?? a.querySelector('a')?.getAttribute('href') ?? ''
+    const dateText = (a.querySelector('.small')?.text ?? '').normalize('NFKC')
+    const m = dateText.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/)
+    const date = m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}T${(m[4] ?? '0').padStart(2, '0')}:${m[5] ?? '00'}:00+09:00` : null
+    return {
+      date,
+      title: clean(a.querySelector('h3')?.innerHTML ?? ''),
+      body: clean((a.querySelector('p')?.innerHTML ?? '').replace(/<br\s*\/?>/gi, ' ')),
+      url: href ? resolve(href, baseUrl) : null,
+    }
+  }).filter((n) => n.title)
+}
+
+/** 「県道鎌ヶ谷本埜線バイパス（全線）の車両通行止めのお知らせ」→ 道路名と区間 */
+export function mailRoadOf(title: string) {
+  const s = title.normalize('NFKC')
+  const road = s.match(/((?:主要地方道|一般県道|県道|国道|町道|市道)[^\s（(のをに、]*?(?:線|号)(?:バイパス|BP)?)/)?.[1] ?? ''
+  const section = road ? (s.slice(s.indexOf(road) + road.length).match(/^[（(]([^）)]+)[）)]/)?.[1] ?? '') : ''
+  return { road: road.replace(/^一般/, ''), section, key: normalizeKey(road.replace(/^(主要地方道|一般県道)/, '県道')) }
+}
+
+export async function scanSugumail(source: ClosureSource, existing: ExistingClosure[], now = new Date()): Promise<ClosureScan> {
+  const url = source.url
+  if (!url) throw new Error('URL（バックナンバーのページ）が必要です')
+  const notices = parseSugumail(await fetchRequired(url), url)
+  if (!notices.length) throw new Error('配信のバックナンバーが読めません（ページの形が変わった可能性）')
+  const municipality = configString(source, 'municipality', '')
+  const areas = configList(source, 'areas', DEFAULT_AREAS)
+  const maxAgeMs = Math.max(Number(configString(source, 'maxAgeDays', '14')) || 14, 1) * 86400000
+
+  const state = new Map<string, ClosureDraft>()
+  const cleared: Record<string, ClearReason> = {}
+  for (const n of [...notices].reverse()) {          // 古い順にたどる
+    if (!/通行止/.test(n.title)) continue
+    const info = mailRoadOf(n.title)
+    if (!info.road) continue
+    if (/解除/.test(n.title)) { state.delete(info.key); cleared[info.key] = 'announced'; continue }
+    delete cleared[info.key]
+    state.set(info.key, {
+      key: info.key,
+      road: info.road,
+      place: info.section,
+      reason: reasonOf(`${n.title} ${n.body}`),
+      municipality,
+      inArea: municipality ? areas.some((a) => municipality.includes(a)) : true,
+      url: n.url ?? url,
+      sourceTitle: n.title,
+      publishedAt: n.date,
+      raw: { noticeUrl: n.url },
+    })
+  }
+  const active = [...state.values()]
+  // 押し出された通行止めは前回のまま残す。ただし発表から maxAgeDays を過ぎたら外す
+  for (const row of existing) {
+    if (row.cleared_at || state.has(row.closure_key) || cleared[row.closure_key]) continue
+    const raw = (row.raw ?? {}) as Record<string, unknown>
+    const published = Date.parse(String(raw.publishedAt ?? ''))
+    if (Number.isFinite(published) && now.getTime() - published > maxAgeMs) continue
+    active.push({ ...keepAsIs(row, row.url ?? url), municipality })
+  }
+  for (const item of active) if (item.raw && !item.raw.keptAsIs) item.raw.publishedAt = item.publishedAt
+  return { active, cleared, notes: [`配信 ${notices.length}件を確認`] }
+}
+
+// ---------------------------------------------------------------------------
 // 共通：読む・保存する
 // ---------------------------------------------------------------------------
 
@@ -759,6 +835,7 @@ export async function scanRoadClosures(source: ClosureSource, existing: Existing
   if (source.kind === 'road-closure-inzai') return scanInzai(source, existing)
   if (source.kind === 'road-closure-inba') return scanInba(source, existing)
   if (source.kind === 'road-closure-mymap') return scanMyMap(source, existing)
+  if (source.kind === 'road-closure-sugumail') return scanSugumail(source, existing)
   throw new Error(`未対応の種別です: ${source.kind}`)
 }
 
@@ -819,6 +896,13 @@ export async function syncRoadClosures(supabase: SupabaseClient, sourceId: strin
 
   for (const row of existing) {
     if (row.cleared_at || seen.has(row.closure_key)) continue
+    // 運営がこの通行止めを市民記録（通れない道）として代理登録していたら、解除と同時に地図から伏せる。
+    // raw.linkedPassedRoadIds に id を入れておく（2026-09-22 栄町の県道鎌ヶ谷本埜線バイパスで導入）
+    const linked = ((row.raw ?? {}) as { linkedPassedRoadIds?: unknown }).linkedPassedRoadIds
+    if (Array.isArray(linked) && linked.length) {
+      const ids = linked.filter((v): v is string => typeof v === 'string')
+      if (ids.length) await supabase.from('disaster_passed_roads').update({ hidden: true }).in('id', ids)
+    }
     const { error } = await supabase
       .from('disaster_road_closures')
       .update({ cleared_at: now, clear_reason: scan.cleared[row.closure_key] ?? 'disappeared', updated_at: now })

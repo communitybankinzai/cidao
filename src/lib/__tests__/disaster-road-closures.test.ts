@@ -307,3 +307,35 @@ describe('市の Google マイマップ', () => {
     await expect(scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), prev)).rejects.toThrow('KML')
   })
 })
+
+// --- 自治体メール配信のバックナンバー（栄町） ----------------------------------------
+
+const SAKAE = 'https://plus.sugumail.com/usr/sakae/doc'
+const notice = (id: number, date: string, title: string, body = '') =>
+  `<article class="panel panel-body" data-href="${SAKAE}/${id}"><dl><dt><span class="small">${date}</span></dt><dd><span class="label">行政情報</span></dd></dl><h3 class="bd-bottom">${title}</h3><p>${body}</p></article>`
+const backnumber = (items: string[]) => `<section class="back-number">${items.join('')}</section>`
+const ROAD = '県道鎌ヶ谷本埜線バイパス（全線）の車両通行止めのお知らせ'
+
+describe('自治体メール配信のバックナンバー', () => {
+  it('通行止めの配信を道路名ごとに1件にし、後から出た解除の配信で外す', async () => {
+    const { scanSugumail } = await import('@/lib/disaster-road-closures')
+    mockSite({ [SAKAE]: backnumber([notice(3, '2026/9/22 14:55', ROAD, '道路冠水のため車両通行止めを実施しています。')]) })
+    let scan = await scanSugumail(source('road-closure-sugumail', SAKAE, { municipality: '栄町' }), [], new Date('2026-09-22T15:00:00+09:00'))
+    expect(scan.active).toHaveLength(1)
+    expect(scan.active[0]).toMatchObject({ road: '県道鎌ヶ谷本埜線バイパス', place: '全線', reason: '道路冠水', municipality: '栄町', publishedAt: '2026-09-22T14:55:00+09:00', url: `${SAKAE}/3` })
+    mockSite({ [SAKAE]: backnumber([notice(4, '2026/9/23 9:00', '県道鎌ヶ谷本埜線バイパスの車両通行止め解除のお知らせ'), notice(3, '2026/9/22 14:55', ROAD)]) })
+    scan = await scanSugumail(source('road-closure-sugumail', SAKAE, { municipality: '栄町' }), [], new Date('2026-09-23T10:00:00+09:00'))
+    expect(scan.active).toHaveLength(0)
+    expect(Object.values(scan.cleared)).toEqual(['announced'])
+  })
+
+  it('押し出されても残し、14日を過ぎたら外す', async () => {
+    const { scanSugumail } = await import('@/lib/disaster-road-closures')
+    const row: ExistingClosure = { closure_key: '県道鎌ヶ谷本埜線バイパス', url: `${SAKAE}/3`, in_area: true, cleared_at: null, clear_reason: null, raw: { publishedAt: '2026-09-22T14:55:00+09:00', road: '県道鎌ヶ谷本埜線バイパス', place: '全線' } }
+    mockSite({ [SAKAE]: backnumber([notice(9, '2026/9/25 8:00', '避難所の閉鎖について')]) })
+    let scan = await scanSugumail(source('road-closure-sugumail', SAKAE, { municipality: '栄町' }), [row], new Date('2026-09-25T09:00:00+09:00'))
+    expect(scan.active.map((a) => a.key)).toEqual(['県道鎌ヶ谷本埜線バイパス'])
+    scan = await scanSugumail(source('road-closure-sugumail', SAKAE, { municipality: '栄町' }), [row], new Date('2026-10-07T09:00:00+09:00'))
+    expect(scan.active).toHaveLength(0)
+  })
+})
