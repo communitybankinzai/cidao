@@ -222,3 +222,51 @@ describe('syncRoadClosures', () => {
     expect(clears).toEqual([['gone', 'disappeared'], ['announced', 'announced']])
   })
 })
+
+// --- 印旛土木事務所 --------------------------------------------------------------
+
+const INBA_NEWS = 'https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html'
+const INBA_PAGE = 'https://www.pref.chiba.lg.jp/cs-inba/kasen/tsuukoukisei050825.html'
+const inbaNews = (rows: Array<[string, string]>) => `<div id="tmp_contents"><h1>新着情報-印旛土木事務所</h1><table class="list_table"><tbody>${
+  rows.map(([href, t]) => `<tr><td class="date">令和8(2026)年7月29日</td><td><a href="${href}">${t}</a>（県土整備部印旛土木事務所）</td></tr>`).join('')
+}</tbody></table></div>`
+const inbaItem = (h4: string, section: string, period: string, content = '全面通行止め（迂回路あり）') =>
+  `<h4>${h4}</h4><ul><li>規制内容：${content}</li><li>規制区間：一般県道八千代印旛栄自転車道線<br> 　&nbsp;${section}</li><li>規制期間：${period}</li><li>規制時期：終日</li></ul>`
+const inbaPage = (title: string, items: string[]) => `<div id="tmp_contents"><h1>${title}│印旛土木事務所</h1><h2>通行規制箇所一覧</h2>${items.join('')}<div class="box_link"><ul><li><a href="/cs-inba/index.html">印旛土木事務所ホームページ</a></li></ul></div></div>`
+
+describe('印旛土木事務所', () => {
+  it('規制期間を読む（実在しない11月31日は月末に丸める）', async () => {
+    const { parsePeriod } = await import('@/lib/disaster-road-closures')
+    expect(parsePeriod('令和8年1月7日から令和8年11月31日')).toEqual({ start: '2026-01-07T00:00:00+09:00', end: '2026-11-30T23:59:59+09:00' })
+    expect(parsePeriod('令和8年11月1日（予定）から令和11年3月31日（予定）').start).toBe('2026-11-01T00:00:00+09:00')
+  })
+
+  it('期間中の通行止めだけを出し、始まっていないもの・終わったものは出さない', async () => {
+    const { scanInba } = await import('@/lib/disaster-road-closures')
+    mockSite({
+      [INBA_NEWS]: inbaNews([['/cs-inba/kasen/tsuukoukisei050825.html', '通行規制情報（自転車道線の通行止め）│印旛土木事務所'], ['/cs-inba/index.html', '印旛土木事務所']]),
+      [INBA_PAGE]: inbaPage('通行規制情報（自転車道線の通行止め）', [
+        inbaItem('(1) 水辺拠点整備', '佐倉市臼井田地先', '令和8年11月1日（予定）から令和11年3月31日（予定）'),
+        inbaItem('(2) 堤防工事', '佐倉市先崎干拓地先', '令和8年1月7日から令和8年11月31日'),
+        inbaItem('(3) 旧工事', '佐倉市臼井地先', '令和8年1月1日から令和8年3月31日'),
+      ]),
+    })
+    const scan = await scanInba(source('road-closure-inba', INBA_NEWS), [], new Date('2026-09-22T12:00:00+09:00'))
+    expect(scan.active).toHaveLength(1)
+    expect(scan.active[0]).toMatchObject({ road: '県道八千代印旛栄自転車道線', place: '佐倉市先崎干拓地先', municipality: '佐倉市', inArea: true, reason: '工事' })
+    expect(Object.values(scan.cleared)).toEqual(['announced'])   // (3) は期間が過ぎた
+  })
+
+  it('新着から落ちても、前回の記事を読み直し、記事から消えていたら解除', async () => {
+    const { scanInba } = await import('@/lib/disaster-road-closures')
+    mockSite({
+      [INBA_NEWS]: inbaNews([['/cs-inba/index.html', '印旛土木事務所']]),
+      [INBA_PAGE]: inbaPage('通行規制情報（自転車道線の通行止め）', []),
+    })
+    const key = `${INBA_PAGE}#佐倉市先崎干拓地先`
+    const existing: ExistingClosure[] = [{ closure_key: key, url: INBA_PAGE, in_area: true, cleared_at: null, clear_reason: null, raw: { pageUrl: INBA_PAGE } }]
+    const scan = await scanInba(source('road-closure-inba', INBA_NEWS), existing, new Date('2026-09-22T12:00:00+09:00'))
+    expect(scan.active).toHaveLength(0)
+    expect(scan.cleared[key]).toBeUndefined()   // 記事は読めた → 同期で disappeared として解除される
+  })
+})

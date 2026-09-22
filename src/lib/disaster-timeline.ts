@@ -1057,6 +1057,7 @@ const PARSERS: Record<string, SourceParser> = {
   'road-closure-kokudo': roadClosurePreview,
   'road-closure-pref': roadClosurePreview,
   'road-closure-inzai': roadClosurePreview,
+  'road-closure-inba': roadClosurePreview,
 }
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
@@ -1075,6 +1076,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'road-closure-kokudo', label: '通行止め：千葉国道事務所 記者発表', help: 'URL は https://www.ktr.mlit.go.jp/kisha/chiba_index.html 。同じ「国道＋区間」の最後の発表が通行止めなら通行止め中、解除の発表で解除。config: routes（地図に出す国道番号・カンマ区切り・既定 16,6）、minIntervalMinutes（既定50）。保存先は disaster_road_closures（タイムラインには積まない）' },
   { id: 'road-closure-pref', label: '通行止め：千葉県 県管理道路通行規制', help: 'URL は https://www.pref.chiba.lg.jp/cate/baa/lifeline/kendou/index.html （出典リンク用）。一覧の本体 pl_6302/6301（通行止め）と pl_7310/7929（解除）を読む。config: areas（周辺とみなす市町村名・カンマ区切り）、closureLists・clearLists（一覧の本体URL・通常は空）、minIntervalMinutes' },
   { id: 'road-closure-inzai', label: '通行止め：印西市（新着の通行止め記事）', help: 'URL は https://www.city.inzai.lg.jp/ 。新着の通行止め記事と「道路の通行止めの状況」ページを読み、記事の題名が「解除」になる・記事が消える・まとめページから消える で解除。config: statusUrls（まとめページ・通常は空で新着から自動）、minIntervalMinutes' },
+  { id: 'road-closure-inba', label: '通行止め：千葉県 印旛土木事務所（新着の通行規制情報）', help: 'URL は https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html 。新着の「通行規制情報」記事の「規制内容／規制区間／規制期間」を1規制＝1件で読む。期間が始まるまでは出さず、期間が過ぎる・記事から消える・記事が消える で解除。config: areas、pageUrls（新着に無い記事を足すとき）、minIntervalMinutes' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 

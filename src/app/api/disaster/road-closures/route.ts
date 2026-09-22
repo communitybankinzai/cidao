@@ -61,7 +61,7 @@ type Row = {
   cleared_at: string | null
   clear_reason: string | null
   path: unknown
-  raw: { mapUrl?: unknown } | null
+  raw: { mapUrl?: unknown; periodEnd?: unknown } | null
 }
 
 export async function GET(request: Request) {
@@ -102,6 +102,8 @@ export async function GET(request: Request) {
       // 役所が付けた位置図（印西市の記事の PDF など）。線の無い件の場所の手がかり
       mapUrl: typeof row.raw?.mapUrl === 'string' && /^https:\/\//.test(row.raw.mapUrl) ? row.raw.mapUrl : null,
       publishedAt: row.published_at,
+      // 役所が示した規制期間の終わり（印旛土木事務所の工事など）。無ければ null＝解除の発表まで
+      periodEnd: typeof row.raw?.periodEnd === 'string' ? row.raw.periodEnd : null,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
       clearedAt: row.cleared_at,

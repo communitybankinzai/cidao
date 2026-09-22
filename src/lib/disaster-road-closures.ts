@@ -15,7 +15,7 @@
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai'] as const
+export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba'] as const
 export type RoadClosureKind = (typeof ROAD_CLOSURE_KINDS)[number]
 
 export function isRoadClosureKind(kind: string): kind is RoadClosureKind {
@@ -512,6 +512,138 @@ function keepAsIs(prev: ExistingClosure, url: string): ClosureDraft {
 }
 
 // ---------------------------------------------------------------------------
+// 千葉県 印旛土木事務所（https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html）
+// ---------------------------------------------------------------------------
+// 管内は印西・白井・佐倉・四街道・八街・酒々井・栄町。県の一覧（pl_6302 など）とは別に、自所の新着へ
+// 「通行規制情報（…）」の記事を載せる（2026-09-22 事業主指示で情報源に追加）。記事の中に規制が
+// 「規制内容／規制区間／規制期間」の箇条書きで並ぶので、1規制＝1件として扱う。
+// 解除：記事の題名に「解除」／記事が消えた（404）／記事から規制が消えた（記事は読めている）／規制期間が過ぎた。
+// 期間が始まっていない規制（「令和8年11月1日（予定）から」など）は始まるまで出さない。
+// 新着は5件ほどしか載らないので、新着から落ちただけでは解除しない（前回までの記事は読み直す）。
+
+const INBA_NEWS = 'https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html'
+const INBA_DETAIL_LIMIT = 8
+
+export type InbaEntry = { heading: string; content: string; section: string; period: string; road: string; place: string; municipality: string }
+
+/** 「令和8年1月7日から令和8年11月31日」→ 開始・終了（JST の日付。実在しない日は月末に丸める） */
+export function parsePeriod(text: string): { start: string | null; end: string | null } {
+  const s = text.normalize('NFKC')
+  const dates = [...s.matchAll(/令和\s*(\d{1,2}|元)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g)].map((m) => {
+    const year = 2018 + (m[1] === '元' ? 1 : Number(m[1]))
+    const month = Number(m[2])
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    const day = Math.min(Number(m[3]), last)
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  })
+  const hasFrom = /から|～|〜/.test(s)
+  return {
+    start: dates[0] ? `${dates[0]}T00:00:00+09:00` : null,
+    end: dates[1] ? `${dates[1]}T23:59:59+09:00` : (!hasFrom && dates[0] ? `${dates[0]}T23:59:59+09:00` : null),
+  }
+}
+
+/** 記事本文から規制を取り出す。本文の枠が無ければ null（読めない＝何も解除しない） */
+export function parseInbaDetail(html: string): { title: string; entries: InbaEntry[] } | null {
+  const root = parseHtml(html)
+  const body = root.querySelector('#tmp_contents') ?? root.querySelector('#tmp_main')
+  if (!body) return null
+  const title = clean(body.querySelector('h1')?.innerHTML ?? '').replace(/[│|｜]\s*印旛土木事務所\s*$/, '')
+  const entries: InbaEntry[] = []
+  let heading = ''
+  for (const node of body.querySelectorAll('h2, h3, h4, ul')) {
+    if (node.tagName !== 'UL') { heading = clean(node.innerHTML); continue }
+    const fields: Record<string, string> = {}
+    for (const li of node.querySelectorAll('li')) {
+      const text = clean(li.innerHTML.replace(/<br\s*\/?>/gi, ' '))
+      const m = text.match(/^(規制内容|規制区間|規制期間)\s*[:：]\s*(.*)$/)
+      if (m) fields[m[1]] = m[2].trim()
+    }
+    if (!fields['規制区間']) continue
+    const section = fields['規制区間'].normalize('NFKC').replace(/\s+/g, ' ').trim()
+    const road = (section.match(/((?:一般|主要地方道)?\s*(?:県道|国道)[^\s]*?(?:線|号))/)?.[1] ?? '').replace(/^一般\s*/, '').replace(/\s+/g, '')
+    const place = section.replace(/^.*?(?:線|号)\s*/, '').trim()
+    entries.push({
+      heading,
+      content: fields['規制内容'] ?? '',
+      section,
+      period: fields['規制期間'] ?? '',
+      road,
+      place,
+      municipality: place.match(/^(.+?[市町村])/)?.[1] ?? '',
+    })
+  }
+  return { title, entries }
+}
+
+export function parseInbaNews(html: string, baseUrl = INBA_NEWS) {
+  const root = parseHtml(html)
+  const rows = root.querySelectorAll('table.list_table tr')
+  return rows.map((tr) => {
+    const a = tr.querySelector('a')
+    const url = a ? resolve(a.getAttribute('href') ?? '', baseUrl) : null
+    return { title: clean(a?.innerHTML ?? ''), url, date: parseJpDate(tr.querySelector('.date')?.text ?? '') }
+  }).filter((row): row is { title: string; url: string; date: string | null } => Boolean(row.url && row.title))
+}
+
+export async function scanInba(source: ClosureSource, existing: ExistingClosure[], now = new Date()): Promise<ClosureScan> {
+  const newsUrl = source.url || INBA_NEWS
+  const newsPage = await fetchPage(newsUrl)
+  if (!newsPage.ok) throw new Error(`HTTP ${newsPage.status}: ${newsUrl}`)
+  const news = parseInbaNews(newsPage.text, newsUrl)
+  if (!news.length) throw new Error('印旛土木事務所の新着が読めません（ページの形が変わった可能性）')
+  const areas = configList(source, 'areas', DEFAULT_AREAS)
+
+  // 読む記事：新着の通行規制・通行止めの記事＋config の指定＋前回まで通行止め中だった記事
+  const pages = new Set<string>(configList(source, 'pageUrls', ''))
+  for (const item of news) if (/通行規制|通行止/.test(item.title)) pages.add(item.url)
+  const activeRows = existing.filter((row) => !row.cleared_at)
+  for (const row of activeRows) {
+    const pageUrl = (row.raw as { pageUrl?: string } | null)?.pageUrl
+    if (pageUrl) pages.add(pageUrl)
+  }
+
+  const notes = [`新着 ${news.length}件・記事 ${pages.size}件を確認`]
+  const active: ClosureDraft[] = []
+  const cleared: Record<string, ClearReason> = {}
+  const rowsOfPage = (pageUrl: string) => activeRows.filter((row) => (row.raw as { pageUrl?: string } | null)?.pageUrl === pageUrl)
+  let fetched = 0
+  for (const pageUrl of pages) {
+    const keep = () => { for (const row of rowsOfPage(pageUrl)) active.push({ ...keepAsIs(row, row.url ?? pageUrl), municipality: String((row.raw as Record<string, unknown> | null)?.municipality ?? '') }) }
+    if (fetched >= INBA_DETAIL_LIMIT) { keep(); continue }
+    fetched += 1
+    const page = await fetchPage(pageUrl)
+    if (!page.ok) {
+      if (page.status === 404 || page.status === 410) { for (const row of rowsOfPage(pageUrl)) cleared[row.closure_key] = 'disappeared'; continue }
+      keep(); notes.push(`記事を読めませんでした（${page.status}）: ${pageUrl}`); continue
+    }
+    const detail = parseInbaDetail(page.text)
+    if (!detail) { keep(); notes.push(`記事の形が読めませんでした: ${pageUrl}`); continue }
+    if (/解除/.test(detail.title)) { for (const row of rowsOfPage(pageUrl)) cleared[row.closure_key] = 'announced'; continue }
+    for (const entry of detail.entries) {
+      if (!/通行止/.test(`${entry.content} ${entry.heading}`)) continue
+      const key = `${pageUrl}#${normalizeKey(entry.section)}`
+      const { start, end } = parsePeriod(entry.period)
+      if (end && Date.parse(end) < now.getTime()) { cleared[key] = 'announced'; continue }   // 期間が過ぎた
+      if (start && Date.parse(start) > now.getTime()) continue                               // まだ始まっていない
+      active.push({
+        key,
+        road: entry.road,
+        place: entry.place,
+        reason: reasonOf(`${entry.heading} ${entry.content}`) || '工事',
+        municipality: entry.municipality,
+        inArea: entry.municipality ? areas.some((a) => entry.municipality.includes(a)) : true,
+        url: pageUrl,
+        sourceTitle: detail.title,
+        publishedAt: start,
+        raw: { pageUrl, periodStart: start, periodEnd: end, periodText: entry.period.slice(0, 80), municipality: entry.municipality },
+      })
+    }
+  }
+  return { active, cleared, notes }
+}
+
+// ---------------------------------------------------------------------------
 // 共通：読む・保存する
 // ---------------------------------------------------------------------------
 
@@ -529,6 +661,7 @@ export async function scanRoadClosures(source: ClosureSource, existing: Existing
   if (source.kind === 'road-closure-kokudo') return scanKokudo(source)
   if (source.kind === 'road-closure-pref') return scanPref(source, existing)
   if (source.kind === 'road-closure-inzai') return scanInzai(source, existing)
+  if (source.kind === 'road-closure-inba') return scanInba(source, existing)
   throw new Error(`未対応の種別です: ${source.kind}`)
 }
 
