@@ -67,7 +67,7 @@ async function readOff(): Promise<OffEntry[]> {
   return Array.isArray(list) ? list.filter((e) => typeof e?.publishedAt === 'string') : []
 }
 
-export async function GET(request: Request) {
+async function getUncached(request: Request) {
   try {
     const [updates, off] = await Promise.all([fetchOfficialUpdates(), readOff()])
     const { alerts, reason } = detectEvacAlerts(updates, Date.now())
@@ -104,4 +104,16 @@ export async function POST(request: Request) {
 
 export function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) })
+}
+
+// 一般向けの GET は Vercel の配信側で 60 秒だけ保存して使い回す（2026-09-22）。保存中の応答は関数を呼ばないので、
+// 閲覧者が増えても呼び出し回数（無料枠 月100万回）が増えない。台風の日に75%の警告が来たための対策。
+// 運営の一覧（?all=1）や合言葉付きの呼び出し、エラーの応答は保存しない
+export async function GET(request: Request) {
+  const response = await getUncached(request)
+  const url = new URL(request.url)
+  if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
+    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=120')
+  }
+  return response
 }
