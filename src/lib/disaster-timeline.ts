@@ -1215,24 +1215,10 @@ export async function runDisasterTimeline(
     const fetchedAt = new Date().toISOString()
     try {
       // 通行止め（役所の発表）はタイムラインに積まず、disaster_road_closures へ反映する
-      if (isRoadClosureKind(source.kind)) {
-        if (await roadClosureThrottled(supabase, source)) {
-          results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: true })
-          continue
-        }
-        const existing = await loadExistingClosures(supabase, source.id)
-        const scan = await scanRoadClosures(source, existing)
-        const counts = await syncRoadClosures(supabase, source.id, scan, existing)
-        await markRoadClosureFetched(supabase, source)
-        results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared })
-        await supabase.from('disaster_info_sources').update({
-          last_fetched_at: fetchedAt,
-          last_status: 'success',
-          last_error: null,
-          updated_at: fetchedAt,
-        }).eq('id', source.id)
-        continue
-      }
+      // 通行止め（役所の発表）はこの巡回では読まない（runRoadClosures が別の定期実行で読む）。
+      // 2026-09-22、ここで4か所を順に読むと巡回全体が約50秒になり、5か所目で上限60秒を超えて
+      // 避難情報・気象を含む巡回ごと打ち切られた
+      if (isRoadClosureKind(source.kind)) continue
       const parser = PARSERS[source.kind]
       if (!parser) throw new Error(`未対応の種別です: ${source.kind}`)
       const drafts = await parser(source, { supabase })
@@ -1272,4 +1258,40 @@ export async function runDisasterTimeline(
   }).eq('id', run.id)
 
   return { skipped: false, runId: String(run.id), status, results }
+}
+
+/**
+ * 通行止め（役所の発表）の情報源だけを読む（POST /api/disaster/road-closures・pg_cron 毎時）。
+ * 災害タイムラインの巡回から切り離し、情報源どうしは同時に読む（1か所が遅くても他を待たせない）。
+ */
+export async function runRoadClosures(supabase: SupabaseClient): Promise<SourceRunResult[]> {
+  const { data: rows, error } = await supabase
+    .from('disaster_info_sources')
+    .select('id, kind, label, url, config, trust, enabled')
+    .eq('enabled', true)
+    .in('kind', ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap'])
+  if (error) throw error
+  return Promise.all((rows ?? []).map(async (row): Promise<SourceRunResult> => {
+    const source = toInfoSource(row as Record<string, unknown>)
+    const fetchedAt = new Date().toISOString()
+    try {
+      if (await roadClosureThrottled(supabase, source)) {
+        return { sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: 0, inserted: 0, updated: 0, unchanged: 0, skipped: true }
+      }
+      const existing = await loadExistingClosures(supabase, source.id)
+      const scan = await scanRoadClosures(source, existing)
+      const counts = await syncRoadClosures(supabase, source.id, scan, existing)
+      await markRoadClosureFetched(supabase, source)
+      await supabase.from('disaster_info_sources').update({
+        last_fetched_at: fetchedAt, last_status: 'success', last_error: null, updated_at: fetchedAt,
+      }).eq('id', source.id)
+      return { sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared }
+    } catch (e) {
+      const message = errorMessage(e)
+      await supabase.from('disaster_info_sources').update({
+        last_fetched_at: fetchedAt, last_status: 'failed', last_error: message.slice(0, 1000), updated_at: fetchedAt,
+      }).eq('id', source.id)
+      return { sourceId: source.id, label: source.label, kind: source.kind, status: 'failed', fetched: 0, inserted: 0, updated: 0, unchanged: 0, error: message }
+    }
+  }))
 }

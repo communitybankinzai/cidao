@@ -7,6 +7,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { ROAD_CLOSURE_KINDS } from '@/lib/disaster-road-closures'
+import { runRoadClosures } from '@/lib/disaster-timeline'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -36,7 +37,7 @@ function corsHeaders(request: Request) {
 export function OPTIONS(request: Request) {
   return new NextResponse(null, {
     status: 204,
-    headers: { ...corsHeaders(request), 'Access-Control-Allow-Methods': 'GET, OPTIONS' },
+    headers: { ...corsHeaders(request), 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' },
   })
 }
 
@@ -62,6 +63,20 @@ type Row = {
   clear_reason: string | null
   path: unknown
   raw: { mapUrl?: unknown; periodEnd?: unknown } | null
+}
+
+// 役所のページを読み直す（pg_cron が毎時呼ぶ）。情報源ごとに前回から50分空けるので、何度呼ばれても役所への取得は増えない
+export async function POST(request: Request) {
+  const supabase = serviceClient()
+  if (!supabase) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 })
+  try {
+    const results = await runRoadClosures(supabase)
+    return NextResponse.json({ ranAt: new Date().toISOString(), results }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[disaster/road-closures]', message)
+    return NextResponse.json({ error: message }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+  }
 }
 
 export async function GET(request: Request) {
