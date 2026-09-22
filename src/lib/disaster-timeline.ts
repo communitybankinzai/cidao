@@ -1021,15 +1021,21 @@ const roadClosurePreview: SourceParser = async (source, context) => {
 }
 
 // 役所のサイトに負担をかけないよう、通行止めの情報源は前回から minIntervalMinutes（既定50分）空ける。
-// 巡回の last_fetched_at は成否に関わらず毎回更新されるので、x-timeline と同じく app_settings に置く
+// 巡回の last_fetched_at は成否に関わらず毎回更新されるので、x-timeline と同じく app_settings に置く。
+// 記録するのは成功したときだけ（失敗しても50分待つと、通信の一時的な失敗で1時間近く更新が止まる。2026-09-22 実際に起きた）
+function roadClosureThrottleKey(source: InfoSource) {
+  return `road_closure_last_fetch:${source.id}`
+}
+
 async function roadClosureThrottled(supabase: SupabaseClient, source: InfoSource) {
-  const key = `road_closure_last_fetch:${source.id}`
   const minMs = Math.max(Number(configString(source, 'minIntervalMinutes', '50')) || 50, 5) * 60 * 1000
-  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
+  const { data } = await supabase.from('app_settings').select('value').eq('key', roadClosureThrottleKey(source)).maybeSingle()
   const last = Date.parse(String((data?.value as { at?: string } | undefined)?.at ?? ''))
-  if (Number.isFinite(last) && Date.now() - last < minMs) return true
-  await supabase.from('app_settings').upsert({ key, value: { at: new Date().toISOString() } })
-  return false
+  return Number.isFinite(last) && Date.now() - last < minMs
+}
+
+async function markRoadClosureFetched(supabase: SupabaseClient, source: InfoSource) {
+  await supabase.from('app_settings').upsert({ key: roadClosureThrottleKey(source), value: { at: new Date().toISOString() } })
 }
 
 const PARSERS: Record<string, SourceParser> = {
@@ -1213,6 +1219,7 @@ export async function runDisasterTimeline(
         const existing = await loadExistingClosures(supabase, source.id)
         const scan = await scanRoadClosures(source, existing)
         const counts = await syncRoadClosures(supabase, source.id, scan, existing)
+        await markRoadClosureFetched(supabase, source)
         results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared })
         await supabase.from('disaster_info_sources').update({
           last_fetched_at: fetchedAt,
