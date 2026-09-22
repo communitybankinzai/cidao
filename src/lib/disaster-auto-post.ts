@@ -227,14 +227,16 @@ export function buildText(signals: Signal[], level: number): string {
   // 気象庁の警報・注意報は同じ本文のまま何度も更新されるため、そのまま2件並べると
   // まったく同じ引用が2回出る（2026-09-21 の投稿で実際に起きた）。
   // 情報源と本文が同じものは1回にまとめ、違う中身を最大2件載せる。
+  // 同じ放送が「防災行政無線」と「防災行政無線（発令中）」の両方から来るので、出どころの名前ではなく本文で見分ける。
+  // 「発令中」として足した前の避難指示は上の「ほかに：」の1行に任せ、引用はしない（2026-09-22 20時の投稿が
+  // 同じ放送の全文を2回引用して長くなった）。気象の警報などで中身が違うものは、これまでどおり2件まで引用する
   const seen = new Set<string>()
   for (const s of top) {
     const quoted = quoteOf(s)
-    if (!quoted) continue
-    const key = `${s.source}\n${quoted}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    lines.push(`■ ${s.source || '公式発表'}より`)
+    if (!quoted || seen.has(quoted)) continue
+    if (seen.size && /（発令中）$/.test(s.source)) continue
+    seen.add(quoted)
+    lines.push(`■ ${(s.source || '公式発表').replace(/（発令中）$/, '')}より`)
     lines.push(quoted)
     lines.push('')
     if (seen.size >= 2) break
