@@ -175,25 +175,43 @@ function findBlanketClosure(updates: OfficialUpdate[]) {
   )
 }
 
+const OPEN_WORDS = /開設|開放|受け入れ|受入れ|受入開始/
+const CLOSE_WORDS = /閉鎖|閉所|開設.{0,8}(終了|取りやめ)|受入.{0,6}終了/
+
+// 施設名を含む文（さらに読点で区切った部分）だけで、開設か閉鎖かを判定する。決められなければ null
+function statusInText(text: string, normalizedName: string): 'open' | 'closed' | null {
+  for (const sentence of text.split(/[。\n]/)) {
+    if (!normalizeMatchText(sentence).includes(normalizedName)) continue
+    const clause = sentence.split('、').find((c) => normalizeMatchText(c).includes(normalizedName)) ?? sentence
+    for (const part of [clause, sentence]) {
+      const closed = CLOSE_WORDS.test(part)
+      const open = OPEN_WORDS.test(part.replace(new RegExp(CLOSE_WORDS.source, 'g'), ''))
+      if (closed && !open) return 'closed'
+      if (open && !closed) return 'open'
+    }
+  }
+  return null
+}
+
 function classifyOpeningStatus(
   shelterName: string,
   updates: OfficialUpdate[],
   blanketClosure: OfficialUpdate | null,
 ) {
   const normalizedName = normalizeMatchText(shelterName)
-  const relevant = updates.filter((update) => {
-    const text = normalizeMatchText(`${update.title}\n${update.message}`)
-    return text.includes(normalizedName)
-  })
+  // 新しい放送から順に見て、この施設について「開設」か「閉鎖」かを言っている最初の放送で決める。
+  // 以前は「閉鎖」の語を含む放送が1つでもあれば日時に関係なく閉鎖にし、しかも放送全体で読んでいたため、
+  // 「本埜公民館は17時をもって閉鎖します。避難所は、引き続き印旛公民館を開設しております」（2026-09-22 16:50）で
+  // 印旛公民館まで閉鎖になり、19:50 の「現在、開設中の避難所は、印旛公民館です」の後も閉鎖のままだった
+  const relevant = updates
+    .filter((update) => normalizeMatchText(`${update.title}\n${update.message}`).includes(normalizedName))
+    .sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt)))
+  let opened: OfficialUpdate | undefined
   for (const update of relevant) {
-    const text = `${update.title}\n${update.message}`
-    if (/閉鎖|閉所|開設.{0,8}(終了|取りやめ)|受入.{0,6}終了/.test(text)) {
-      return { openingStatus: 'closed' as const, openingEvidence: update }
-    }
+    const status = statusInText(`${update.title}\n${update.message}`, normalizedName)
+    if (status === 'closed') return { openingStatus: 'closed' as const, openingEvidence: update }
+    if (status === 'open') { opened = update; break }
   }
-  const opened = relevant.find((update) =>
-    /開設|開放|受け入れ|受入れ|受入開始/.test(`${update.title}\n${update.message}`),
-  )
   // 施設名を挙げない一斉閉鎖は、開設が発表されていた施設にだけ、
   // その開設放送より新しいときに限って適用する。
   // 一度も開設されていない施設まで「閉鎖」にすると、開いていたかのように誤解させる。

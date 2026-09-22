@@ -2,7 +2,9 @@
 // 防災MAPの地図上の警告帯（/api/disaster/evac-alert）が使う。
 import { CITY_PORTAL_URL, type OfficialUpdate } from '@/lib/inzai-city-alerts'
 
-const EXPIRE_HOURS = 24
+// 解除の放送が出るまで続ける。以前は24時間で自動的に消していたため、9/21 17:35・18:55 の印旛沼の避難指示が
+// 解除されないまま 9/22 の同時刻に帯から消えた（2026-09-22）。解除の文面を読み落とした場合に備え、7日で消す
+const EXPIRE_HOURS = 24 * 7
 
 // 強い順。1つの放送に複数あれば強いほうを採る
 const LEVELS = [
