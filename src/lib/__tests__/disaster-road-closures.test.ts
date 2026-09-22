@@ -270,3 +270,40 @@ describe('印旛土木事務所', () => {
     expect(scan.cleared[key]).toBeUndefined()   // 記事は読めた → 同期で disappeared として解除される
   })
 })
+
+// --- 市の Google マイマップ（佐倉市） ---------------------------------------------
+
+const SAKURA_PAGE = 'https://www.city.sakura.lg.jp/soshiki/kikikanrika/taihuu25/22665.html'
+const MID = '1EPUzaYESFoyyDgHZzFeFGp1qakKikQg'
+const KML_URL = `https://www.google.com/maps/d/kml?mid=${MID}&forcekml=1`
+const pm = (name: string, desc: string | null, coords: string) =>
+  `<Placemark><name>${name}</name>${desc === null ? '' : `<description><![CDATA[${desc}]]></description>`}<LineString><coordinates> ${coords} </coordinates></LineString></Placemark>`
+const kml = (items: string[]) => `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Folder>${items.join('')}</Folder></Document></kml>`
+
+describe('市の Google マイマップ', () => {
+  it('号外ページの埋め込みから地図を見つけ、Placemark を1件ずつ読む', async () => {
+    const { scanMyMap } = await import('@/lib/disaster-road-closures')
+    mockSite({
+      [SAKURA_PAGE]: `<iframe src="https://www.google.com/maps/d/embed?mid=${MID}&amp;ehbc=2E312F"></iframe>`,
+      [KML_URL]: kml([
+        pm('通行止め（石川）', '石川５８６－４付近のがけ崩れによる<br>令和８年９月７日午前２時時点', '140.2257667,35.6959397,0 140.2259813,35.6943435,0'),
+        pm('通行止め（羽鳥）', null, '140.2059608,35.7066929,0 140.2056261,35.7064977,0'),
+      ]),
+    })
+    const scan = await scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), [])
+    expect(scan.active).toHaveLength(2)
+    expect(scan.active[0]).toMatchObject({ place: '佐倉市 石川586-4付近', reason: '土砂・のり面の崩れ', publishedAt: '2026-09-07T00:00:00+09:00', inArea: true, url: SAKURA_PAGE })
+    expect(scan.active[0].raw?.cityPath).toEqual([[35.69594, 140.225767], [35.694344, 140.225981]])
+    expect(scan.active[1]).toMatchObject({ place: '佐倉市 羽鳥', publishedAt: null })
+  })
+
+  it('号外ページから地図が消えても、前回の地図を読み続ける。KML でない応答なら例外', async () => {
+    const { scanMyMap } = await import('@/lib/disaster-road-closures')
+    const prev: ExistingClosure[] = [{ closure_key: 'k', url: SAKURA_PAGE, in_area: true, cleared_at: null, clear_reason: null, raw: { mid: MID, pageUrl: SAKURA_PAGE } }]
+    mockSite({ [SAKURA_PAGE]: '<html>ページ移動しました</html>', [KML_URL]: kml([]) })
+    const scan = await scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), prev)
+    expect(scan.active).toHaveLength(0)   // 市が地図を空にした → 同期で全件解除
+    mockSite({ [SAKURA_PAGE]: '<html></html>', [KML_URL]: '<html>ログインしてください</html>' })
+    await expect(scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), prev)).rejects.toThrow('KML')
+  })
+})

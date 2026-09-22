@@ -15,7 +15,7 @@
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba'] as const
+export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap'] as const
 export type RoadClosureKind = (typeof ROAD_CLOSURE_KINDS)[number]
 
 export function isRoadClosureKind(kind: string): kind is RoadClosureKind {
@@ -129,7 +129,7 @@ export function reasonOf(text: string) {
   const s = text.normalize('NFKC')
   if (/冠水/.test(s)) return '道路冠水'
   if (/陥没/.test(s)) return '道路陥没'
-  if (/土砂|崩落|法面|のり面|落石/.test(s)) return '土砂・のり面の崩れ'
+  if (/土砂|崩落|崩壊|がけ崩れ|崖崩れ|法面|のり面|落石/.test(s)) return '土砂・のり面の崩れ'
   if (/倒木/.test(s)) return '倒木'
   if (/大雨|豪雨|台風/.test(s)) return '大雨'
   if (/地震/.test(s)) return '地震'
@@ -644,6 +644,102 @@ export async function scanInba(source: ClosureSource, existing: ExistingClosure[
 }
 
 // ---------------------------------------------------------------------------
+// 市が Google マイマップで公開する通行止め地図（佐倉市「佐倉市内通行止め箇所」など）
+// ---------------------------------------------------------------------------
+// 市の号外ページ（例 https://www.city.sakura.lg.jp/soshiki/kikikanrika/taihuu25/22665.html）に
+// マイマップが埋め込まれ、KML（/maps/d/kml?mid=…&forcekml=1）で区間の線と説明が取れる（2026-09-22 事業主指示で追加）。
+// 1 Placemark＝1件（鍵＝名前＋線の始まりの位置）。解除は「前回あって今回の KML に無い」。
+// 号外は災害のたびに新しいページになりうるので、config の号外ページ（pages）と一覧ページ（indexPages）に出る
+// 「通行止め」の号外を読み、埋め込まれた mid を拾う。どこからも拾えなければ前回の mid の KML を読む。
+// 市が描いた線は raw.cityPath に保存するが、地図に出すかは事業主の確認待ち（path には入れない）。
+
+export type MyMapPlacemark = { name: string; description: string; coords: Array<[number, number]> }
+
+export function parseKml(kml: string): MyMapPlacemark[] {
+  const out: MyMapPlacemark[] = []
+  for (const m of kml.matchAll(/<Placemark>([\s\S]*?)<\/Placemark>/g)) {
+    const body = m[1]
+    const name = clean(body.match(/<name>([\s\S]*?)<\/name>/)?.[1]?.replace(/<!\[CDATA\[|\]\]>/g, '') ?? '')
+    const description = clean((body.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<br\s*\/?>/gi, ' '))
+    const coordText = body.match(/<coordinates>([\s\S]*?)<\/coordinates>/)?.[1] ?? ''
+    const coords = coordText.trim().split(/\s+/).map((c) => c.split(',').map(Number)).filter((c) => c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+      .map((c) => [Math.round(c[1] * 1e6) / 1e6, Math.round(c[0] * 1e6) / 1e6] as [number, number])
+    if (name && coords.length) out.push({ name, description, coords })
+  }
+  return out
+}
+
+export function myMapMids(html: string) {
+  return [...new Set([...html.matchAll(/maps\/d\/(?:u\/\d+\/)?(?:embed|viewer|edit|kml)\?(?:[^"'\s]*?&(?:amp;)?)?mid=([A-Za-z0-9_-]{20,})/g)].map((m) => m[1]))]
+}
+
+/** 「通行止め（石川）」「道路崩壊地点（飯田 佐倉カントリー倶楽部付近）」→ 括弧の中を場所に */
+export function myMapPlace(name: string, description: string) {
+  const inParen = name.normalize('NFKC').match(/[（(]([^）)]+)[）)]/)?.[1]?.trim() ?? ''
+  const where = description.normalize('NFKC').match(/^(.{2,40}?(?:付近|地先|周辺))/)?.[1]?.trim() ?? ''
+  return where || inParen || name
+}
+
+export async function scanMyMap(source: ClosureSource, existing: ExistingClosure[]): Promise<ClosureScan> {
+  const municipality = configString(source, 'municipality', '')
+  const areas = configList(source, 'areas', DEFAULT_AREAS)
+  const pages = new Set(configList(source, 'pages', source.url))
+  const notes: string[] = []
+  // 一覧ページから「通行止め」の号外を拾う（新しい号外に地図が載り替わったときのため）
+  for (const idx of configList(source, 'indexPages', '')) {
+    const page = await fetchPage(idx)
+    if (!page.ok) { notes.push(`一覧ページを読めませんでした（${page.status}）: ${idx}`); continue }
+    for (const m of page.text.matchAll(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      if (/通行止/.test(clean(m[2]))) { const u = resolve(m[1], idx); if (u) pages.add(u) }
+    }
+  }
+  // 号外ページに埋め込まれた地図（mid）。新しい号外ほど後ろ（ページ番号が大きい）とみなし、最後のものを使う
+  let mid = ''
+  let pageUrl = ''
+  const sorted = [...pages].sort((a, b) => (Number(a.match(/(\d+)\.html$/)?.[1] ?? 0) - Number(b.match(/(\d+)\.html$/)?.[1] ?? 0)))
+  for (const url of sorted) {
+    const page = await fetchPage(url)
+    if (!page.ok) { notes.push(`号外ページを読めませんでした（${page.status}）: ${url}`); continue }
+    const found = myMapMids(page.text)
+    if (found.length) { mid = found[found.length - 1]; pageUrl = url }
+  }
+  if (!mid) {
+    const prev = existing.map((row) => row.raw as { mid?: string; pageUrl?: string } | null).find((raw) => raw?.mid)
+    mid = configString(source, 'mid', prev?.mid ?? '')
+    pageUrl = prev?.pageUrl ?? source.url
+    if (!mid) throw new Error('マイマップの mid が見つかりません（号外ページの形が変わった可能性）')
+    notes.push('号外ページから地図が見つからないため、前回の地図を読みました')
+  }
+  const kmlUrl = `https://www.google.com/maps/d/kml?mid=${encodeURIComponent(mid)}&forcekml=1`
+  const kml = await fetchRequired(kmlUrl)
+  if (!/<kml[\s>]/.test(kml)) throw new Error('KML ではない応答でした（地図の公開設定が変わった可能性）')
+  const placemarks = parseKml(kml)
+  notes.unshift(`地図 ${mid.slice(0, 8)}… の ${placemarks.length}件を確認`)
+
+  const active: ClosureDraft[] = placemarks.map((pm) => {
+    const [lat, lon] = pm.coords[0]
+    const key = `${mid}|${normalizeKey(pm.name)}|${lat.toFixed(4)},${lon.toFixed(4)}`
+    const place = myMapPlace(pm.name, pm.description)
+    const isLine = pm.coords.length >= 2
+    return {
+      key,
+      road: '',
+      place: municipality && !place.startsWith(municipality) ? `${municipality} ${place}` : place,
+      reason: reasonOf(`${pm.name} ${pm.description}`),
+      municipality,
+      inArea: municipality ? areas.some((a) => municipality.includes(a)) : true,
+      url: pageUrl || source.url,
+      sourceTitle: pm.name,
+      publishedAt: parseJpDate(pm.description),
+      raw: { mid, pageUrl, kind: isLine ? 'line' : 'point', cityPath: pm.coords.slice(0, 200) },
+    }
+  })
+  // 同じ名前・同じ始点の Placemark が重なっていたら1件にまとめる（鍵が重なると保存で失敗するため）
+  const unique = [...new Map(active.map((item) => [item.key, item])).values()]
+  return { active: unique, cleared: {}, notes }
+}
+
+// ---------------------------------------------------------------------------
 // 共通：読む・保存する
 // ---------------------------------------------------------------------------
 
@@ -662,6 +758,7 @@ export async function scanRoadClosures(source: ClosureSource, existing: Existing
   if (source.kind === 'road-closure-pref') return scanPref(source, existing)
   if (source.kind === 'road-closure-inzai') return scanInzai(source, existing)
   if (source.kind === 'road-closure-inba') return scanInba(source, existing)
+  if (source.kind === 'road-closure-mymap') return scanMyMap(source, existing)
   throw new Error(`未対応の種別です: ${source.kind}`)
 }
 

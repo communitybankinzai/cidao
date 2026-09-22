@@ -1058,6 +1058,7 @@ const PARSERS: Record<string, SourceParser> = {
   'road-closure-pref': roadClosurePreview,
   'road-closure-inzai': roadClosurePreview,
   'road-closure-inba': roadClosurePreview,
+  'road-closure-mymap': roadClosurePreview,
 }
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
@@ -1077,6 +1078,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'road-closure-pref', label: '通行止め：千葉県 県管理道路通行規制', help: 'URL は https://www.pref.chiba.lg.jp/cate/baa/lifeline/kendou/index.html （出典リンク用）。一覧の本体 pl_6302/6301（通行止め）と pl_7310/7929（解除）を読む。config: areas（周辺とみなす市町村名・カンマ区切り）、closureLists・clearLists（一覧の本体URL・通常は空）、minIntervalMinutes' },
   { id: 'road-closure-inzai', label: '通行止め：印西市（新着の通行止め記事）', help: 'URL は https://www.city.inzai.lg.jp/ 。新着の通行止め記事と「道路の通行止めの状況」ページを読み、記事の題名が「解除」になる・記事が消える・まとめページから消える で解除。config: statusUrls（まとめページ・通常は空で新着から自動）、minIntervalMinutes' },
   { id: 'road-closure-inba', label: '通行止め：千葉県 印旛土木事務所（新着の通行規制情報）', help: 'URL は https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html 。新着の「通行規制情報」記事の「規制内容／規制区間／規制期間」を1規制＝1件で読む。期間が始まるまでは出さず、期間が過ぎる・記事から消える・記事が消える で解除。config: areas、pageUrls（新着に無い記事を足すとき）、minIntervalMinutes' },
+  { id: 'road-closure-mymap', label: '通行止め：市の Google マイマップ（佐倉市など）', help: 'URL は地図が埋め込まれた市の号外ページ。埋め込みの mid を拾い KML を読んで、1 Placemark＝1件。前回あって今回の KML に無ければ解除。config: municipality（例 佐倉市）、indexPages（「通行止め」の号外を探す一覧ページ・カンマ区切り）、pages（号外ページを足すとき）、mid（号外から拾えないときの予備）、minIntervalMinutes' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
