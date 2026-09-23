@@ -118,6 +118,20 @@ describe('parseCityTransit（A案：バスは自動・鉄道は承認）', () =>
     expect(parseCityTransit(page, AT).railways[0]).toEqual(expect.objectContaining({ from: '千葉ニュータウン中央', to: '印旛日本医大' }))
   })
 
+  it('市が「新木駅から木下駅」と書いても区間として読める（2026-09-23の書き方）', () => {
+    const page = [
+      '災害時の公共交通のご案内',
+      '台風25号に伴う公共交通のご利用について（令和8年9月23日 11時00分現在）',
+      '台風25号に伴い、JR成田線は【新木駅から木下駅】間の上下線で終日運転を見合わせています。',
+      'また、【我孫子駅から新木駅・木下駅から成田駅】間では上下線で本数を減らして運転しています。',
+      'バスにも遅延や運休等の乱れが生じていますのでご注意ください。',
+    ].join('\n')
+    const r = parseCityTransit(page, AT)
+    expect(r.railways[0]).toEqual(expect.objectContaining({ line: 'jr-narita-abiko', from: '新木', to: '木下', state: 'suspended' }))
+    // 「・」を含む駅名の並びを路線バスとして登録しない
+    expect(r.buses).toEqual([])
+  })
+
   it('運転再開の文は運休として拾わない', () => {
     const page = 'JR成田線は、成田駅～我孫子駅間で運転を再開しました。'
     const r = parseCityTransit(page, AT)

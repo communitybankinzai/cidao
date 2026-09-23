@@ -138,8 +138,10 @@ export function parseCityTransit(pageText: string, announcedAt: string): ParsedT
   // 路線バス：「・六合路線（小林駅～…）【注意】区間運休」
   for (const raw of pageText.split(/\n|(?=・)/)) {
     const line = raw.trim()
-    const m = line.match(/^・\s*([^\s（(【]+?(?:線|路線))\s*([（(][^）)]*[）)])?\s*(.*)$/)
+    const m = line.match(/^・\s*([^\s（(【】〜～]{2,10}?(?:線|路線))\s*([（(][^）)]*[）)])?\s*(.*)$/)
     if (!m) continue
+    // 駅名の並び（「木下駅から成田駅」等）は路線名ではない
+    if (/駅|から|間/.test(m[1])) continue
     const rest = m[3] ?? ''
     const detail = /区間運休/.test(rest) ? '区間運休です。' : /全線/.test(m[2] ?? '') ? '全線で運休しています。' : '運休しています。'
     out.buses.push({ name: `路線バス ${m[1]}${m[2] ?? ''}`, state: 'suspended', detail, announcedAt })
@@ -155,7 +157,7 @@ export function parseCityTransit(pageText: string, announcedAt: string): ParsedT
     // 「〇〇駅～〇〇駅間」の前後を、地図の駅名一覧と突き合わせて決める。
     // 正規表現で名前を切り出すと「線路冠水のため新鎌ヶ谷」のように前の語まで取り込むため。
     // 区切りに「ー」は使わない（千葉ニュータウン中央 の中にあるため）
-    const pair = sentence.match(/(.*?)\s*[～〜~－]\s*(.*?)間/)
+    const pair = sentence.match(/(.*?)\s*(?:[～〜~－]|から)\s*(.*?)間/)
     const longest = (list: string[]) => list.sort((a, b) => b.length - a.length)[0]
     const before = (pair?.[1] ?? '').replace(/駅$/, '')
     const after = pair?.[2] ?? ''
