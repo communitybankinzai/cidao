@@ -655,6 +655,45 @@ export async function scanInba(source: ClosureSource, existing: ExistingClosure[
 
 export type MyMapPlacemark = { name: string; description: string; coords: Array<[number, number]> }
 
+/** 2点のおおよその距離（m） */
+export function distanceM(a: [number, number], b: [number, number]) {
+  const dLat = (a[0] - b[0]) * 111320
+  const dLon = (a[1] - b[1]) * 111320 * Math.cos((a[0] * Math.PI) / 180)
+  return Math.hypot(dLat, dLon)
+}
+
+const SAME_LINE_M = 300          // 同じ名前なら、始点がこれだけ離れていても同じ線とみなす
+const REVIVE_WITHIN_MS = 86400000 // 解除から24時間以内に戻った線は、同じ行を使い続ける（継続時間を切らない）
+
+/** 鍵から始点（緯度,経度）を読む。古い行のために raw.cityPath も見る */
+export function keyPoint(row: ExistingClosure): [number, number] | null {
+  const m = row.closure_key.match(/\|(-?\d+\.\d+),(-?\d+\.\d+)$/)
+  if (m) return [Number(m[1]), Number(m[2])]
+  const path = (row.raw as { cityPath?: Array<[number, number]> } | null)?.cityPath
+  return Array.isArray(path) && path.length ? path[0] : null
+}
+
+/**
+ * 役所が線を引き直して始点が少し動いても、同じ線として扱うための突き合わせ。
+ * 名前が同じで始点が300m以内の行があればその鍵を使う（通行止め中の行を優先、無ければ24時間以内に解除された行）。
+ */
+export function matchExistingLine(existing: ExistingClosure[], name: string, point: [number, number], now: number) {
+  const named = existing.filter((row) => row.closure_key.includes(`|${normalizeKey(name)}|`))
+  const usable = named.filter((row) => {
+    if (!row.cleared_at) return true
+    const at = Date.parse(row.cleared_at)
+    return Number.isFinite(at) && now - at <= REVIVE_WITHIN_MS
+  })
+  let best: { row: ExistingClosure; d: number } | null = null
+  for (const row of usable) {
+    const p = keyPoint(row)
+    if (!p) continue
+    const d = distanceM(p, point)
+    if (d <= SAME_LINE_M && (!best || d < best.d || (d === best.d && !row.cleared_at))) best = { row, d }
+  }
+  return best?.row.closure_key ?? null
+}
+
 export function parseKml(kml: string): MyMapPlacemark[] {
   const out: MyMapPlacemark[] = []
   for (const m of kml.matchAll(/<Placemark>([\s\S]*?)<\/Placemark>/g)) {
@@ -716,9 +755,14 @@ export async function scanMyMap(source: ClosureSource, existing: ExistingClosure
   const placemarks = parseKml(kml)
   notes.unshift(`地図 ${mid.slice(0, 8)}… の ${placemarks.length}件を確認`)
 
+  const nowMs = Date.now()
+  const taken = new Set<string>()
   const active: ClosureDraft[] = placemarks.map((pm) => {
     const [lat, lon] = pm.coords[0]
-    const key = `${mid}|${normalizeKey(pm.name)}|${lat.toFixed(4)},${lon.toFixed(4)}`
+    // 役所が線を引き直すと始点が数十m動く。同じ名前で近ければ前と同じ行を使う（継続時間の起点を保つ）
+    const matched = matchExistingLine(existing.filter((row) => !taken.has(row.closure_key)), pm.name, [lat, lon], nowMs)
+    if (matched) taken.add(matched)
+    const key = matched ?? `${mid}|${normalizeKey(pm.name)}|${lat.toFixed(4)},${lon.toFixed(4)}`
     const place = myMapPlace(pm.name, pm.description)
     const isLine = pm.coords.length >= 2
     return {

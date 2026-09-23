@@ -339,3 +339,40 @@ describe('自治体メール配信のバックナンバー', () => {
     expect(scan.active).toHaveLength(0)
   })
 })
+
+describe('マイマップ：線を引き直されても同じ行として扱う', () => {
+  it('同じ名前で始点が300m以内なら前の鍵を使い、24時間以内に解除された行も復活させる', async () => {
+    const { scanMyMap } = await import('@/lib/disaster-road-closures')
+    const oldKey = `${MID}|通行止め(石川)|35.6959,140.2258`
+    const clearedKey = `${MID}|通行止め(羽鳥)|35.7067,140.2060`
+    const existing: ExistingClosure[] = [
+      { closure_key: oldKey, url: SAKURA_PAGE, in_area: true, cleared_at: null, clear_reason: null, raw: {} },
+      { closure_key: clearedKey, url: SAKURA_PAGE, in_area: true, cleared_at: new Date(Date.now() - 3600000).toISOString(), clear_reason: 'disappeared', raw: {} },
+      { closure_key: `${MID}|通行止め(寺崎)|35.7065,140.2137`, url: SAKURA_PAGE, in_area: true, cleared_at: new Date(Date.now() - 3 * 86400000).toISOString(), clear_reason: 'disappeared', raw: {} },
+    ]
+    mockSite({
+      [SAKURA_PAGE]: `<iframe src="https://www.google.com/maps/d/embed?mid=${MID}"></iframe>`,
+      [KML_URL]: kml([
+        pm('通行止め（石川）', '石川付近', '140.2260,35.6961,0 140.2262,35.6943,0'),      // 約25m ずれただけ
+        pm('通行止め（羽鳥）', '羽鳥付近', '140.2061,35.7068,0 140.2056,35.7065,0'),      // 1時間前に解除 → 復活
+        pm('通行止め（寺崎）', '寺崎付近', '140.2138,35.7066,0 140.2142,35.7068,0'),      // 3日前に解除 → 新しい行
+      ]),
+    })
+    const scan = await scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), existing)
+    const keys = scan.active.map((a) => a.key)
+    expect(keys[0]).toBe(oldKey)
+    expect(keys[1]).toBe(clearedKey)
+    expect(keys[2]).toBe(`${MID}|通行止め(寺崎)|35.7066,140.2138`)
+  })
+
+  it('同じ名前でも300mより離れていれば別の行にする', async () => {
+    const { scanMyMap } = await import('@/lib/disaster-road-closures')
+    const existing: ExistingClosure[] = [{ closure_key: `${MID}|通行止め(石川)|35.6959,140.2258`, url: SAKURA_PAGE, in_area: true, cleared_at: null, clear_reason: null, raw: {} }]
+    mockSite({
+      [SAKURA_PAGE]: `<iframe src="https://www.google.com/maps/d/embed?mid=${MID}"></iframe>`,
+      [KML_URL]: kml([pm('通行止め（石川）', '石川付近', '140.2300,35.7100,0 140.2302,35.7102,0')]),
+    })
+    const scan = await scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), existing)
+    expect(scan.active[0].key).toBe(`${MID}|通行止め(石川)|35.7100,140.2300`)
+  })
+})
