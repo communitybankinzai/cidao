@@ -8,7 +8,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { CITY_PORTAL_URL, fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
-import { detectEvacAlerts } from '@/lib/inzai-evac-alert'
+import { detectEvacAlerts, type EvacAlert } from '@/lib/inzai-evac-alert'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -67,15 +67,63 @@ async function readOff(): Promise<OffEntry[]> {
   return Array.isArray(list) ? list.filter((e) => typeof e?.publishedAt === 'string') : []
 }
 
+// 【放送が消えたときのために覚えておく（2026-09-24）】
+// 市の防災速報（get_bousai_xml.php）は災害が落ち着くと {"fname":0}＝0件になる。
+// 発令中でも0件になるため、そのままだと「解除されたから消えた」のか「データが消えたから消えた」のか
+// 区別できないまま帯が消える（9/24 朝に実際に起きた。県のまとめには閉鎖の発表が無かった）。
+// 直前の判定を app_settings に覚えておき、0件のときは stale: true を付けて返す。24時間で消えるのは従来どおり。
+const LAST_KEY = 'evac_alert_last'
+type LastState = { alerts: EvacAlert[]; lastBroadcastAt: string; savedAt: string }
+
+async function readLast(): Promise<LastState | null> {
+  const supabase = serviceClient()
+  if (!supabase) return null
+  const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_KEY).maybeSingle()
+  const v = data?.value as LastState | undefined
+  return v && Array.isArray(v.alerts) ? v : null
+}
+
+async function writeLast(state: LastState) {
+  const supabase = serviceClient()
+  if (!supabase) return
+  const { error } = await supabase.from('app_settings').upsert({ key: LAST_KEY, value: state })
+  if (error) console.error('[disaster/evac-alert] last', error.message)
+}
+
 async function getUncached(request: Request) {
   try {
-    const [updates, off] = await Promise.all([fetchOfficialUpdates(), readOff()])
-    const { alerts, reason } = detectEvacAlerts(updates, Date.now())
+    const [updates, off, last] = await Promise.all([fetchOfficialUpdates(), readOff(), readLast()])
+    const now = Date.now()
+    let { alerts, reason } = detectEvacAlerts(updates, now)
+    let stale = false
+    let lastBroadcastAt = updates.length ? (updates[0]?.publishedAt ?? '') : (last?.lastBroadcastAt ?? '')
+
+    if (updates.length) {
+      // 放送が読めたときの判定が正。次に0件になったときのために覚えておく
+      const latest = updates.map((u) => u.publishedAt).sort().pop() ?? ''
+      lastBroadcastAt = latest
+      if (alerts.length || last?.alerts?.length) {
+        await writeLast({ alerts, lastBroadcastAt: latest, savedAt: new Date().toISOString() })
+      }
+    } else if (last?.alerts?.length) {
+      // 放送が0件。覚えていた発令を「参考」として返す（24時間を過ぎたものは detect と同じ基準で落とす）
+      const kept = detectEvacAlerts(
+        last.alerts.map((a) => ({ title: a.title, message: a.message, publishedAt: a.publishedAt, sourceUrl: a.sourceUrl })),
+        now,
+      )
+      alerts = kept.alerts
+      reason = alerts.length ? 'stale' : kept.reason
+      stale = alerts.length > 0
+    }
+
     const offSet = new Set(off.map((e) => e.publishedAt))
     return json(request, {
       fetchedAt: new Date().toISOString(),
       alerts: alerts.map((a) => ({ ...a, suppressed: offSet.has(a.publishedAt) })),
       reason,
+      // true＝市の放送データが空になったため、直前の発令をそのまま出している（解除を確認したわけではない）
+      stale,
+      lastBroadcastAt,
       source: { name: '印西市防災速報', url: CITY_PORTAL_URL },
     })
   } catch (error) {

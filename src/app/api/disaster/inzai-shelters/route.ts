@@ -1,6 +1,40 @@
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { parse } from 'csv-parse/sync'
 import { NextResponse } from 'next/server'
 import { CITY_PORTAL_URL, fetchOfficialUpdates, type OfficialUpdate } from '@/lib/inzai-city-alerts'
+
+// 【放送が消えたときのために覚えておく（2026-09-24）】
+// 市の防災速報（get_bousai_xml.php）は災害が落ち着くと {"fname":0}＝0件になる。
+// 開設中でも0件になるため、そのままだと開設していた施設が「開設発表なし」に戻る
+// （9/24 朝に実際に起きた。県のまとめには閉鎖の発表が無かった）。
+// 直前の「開設中」を app_settings に覚えておき、0件のときは stale: true を付けて出す。
+// 覚えているのは48時間まで（それ以上前の開設を出し続けない）。
+const LAST_OPEN_KEY = 'shelter_last_open'
+const STALE_KEEP_HOURS = 48
+
+type LastOpen = { openNames: string[]; evidence: OfficialUpdate | null; lastBroadcastAt: string; savedAt: string }
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) return null
+  return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+async function readLastOpen(): Promise<LastOpen | null> {
+  const supabase = serviceClient()
+  if (!supabase) return null
+  const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_OPEN_KEY).maybeSingle()
+  const v = data?.value as LastOpen | undefined
+  return v && Array.isArray(v.openNames) ? v : null
+}
+
+async function writeLastOpen(state: LastOpen) {
+  const supabase = serviceClient()
+  if (!supabase) return
+  const { error } = await supabase.from('app_settings').upsert({ key: LAST_OPEN_KEY, value: state })
+  if (error) console.error('[disaster/inzai-shelters] lastOpen', error.message)
+}
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -241,16 +275,44 @@ async function getUncached(request: Request) {
       ...shelter,
       ...classifyOpeningStatus(shelter.name, officialUpdates, blanketClosure),
     }))
+
+    // 放送が0件になっても、直前の「開設中」を参考として残す（2026-09-24。詳細は readLastOpen のコメント）
+    const last = await readLastOpen()
+    let stale = false
+    let lastBroadcastAt = officialUpdates.map((u) => u.publishedAt).sort().pop() ?? ''
+    if (officialUpdates.length) {
+      const openNames = shelters.filter((s) => s.openingStatus === 'open').map((s) => s.name)
+      const evidence = shelters.find((s) => s.openingStatus === 'open')?.openingEvidence ?? null
+      if (openNames.length || last?.openNames?.length) {
+        await writeLastOpen({ openNames, evidence, lastBroadcastAt, savedAt: new Date().toISOString() })
+      }
+    } else if (last?.openNames?.length && Date.now() - Date.parse(last.savedAt) < STALE_KEEP_HOURS * 3600_000) {
+      lastBroadcastAt = last.lastBroadcastAt
+      stale = true
+      const names = new Set(last.openNames)
+      shelters.forEach((s) => {
+        if (names.has(s.name)) {
+          s.openingStatus = 'open'
+          s.openingEvidence = last.evidence
+        }
+      })
+    }
+
     return json(request, {
       fetchedAt: new Date().toISOString(),
       shelters,
       officialUpdates,
       blanketClosure,
+      // true＝市の放送データが空になったため、直前の開設をそのまま出している（閉鎖を確認したわけではない）
+      stale,
+      lastBroadcastAt,
       openingInformation: blanketClosure
         ? '印西市防災速報で全避難所の閉鎖が放送されました。施設名の記載がないため全施設に適用しています。'
         : officialUpdates.length
           ? '印西市防災速報の施設名と開設・閉鎖表現を照合しました。'
-          : '現在、印西市防災速報に避難所開設情報は掲載されていません。',
+          : stale
+            ? '市の防災速報が現在0件のため、最後に開設と放送された施設をそのまま出しています。閉鎖の放送を確認したわけではありません。'
+            : '現在、印西市防災速報に避難所開設情報は掲載されていません。',
       sources: {
         organization: '印西市 総務部防災課',
         openDataPageUrl: OPEN_DATA_PAGE_URL,
