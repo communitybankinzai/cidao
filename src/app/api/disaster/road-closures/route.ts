@@ -62,7 +62,7 @@ type Row = {
   cleared_at: string | null
   clear_reason: string | null
   path: unknown
-  raw: { mapUrl?: unknown; periodEnd?: unknown } | null
+  raw: { mapUrl?: unknown; periodEnd?: unknown; cityPath?: unknown } | null
 }
 
 // 役所のページを読み直す（pg_cron が毎時呼ぶ）。情報源ごとに前回から50分空けるので、何度呼ばれても役所への取得は増えない
@@ -106,7 +106,11 @@ export async function GET(request: Request) {
   const sourceById = new Map((sources ?? []).map((s) => [s.id as string, s]))
   const toItem = (row: Row) => {
     const source = sourceById.get(row.source_id)
-    const path = Array.isArray(row.path) && row.path.length >= 2 ? row.path : null
+    // 線は2通り：運営が位置を確かめた線（path）と、役所が座標付きで公開した線（raw.cityPath・佐倉市のマイマップなど）
+    const own = Array.isArray(row.path) && row.path.length >= 2 ? row.path : null
+    const city = Array.isArray(row.raw?.cityPath) && row.raw.cityPath.length >= 2 ? row.raw.cityPath : null
+    const path = own ?? city
+    const pathSource = own ? 'operator' : city ? 'city' : null
     return {
       id: row.id,
       road: row.road,
@@ -126,6 +130,7 @@ export async function GET(request: Request) {
       sourceLabel: (source?.label as string | undefined) ?? '',
       sourceKind: (source?.kind as string | undefined) ?? '',
       path,
+      pathSource,
     }
   }
   const items = ((rows ?? []) as Row[])
