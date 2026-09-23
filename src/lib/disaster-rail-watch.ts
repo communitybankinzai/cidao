@@ -122,11 +122,44 @@ function railStateOf(text: string): string | null {
   if (/再開|平常/.test(text) && !/見合わせ|運休/.test(text)) return null
   if (/見合わせ|運転を取りやめ/.test(text)) return 'suspended'
   const stop = /運休/.test(text)
-  const late = /遅れ|送れ|遅延/.test(text) // 市の文面に「送れ」の誤字があった（2026-09-21）
+  // 「本数を減らして運転」は市が減便のときに使う言い方（2026-09-23）
+  const late = /遅れ|送れ|遅延|本数を減らし|減便|間引き/.test(text)
   if (stop && late) return 'disrupted'
   if (stop) return 'suspended'
   if (late) return 'delayed'
   return null
+}
+
+/**
+ * 文に出てくる駅名を順に拾い、「から」「～」でつながっている隣どうしを区間にする。
+ * 「我孫子駅から新木駅・木下駅から成田駅間」→ [[我孫子,新木],[木下,成田]]
+ */
+export function stationPairs(sentence: string, stations: string[]): Array<[string, string]> {
+  const found: Array<{ name: string; start: number; end: number }> = []
+  for (const name of stations) {
+    let at = sentence.indexOf(name)
+    while (at >= 0) {
+      found.push({ name, start: at, end: at + name.length })
+      at = sentence.indexOf(name, at + 1)
+    }
+  }
+  // 位置順に並べ、重なり（「新木」と「東我孫子」の中の「我孫子」など）は長い方を残す
+  found.sort((a, b) => a.start - b.start || b.name.length - a.name.length)
+  const picked: typeof found = []
+  for (const item of found) {
+    const last = picked[picked.length - 1]
+    if (last && item.start < last.end) continue
+    picked.push(item)
+  }
+  const pairs: Array<[string, string]> = []
+  for (let i = 0; i + 1 < picked.length; i += 1) {
+    const between = sentence.slice(picked[i].end, picked[i + 1].start)
+    if (/^駅?\s*(から|[～〜~－])\s*$/.test(between)) {
+      pairs.push([picked[i].name, picked[i + 1].name])
+      i += 1 // 使った2駅は次の組に使わない
+    }
+  }
+  return pairs
 }
 
 /** 市の「災害時の公共交通のご案内」の本文から、地図に入れる鉄道・路線バスを読み取る */
@@ -146,27 +179,32 @@ export function parseCityTransit(pageText: string, announcedAt: string): ParsedT
     out.buses.push({ name: `路線バス ${m[1]}${m[2] ?? ''}`, state: 'suspended', detail, announcedAt })
   }
 
-  // 鉄道：文ごとに路線名・区間・状態を読む
+  // 鉄道：文ごとに路線名・区間・状態を読む。
+  // 「また、【我孫子駅から新木駅…】間では本数を減らして運転しています」のように
+  // 2文目以降で路線名を省く書き方があるので、直前に出た路線を引き継ぐ（2026-09-23）
+  let lastRail: (typeof RAIL_LINES)[number] | null = null
   for (const sentence of flat.split(/。/)) {
-    const rail = RAIL_LINES.find((r) => r.pattern.test(sentence))
+    const named = RAIL_LINES.find((r) => r.pattern.test(sentence))
+    if (named) lastRail = named
+    // 路線名のない文で引き継ぐのは、バスの話でないときだけ
+    const rail = named ?? (/バス/.test(sentence) ? null : lastRail)
     if (!rail) continue
     const state = railStateOf(sentence)
     if (!state) continue
     const stations = rail.lineId ? LINE_STATIONS[rail.lineId] ?? [] : []
-    // 「〇〇駅～〇〇駅間」の前後を、地図の駅名一覧と突き合わせて決める。
-    // 正規表現で名前を切り出すと「線路冠水のため新鎌ヶ谷」のように前の語まで取り込むため。
-    // 区切りに「ー」は使わない（千葉ニュータウン中央 の中にあるため）
-    const pair = sentence.match(/(.*?)\s*(?:[～〜~－]|から)\s*(.*?)間/)
-    const longest = (list: string[]) => list.sort((a, b) => b.length - a.length)[0]
-    const before = (pair?.[1] ?? '').replace(/駅$/, '')
-    const after = pair?.[2] ?? ''
-    const from = longest(stations.filter((st) => before.endsWith(st)))
-    const to = longest(stations.filter((st) => after.startsWith(st)))
-    if (!rail.lineId || !from || !to) {
-      out.unparsed.push(`${sentence.trim()}。`)
+    // 区間は、文に出てくる駅名を地図の駅名一覧で拾い、「から」「～」でつながる隣どうしを組にする。
+    // 正規表現で名前を切り出すと「線路冠水のため新鎌ヶ谷」のように前の語まで取り込む。
+    // 1つの文に2区間が並ぶ書き方（「我孫子駅から新木駅・木下駅から成田駅間」）にも対応する（2026-09-23）
+    const segments = rail.lineId ? stationPairs(sentence, stations) : []
+    if (!rail.lineId || !segments.length) {
+      // 路線名が書かれている文だけ「読み取れなかった」に回す。
+      // 引き継ぎの文はバスの一覧など関係ない文のことがあるので黙って飛ばす
+      if (named) out.unparsed.push(`${sentence.trim()}。`)
       continue
     }
-    out.railways.push({ line: rail.lineId, from, to, state, detail: `${sentence.trim()}。`, announcedAt })
+    for (const [from, to] of segments) {
+      out.railways.push({ line: rail.lineId, from, to, state, detail: `${sentence.trim()}。`, announcedAt })
+    }
   }
   return out
 }

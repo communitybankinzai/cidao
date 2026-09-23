@@ -132,6 +132,18 @@ describe('parseCityTransit（A案：バスは自動・鉄道は承認）', () =>
     expect(r.buses).toEqual([])
   })
 
+  it('1つの文に2区間が並ぶ「本数を減らして運転」を、2つの減便として読む（9/23の書き方）', () => {
+    const page = [
+      '台風25号に伴い、JR成田線は【新木駅から木下駅】間の上下線で終日運転を見合わせています。',
+      'また、【我孫子駅から新木駅・木下駅から成田駅】間では上下線で本数を減らして運転しています。常磐線快速電車への直通運転は終日中止となります。',
+    ].join('\n')
+    const r = parseCityTransit(page, AT)
+    expect(r.railways.map((x) => `${x.from}-${x.to}:${x.state}`)).toEqual([
+      '新木-木下:suspended', '我孫子-新木:delayed', '木下-成田:delayed',
+    ])
+    expect(r.unparsed).toEqual([])
+  })
+
   it('運転再開の文は運休として拾わない', () => {
     const page = 'JR成田線は、成田駅～我孫子駅間で運転を再開しました。'
     const r = parseCityTransit(page, AT)
