@@ -7,7 +7,6 @@
 //
 // 判定（compareCityTransit）は純粋関数でテストあり。送信は失敗しても巡回を止めない。
 
-import { randomBytes } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isCitySourced, type BusEntry, type RailEntry, type RailStatus } from '@/lib/disaster-rail-status'
 
@@ -184,17 +183,6 @@ function railLabel(r: RailEntry) {
   return `${r.from}〜${r.to}（${state}）`
 }
 
-const APPROVE_BASE = 'https://cidao.vercel.app/api/disaster/rail-status/approve'
-const APPROVAL_HOURS = 12
-
-export type RailApproval = {
-  railways: RailEntry[]
-  announcedAt: string
-  createdAt: string
-  expiresAt: string
-  status: 'pending' | 'applied' | 'expired'
-}
-
 /**
  * 市の公共交通の案内が書き換わったときに呼ぶ（巡回から）。
  * 路線バスは自動で反映し、鉄道は今の地図と違えば承認リンクを作ってメールする。例外は投げない。
@@ -223,26 +211,26 @@ export async function handleCityTransitChange(
       parsed.unparsed.push('（路線バスの運休が書かれていますが、路線名を読み取れませんでした）')
     }
 
-    // 2) 鉄道：今の地図と違えば承認を作る
-    // 増えた・変わったときだけ承認を求める。消えたときは運休の自動解除（disaster-rail-status.ts）が外すので不要。
-    // 鉄道の文が読み取れなかったときも作らない（読めなかった＝止まっていない、と誤って外す提案になるため）
-    let approveUrl = ''
+    // 2) 鉄道：読み取れた区間はその場で反映する（2026-09-23 事業主判断＝A案）。
+    // 以前は承認リンクを押すまで反映しなかったが、夜間や不在のあいだ地図が古いままになった。
+    // 区間は地図の路線データの駅名と照合してから塗るので、誤った区間を塗る危険は小さい。
+    // 読み取れなかった文があるときは、市がまだ何か書いていると考えて今の登録を消さない。
     const railUnreadable = parsed.unparsed.some((s) => RAIL_LINES.some((r) => r.pattern.test(s)))
-    const railChanged = !railUnreadable && parsed.railways.length > 0 && !sameRailways((status.railways ?? []).filter(isCitySourced), parsed.railways)
+    const cityRails = (status.railways ?? []).filter(isCitySourced)
+    const railChanged = !railUnreadable && !sameRailways(cityRails, parsed.railways)
     if (railChanged) {
-      const token = randomBytes(24).toString('base64url')
-      const approval: RailApproval = {
-        railways: parsed.railways,
-        announcedAt: item.occurredAt,
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + APPROVAL_HOURS * 3600 * 1000).toISOString(),
-        status: 'pending',
+      const kept = (status.railways ?? []).filter((r) => !isCitySourced(r))
+      const next: RailStatus = {
+        ...status,
+        railways: [...parsed.railways, ...kept],
+        buses: parsed.buses.length || !mentionsBus ? parsed.buses : status.buses,
+        updatedAt: item.occurredAt,
+        checkedAt: new Date().toISOString(),
       }
-      await supabase.from('app_settings').upsert({ key: `disaster_rail_approval:${token}`, value: approval })
-      approveUrl = `${APPROVE_BASE}?token=${token}`
+      await supabase.from('app_settings').upsert({ key: SETTINGS_KEY, value: next })
     }
 
-    return await sendTransitMail({ item, status, parsed, busesApplied, railChanged, approveUrl })
+    return await sendTransitMail({ item, status, parsed, busesApplied, railChanged, railUnreadable })
   } catch (error) {
     return `failed: ${error instanceof Error ? error.message : String(error)}`
   }
@@ -254,27 +242,29 @@ async function sendTransitMail(args: {
   parsed: ParsedTransit
   busesApplied: boolean
   railChanged: boolean
-  approveUrl: string
+  railUnreadable: boolean
 }): Promise<string> {
-  const { item, status, parsed, busesApplied, railChanged, approveUrl } = args
+  const { item, status, parsed, busesApplied, railChanged, railUnreadable } = args
   const apiKey = process.env.RESEND_API_KEY ?? ''
   const from = process.env.MAIL_FROM ?? ''
   const to = process.env.DISASTER_NOTIFY_TO ?? process.env.COST_ALERT_TO ?? ''
   if (!apiKey || !from || !to) return 'skipped: RESEND_API_KEY / MAIL_FROM / 通知先 が未設定'
 
-  const needsHuman = railChanged || parsed.unparsed.length > 0
+  // 人の手が要るのは「読み取れなかった文があるとき」だけ。反映そのものは自動で終わっている
+  const needsHuman = parsed.unparsed.length > 0
   const lines: string[] = []
 
   if (railChanged) {
-    const now = (status.railways ?? []).filter(isCitySourced).map(railLabel)
-    const next = parsed.railways.map(railLabel)
+    const before = (status.railways ?? []).filter(isCitySourced).map(railLabel)
+    const after = parsed.railways.map(railLabel)
     lines.push(
-      '<b>🚃 鉄道の運休が市の発表と違います。確認して反映してください。</b><br>' +
-      `地図の今：${now.length ? now.map(escapeHtml).join('、') : '（なし）'}<br>` +
-      `市の発表：${next.length ? next.map(escapeHtml).join('、') : '（なし＝地図から外します）'}<br>` +
-      `<a href="${approveUrl}" style="display:inline-block;margin-top:6px;padding:8px 14px;background:#b91c1c;color:#fff;border-radius:6px;text-decoration:none">内容を確認して反映する</a>` +
-      `（${APPROVAL_HOURS}時間有効。開いた先のボタンを押すまでは反映されません）`,
+      '<b>🚃 鉄道の運休を市の発表に合わせて自動で反映しました</b><br>' +
+      `前：${before.length ? before.map(escapeHtml).join('、') : '（なし）'}<br>` +
+      `後：${after.length ? after.map(escapeHtml).join('、') : '（なし＝地図から外しました）'}`,
     )
+  }
+  if (railUnreadable) {
+    lines.push('<b>⚠ 鉄道の文を読み取れなかったため、地図の鉄道は変えていません。</b>下の文面を見て、必要なら Claude Code に伝えてください。')
   }
   if (parsed.unparsed.length) {
     lines.push(`<b>⚠ 読み取れなかった記述（地図には入れていません。必要なら Claude Code に伝えてください）</b><br>${parsed.unparsed.map(escapeHtml).join('<br>')}`)
@@ -293,11 +283,85 @@ async function sendTransitMail(args: {
   // CBI公式メールの自動仕分け（gas-mail-share/MailTriage.gs の RE_ACTION）は「警告」を含む件名を
   // 「要対応＋★」にする。GAS はCBI公式アカウントの持ち物で手元から書き換えられないため、件名側で合わせる
   const subject = needsHuman
-    ? '【要対応・更新漏れ警告】防災MAP：鉄道の運休の確認が必要です'
-    : busesApplied
-      ? '防災MAP：路線バスの運休を市の発表に合わせて自動更新しました'
+    ? '【要対応・更新漏れ警告】防災MAP：市の発表を読み取れなかった文があります'
+    : railChanged || busesApplied
+      ? '防災MAP：運行情報を市の発表に合わせて自動更新しました'
       : '防災MAP：市の公共交通の案内が更新されました（地図と一致）'
 
+  const { Resend } = await import('resend')
+  const resend = new Resend(apiKey)
+  const { error } = await resend.emails.send({
+    from: from.includes('<') ? from : `CBI <${from}>`,
+    to,
+    subject,
+    html: `<p>${lines.join('</p><p>')}</p>`,
+  })
+  return error ? `send failed: ${error.message}` : 'sent'
+}
+
+// ---------------------------------------------------------------------------
+// 取り込みが止まっていないかの見張り（2026-09-23 A案）
+// ---------------------------------------------------------------------------
+// 2026-09-22 に市の案内ページが 404 になり、取り込みが失敗し続けたのに誰も気づかず、
+// 地図に古い内容が残った。取れない状態が続いたらメールで知らせる。
+
+const WATCHDOG_HOURS = 6
+const WATCHDOG_STATE_KEY = 'disaster_rail_watchdog'
+
+/** 市の案内が長く取れていないときに知らせる。巡回のたびに呼ぶ。例外は投げない。 */
+export async function checkCityPageHealth(
+  supabase: SupabaseClient,
+  source: { label: string; url: string },
+  ok: boolean,
+  errorMessage?: string,
+): Promise<string> {
+  try {
+    const now = Date.now()
+    const { data } = await supabase.from('app_settings').select('value').eq('key', WATCHDOG_STATE_KEY).maybeSingle()
+    const state = (data?.value ?? {}) as { lastOkAt?: string; notifiedAt?: string }
+
+    if (ok) {
+      if (!state.lastOkAt || Date.parse(state.lastOkAt) < now) {
+        await supabase.from('app_settings').upsert({
+          key: WATCHDOG_STATE_KEY,
+          value: { lastOkAt: new Date(now).toISOString() },
+        })
+      }
+      return 'ok'
+    }
+
+    const lastOk = state.lastOkAt ? Date.parse(state.lastOkAt) : NaN
+    const downMs = Number.isFinite(lastOk) ? now - lastOk : Infinity
+    if (downMs < WATCHDOG_HOURS * 3600 * 1000) return 'failing (まだ通知しない)'
+    // 同じ障害で何度も送らない（1日1通まで）
+    const notified = state.notifiedAt ? Date.parse(state.notifiedAt) : 0
+    if (now - notified < 24 * 3600 * 1000) return 'failing (通知済み)'
+
+    const sent = await sendPlainMail(
+      '【要対応・更新漏れ警告】防災MAP：市の公共交通の案内が取り込めていません',
+      [
+        `<b>${escapeHtml(source.label)} を ${Math.floor(downMs / 3600000)} 時間取り込めていません。</b>`,
+        `ページが消えた・場所が変わった可能性があります。地図の運休は古いまま残ります。`,
+        `直前のエラー：${escapeHtml(errorMessage ?? '（不明）')}`,
+        `市のページ：<a href="${escapeHtml(source.url)}">${escapeHtml(source.url)}</a>`,
+        `対応：ページの場所が変わっていれば、Claude Code に「運行情報の情報源のURLを直して」と伝えてください。`,
+      ],
+    )
+    await supabase.from('app_settings').upsert({
+      key: WATCHDOG_STATE_KEY,
+      value: { ...state, notifiedAt: new Date(now).toISOString() },
+    })
+    return `notified: ${sent}`
+  } catch (error) {
+    return `watchdog failed: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
+async function sendPlainMail(subject: string, lines: string[]): Promise<string> {
+  const apiKey = process.env.RESEND_API_KEY ?? ''
+  const from = process.env.MAIL_FROM ?? ''
+  const to = process.env.DISASTER_NOTIFY_TO ?? process.env.COST_ALERT_TO ?? ''
+  if (!apiKey || !from || !to) return 'skipped: 送信設定なし'
   const { Resend } = await import('resend')
   const resend = new Resend(apiKey)
   const { error } = await resend.emails.send({

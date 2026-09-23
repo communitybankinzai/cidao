@@ -51,7 +51,12 @@ export type RailStatus = {
 
 export type ClearedReason = { what: string; why: string }
 
-/** 発表から何時間で自動的に地図から消すか（項目ごとの expiresAt が無いとき） */
+/**
+ * 事業者の発表を運営が登録した項目（sourceType: 'operator'）を、何時間で自動的に消すか。
+ * 市の発表由来の項目には使わない：市が発表し続けているのに時間で消えてしまい、
+ * 2026-09-22・23 に運休中の区間が地図から消えた（事業主指摘）。
+ * 市由来は「市の本文から記述が消えたら解除」だけで判断する。
+ */
 export const DEFAULT_TTL_HOURS = 12
 
 /** 本文にこれが1つも無ければ「もう止まっていない」とみなす */
@@ -59,7 +64,9 @@ export const DISRUPTION_WORDS = [
   '運休', '見合わせ', '遅れ', '遅延', '運転を取りやめ', '折り返し運転', '直通運転を中止',
 ]
 
-export function isExpired(entry: { expiresAt?: string; announcedAt?: string }, now = Date.now()) {
+export function isExpired(entry: { expiresAt?: string; announcedAt?: string; sourceType?: string }, now = Date.now()) {
+  // 市の発表由来は時間で消さない（記述が消えたときだけ解除する）
+  if (isCitySourced(entry) && !entry.expiresAt) return false
   const limit = entry.expiresAt
     ? Date.parse(entry.expiresAt)
     : entry.announcedAt

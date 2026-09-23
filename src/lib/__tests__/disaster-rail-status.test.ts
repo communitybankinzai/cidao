@@ -64,14 +64,15 @@ describe('filterRailStatus', () => {
     expect(r.buses).toHaveLength(1)
   })
 
-  it('発表から12時間を過ぎたものは、案内が取れていても出さない', () => {
+  it('事業者発表を運営が登録した項目は、発表から12時間で消える', () => {
+    // 市の発表由来は時間で消さない（下のテスト）。時間で消えるのは事業者発表の項目だけ
+    const status: RailStatus = {
+      railways: [{ ...STATUS.railways![0], sourceType: 'operator', sourceLabel: 'JR東日本 運行情報' }],
+    }
     // 発表 10:00 ＋ 12時間 ＝ 22:00 が期限
-    const before = Date.parse('2026-09-21T21:00:00+09:00')
-    const r = filterRailStatus(STATUS, PAGE_DISRUPTED, before)
-    expect(r.railways).toHaveLength(1)
+    expect(filterRailStatus(status, PAGE_DISRUPTED, Date.parse('2026-09-21T21:00:00+09:00')).railways).toHaveLength(1)
 
-    const after = Date.parse('2026-09-21T23:00:00+09:00')
-    const r2 = filterRailStatus(STATUS, PAGE_DISRUPTED, after)
+    const r2 = filterRailStatus(status, PAGE_DISRUPTED, Date.parse('2026-09-21T23:00:00+09:00'))
     expect(r2.railways).toHaveLength(0)
     expect(r2.cleared[0].why).toBe('発表から時間が経ったため')
   })
@@ -107,5 +108,26 @@ describe('filterRailStatus', () => {
     expect(r.railways).toHaveLength(0)
     expect(r.cleared[0].why).toBe('発表から時間が経ったため')
   })
-})
 
+  it('市の発表由来は時間で消さない（記述が消えたときだけ解除する）', () => {
+    // 2026-09-22・23：市がまだ発表しているのに12時間で消え、運休中の区間が地図から落ちた
+    const status: RailStatus = {
+      railways: [{ line: 'jr-narita-abiko', from: '新木', to: '木下', state: 'suspended', announcedAt: '2026-09-23T11:00:00+09:00' }],
+      buses: [{ name: '路線バス 六合路線（…）', announcedAt: '2026-09-23T11:00:00+09:00' }],
+    }
+    const page = '災害時の公共交通のご案内 JR成田線は【新木駅から木下駅】間で終日運転を見合わせています。・六合路線（…）は運休しています。'
+    const twoDaysLater = Date.parse('2026-09-25T11:00:00+09:00')
+    const r = filterRailStatus(status, page, twoDaysLater)
+    expect(r.railways).toHaveLength(1)
+    expect(r.buses).toHaveLength(1)
+    expect(r.cleared).toHaveLength(0)
+  })
+
+  it('市の発表由来でも、期限を明示した項目は期限で消える', () => {
+    const status: RailStatus = {
+      railways: [{ line: 'jr-narita-abiko', from: '新木', to: '木下', state: 'suspended', expiresAt: '2026-09-23T23:00:00+09:00' }],
+    }
+    const r = filterRailStatus(status, PAGE_DISRUPTED, Date.parse('2026-09-24T00:00:00+09:00'))
+    expect(r.railways).toHaveLength(0)
+  })
+})

@@ -7,7 +7,7 @@ import { priorityLabelOf, type MonitorItem } from './disaster-sns-monitor'
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
-import { handleCityTransitChange } from '@/lib/disaster-rail-watch'
+import { checkCityPageHealth, handleCityTransitChange } from '@/lib/disaster-rail-watch'
 import {
   isRoadClosureKind,
   loadExistingClosures,
@@ -1228,9 +1228,12 @@ export async function runDisasterTimeline(
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: drafts.length, ...counts })
       // 市の公共交通の案内が書き換わったら、路線バスは自動で地図へ反映し、
       // 鉄道は承認リンク付きで運営へ知らせる（disaster-rail-watch.ts）
-      if (source.kind === 'city-page-watch' && counts.inserted > 0 && drafts[0]) {
-        const mail = await handleCityTransitChange(supabase, drafts[0])
-        console.info(`[disaster-timeline] ${source.label} が更新されたため通知: ${mail}`)
+      if (source.kind === 'city-page-watch') {
+        await checkCityPageHealth(supabase, { label: source.label, url: source.url }, true)
+        if (counts.inserted > 0 && drafts[0]) {
+          const mail = await handleCityTransitChange(supabase, drafts[0])
+          console.info(`[disaster-timeline] ${source.label} が更新されたため通知: ${mail}`)
+        }
       }
       await supabase.from('disaster_info_sources').update({
         last_fetched_at: fetchedAt,
@@ -1240,6 +1243,11 @@ export async function runDisasterTimeline(
       }).eq('id', source.id)
     } catch (error) {
       const message = errorMessage(error)
+      // 市の案内が長く取れないままになっていないか見張る（2026-09-22 に404で止まったため）
+      if (source.kind === 'city-page-watch') {
+        const watched = await checkCityPageHealth(supabase, { label: source.label, url: source.url }, false, message)
+        console.info(`[disaster-timeline] ${source.label} の取り込み失敗: ${watched}`)
+      }
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'failed', fetched: 0, inserted: 0, updated: 0, unchanged: 0, error: message })
       await supabase.from('disaster_info_sources').update({
         last_fetched_at: fetchedAt,
