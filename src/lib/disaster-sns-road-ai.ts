@@ -113,8 +113,12 @@ function anthropicClient() {
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
   // 2026-09 から、ワークスペースに紐付かないキーは anthropic-workspace-id ヘッダーが必須になった（無いと 400）。
   // 組織「N's factory」にワークスペース「cidao」を作って ID を環境変数に置いてある（2026-09-25）
-  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID
-  return new Anthropic({ apiKey, defaultHeaders: workspaceId ? { 'anthropic-workspace-id': workspaceId } : undefined })
+  // ID は秘密ではないので既定値を置く。環境変数に区画ID（681a0d59-…）など別の値が入っていた事故があったため、wrkspc_ で始まる値だけ採用する（2026-09-25）
+  const DEFAULT_WORKSPACE_ID = 'wrkspc_01Draz5nuRYPiaBxzHMbh5Gu'
+  const configured = (process.env.ANTHROPIC_WORKSPACE_ID ?? '').trim()
+  const workspaceId = /^wrkspc_[A-Za-z0-9]+$/.test(configured) ? configured : DEFAULT_WORKSPACE_ID
+  if (configured && workspaceId !== configured) console.warn('[disaster-sns-road-ai] ANTHROPIC_WORKSPACE_ID が wrkspc_ で始まらないため既定値を使います')
+  return new Anthropic({ apiKey, defaultHeaders: { 'anthropic-workspace-id': workspaceId } })
 }
 
 export async function extractRoadReport(client: Anthropic, candidate: Candidate): Promise<{ extraction: Extraction; usage: { input: number; output: number } }> {
