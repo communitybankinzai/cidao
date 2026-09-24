@@ -36,9 +36,16 @@ function extractArea(message: string) {
 
 // 解除の放送がどの発令を解除したかを、災害の種類・場所の語で対応づける。
 // 語が1つも無い解除放送は、それより前の発令をすべて解除したものとみなす（安全側ではなく、出しっぱなしを避ける側）
-const AREA_TOKENS = ['土砂', '印旛沼', '手賀沼', '利根川', '洪水', '浸水', '全域']
+const AREA_TOKENS = ['土砂', '洪水', '浸水', '全域']
+// 川・沼の名前は決め打ちにしない。2026-09-24、9/22 19:50 の「長門川の水位上昇、旧長門川及び将監川の一部越水…
+// 避難指示を発令」が、どの語にも当たらず場所の語ゼロになり、9/24 18:50 の「印旛沼、長門川、旧長門川及び将監川…
+// 避難指示を解除しました」で外れなかった（自動SNS投稿が解除後もレベル4を出し続けた）。
+// そのため、文中の「〇〇川」「〇〇沼」「〇〇池」を拾って照合に使う。
+const WATER_NAME = /[一-鿿ァ-ヶー]{1,6}(?:川|沼|池)/g
 function areaTokens(text: string) {
-  return AREA_TOKENS.filter((t) => text.includes(t))
+  const fixed = AREA_TOKENS.filter((t) => text.includes(t))
+  const waters = text.match(WATER_NAME) ?? []
+  return [...new Set([...fixed, ...waters])]
 }
 
 // 放送文を文ごとに分ける（句点と改行）。「一部解除」の放送では、解除した文と継続する文が同じ放送に並ぶため、
@@ -73,7 +80,11 @@ export function detectEvacAlerts(updates: OfficialUpdate[], now: number) {
     if (cancelParts.length) {
       // 解除した地域の語は、解除を述べた文からだけ拾う
       const tokens = areaTokens(cancelParts.join('\n'))
-      active = tokens.length ? active.filter((a) => !a.tokens.some((t) => tokens.includes(t))) : []
+      // 場所の語を持たない発令は、どの解除でも外す。対応づけられないまま7日間出しっぱなしになるのを防ぐ
+      // （2026-09-24 に実際に起きた。出し続けるより、解除を取りこぼして消えるほうが害が小さいと判断）
+      active = tokens.length
+        ? active.filter((a) => a.tokens.length > 0 && !a.tokens.some((t) => tokens.includes(t)))
+        : []
       cancelledAny = true
     }
     // 新しい発令かどうかは、解除の文と「継続中」「引き続き」の文を除いて判断する
