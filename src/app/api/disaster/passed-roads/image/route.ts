@@ -48,10 +48,17 @@ async function boundedFormData(request: Request) {
 
 // Upload creates an unlisted URL. The edit dialog attaches it with PATCH only on Save.
 // If PATCH fails the dialog retains the URL to retry without uploading another copy.
+// 記録した本人が、あとから写真を付けられる時間（2026-09-25）。
+// 台風25号の冠水地点の再募集にあたり、事業主判断で市民も1枚だけ付けられるようにした。
+// 合言葉は要らないが、**その記録を送った端末から・30分以内・1枚まで**に限る。
+// 不適切な画像は運営が hidden=true で伏せる（冠水の投稿と同じ運用）。
+const OWNER_UPLOAD_MINUTES = 30
+const OWNER_MAX_IMAGES = 1
+
 export async function POST(request: Request) {
   const key = process.env.DISASTER_MODERATION_KEY || process.env.CRON_SECRET || ''
   const given = request.headers.get('x-moderation-key') ?? ''
-  if (!key || given.length < 16 || given !== key) return json(request, { error: 'forbidden' }, 403)
+  const isOperator = Boolean(key) && given.length >= 16 && given === key
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -71,9 +78,23 @@ export async function POST(request: Request) {
   if (image.size > MAX_ROAD_IMAGE_INPUT_BYTES) return json(request, { error: 'image_too_large' }, 413)
 
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
-  const { data: road, error: readError } = await supabase.from('disaster_passed_roads').select('id').eq('id', roadId).maybeSingle()
+  const { data: road, error: readError } = await supabase
+    .from('disaster_passed_roads')
+    .select('id, device_id, created_at, image_urls')
+    .eq('id', roadId)
+    .maybeSingle()
   if (readError) return json(request, { error: 'record_lookup_failed' }, 500)
   if (!road) return json(request, { error: 'not_found' }, 404)
+
+  // 運営でないときは、その記録を送った端末からの、30分以内の1枚だけ受ける
+  const deviceId = typeof form.get('deviceId') === 'string' ? String(form.get('deviceId')) : ''
+  const already = Array.isArray(road.image_urls) ? road.image_urls.length : 0
+  if (!isOperator) {
+    if (!deviceId || deviceId !== road.device_id) return json(request, { error: 'forbidden' }, 403)
+    const age = Date.now() - new Date(String(road.created_at)).getTime()
+    if (!Number.isFinite(age) || age > OWNER_UPLOAD_MINUTES * 60 * 1000) return json(request, { error: 'too_late' }, 409)
+    if (already >= OWNER_MAX_IMAGES) return json(request, { error: 'too_many_images' }, 409)
+  }
 
   let jpeg: Buffer
   try { jpeg = await encodeRoadImage(Buffer.from(await image.arrayBuffer())) } catch (error) {
@@ -85,7 +106,16 @@ export async function POST(request: Request) {
   const { error: uploadError } = await bucket.upload(objectPath, jpeg, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' })
   if (uploadError) return json(request, { error: 'image_upload_failed' }, 500)
   const { data } = bucket.getPublicUrl(objectPath)
-  return json(request, { ok: true, url: data.publicUrl }, 201)
+  // 運営は今までどおり URL を受け取って PATCH で付ける。市民はここで記録に付ける（PATCH は開けない）
+  if (!isOperator) {
+    const { error: attachError } = await supabase
+      .from('disaster_passed_roads')
+      .update({ image_urls: [data.publicUrl] })
+      .eq('id', roadId)
+      .eq('device_id', deviceId)
+    if (attachError) return json(request, { error: 'attach_failed' }, 500)
+  }
+  return json(request, { ok: true, url: data.publicUrl, attached: !isOperator }, 201)
 }
 
 export function OPTIONS(request: Request) {
