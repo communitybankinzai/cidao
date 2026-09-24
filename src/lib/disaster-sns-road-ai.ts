@@ -108,17 +108,23 @@ SNSの投稿1件を読み、「特定の道・橋・場所が 通れた／通れ
 - observed_at は本文に時刻や「今」「先ほど」「昨日の18時」などの手掛かりがあるときだけ、参考の投稿時刻から計算して ISO 8601（+09:00）で答える。無ければ null。
 - 印西市周辺と関係ない地域の話なら is_road_report=false。`
 
-function anthropicClient() {
+// ワークスペースの扱い（2026-09-25）：
+// 手元のキーは「anthropic-workspace-id ヘッダーが必須」と 400 を返すが、本番（Vercel）のキーはヘッダー無しで通り、
+// 逆にヘッダーを付けると「Workspace not found」404 になった（キーの組織が違う）。
+// そのため既定はヘッダー無しで呼び、「指定必須」と言われたときだけ付けて1回やり直す。
+// ID は秘密ではないので既定値を置く。環境変数に区画ID（681a0d59-…）が入っていた事故があるため wrkspc_ で始まる値だけ採用する
+const DEFAULT_WORKSPACE_ID = 'wrkspc_01Draz5nuRYPiaBxzHMbh5Gu'
+function workspaceId() {
+  const configured = (process.env.ANTHROPIC_WORKSPACE_ID ?? '').trim()
+  return /^wrkspc_[A-Za-z0-9]+$/.test(configured) ? configured : DEFAULT_WORKSPACE_ID
+}
+function anthropicClient(withWorkspace = false) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
-  // 2026-09 から、ワークスペースに紐付かないキーは anthropic-workspace-id ヘッダーが必須になった（無いと 400）。
-  // 組織「N's factory」にワークスペース「cidao」を作って ID を環境変数に置いてある（2026-09-25）
-  // ID は秘密ではないので既定値を置く。環境変数に区画ID（681a0d59-…）など別の値が入っていた事故があったため、wrkspc_ で始まる値だけ採用する（2026-09-25）
-  const DEFAULT_WORKSPACE_ID = 'wrkspc_01Draz5nuRYPiaBxzHMbh5Gu'
-  const configured = (process.env.ANTHROPIC_WORKSPACE_ID ?? '').trim()
-  const workspaceId = /^wrkspc_[A-Za-z0-9]+$/.test(configured) ? configured : DEFAULT_WORKSPACE_ID
-  if (configured && workspaceId !== configured) console.warn('[disaster-sns-road-ai] ANTHROPIC_WORKSPACE_ID が wrkspc_ で始まらないため既定値を使います')
-  return new Anthropic({ apiKey, defaultHeaders: { 'anthropic-workspace-id': workspaceId } })
+  return new Anthropic({ apiKey, defaultHeaders: withWorkspace ? { 'anthropic-workspace-id': workspaceId() } : undefined })
+}
+function needsWorkspaceHeader(error: unknown) {
+  return error instanceof Anthropic.APIError && error.status === 400 && /anthropic-workspace-id/.test(error.message)
 }
 
 export async function extractRoadReport(client: Anthropic, candidate: Candidate): Promise<{ extraction: Extraction; usage: { input: number; output: number } }> {
@@ -237,12 +243,21 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
   const targets = ((rows ?? []) as Candidate[]).filter((c) => !done.has(c.id) && !isDismissedOrQuote(c) && looksLikeRoadPost(c.body_text)).slice(0, limit)
   const result = { scanned: 0, reports: 0, noLocation: 0, none: 0, errors: 0, inputTokens: 0, outputTokens: 0, remaining: 0, errorSamples: [] as string[] }
   if (!targets.length) return result
-  const client = options.client ?? anthropicClient()
+  let client = options.client ?? anthropicClient()
   for (const candidate of targets) {
     result.scanned++
     let scan: { result: 'report' | 'none' | 'no_location' | 'error'; detail: string; input_tokens: number; output_tokens: number } = { result: 'error', detail: '', input_tokens: 0, output_tokens: 0 }
     try {
-      const { extraction, usage } = await extractRoadReport(client, candidate)
+      let extracted: Awaited<ReturnType<typeof extractRoadReport>>
+      try {
+        extracted = await extractRoadReport(client, candidate)
+      } catch (firstError) {
+        if (!needsWorkspaceHeader(firstError) || options.client) throw firstError
+        // 「ワークスペース指定が必須」と言われたキー（手元用など）だけヘッダー付きに切り替えて、以降もそれを使う
+        client = anthropicClient(true)
+        extracted = await extractRoadReport(client, candidate)
+      }
+      const { extraction, usage } = extracted
       scan.input_tokens = usage.input; scan.output_tokens = usage.output
       result.inputTokens += usage.input; result.outputTokens += usage.output
       if (!extraction.is_road_report || extraction.kind === 'unknown') {
