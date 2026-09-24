@@ -222,7 +222,7 @@ export async function POST(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
 
-  let body: { deviceId?: unknown; kind?: unknown; source?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown }
+  let body: { deviceId?: unknown; kind?: unknown; source?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown; sourceUrls?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -259,6 +259,12 @@ export async function POST(request: Request) {
   if (endedAt.getTime() > now + 60 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
 
   const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
+  // 記録した本人が、もとになったSNSの投稿URLを1つだけ添えられる（2026-09-25）。
+  // AIの自動読み取り（sns-road-reports）が取りこぼした投稿を、市民が手で地図に足せるようにするため。
+  // 検査は運営の編集と同じ normalizeRoadMediaUrls（http/https のみ・2048字まで）。不正なら記録ごと断る。
+  const sourceUrlsRaw = body.sourceUrls === undefined || body.sourceUrls === null ? [] : body.sourceUrls
+  const sourceUrls = normalizeRoadMediaUrls(Array.isArray(sourceUrlsRaw) ? sourceUrlsRaw : [sourceUrlsRaw])
+  if (sourceUrls === null || sourceUrls.length > 1) return json(request, { error: 'invalid_source_url' }, 400)
   const hash = ipHash(request)
 
   // 同じ端末または同じ IP からの連続投稿を抑える（取消済みは再入力を妨げない）。
@@ -306,6 +312,7 @@ export async function POST(request: Request) {
       started_at: startedAt.toISOString(),
       ended_at: endedAt.toISOString(),
       note,
+      source_urls: sourceUrls,
       ip_hash: hash,
     })
     .select('id, created_at')
