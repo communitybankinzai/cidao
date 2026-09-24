@@ -116,9 +116,15 @@ function insideArea(coordinates: unknown): boolean {
 
 export async function GET(request: Request) {
   try {
-    const response = await fetch(SOURCE_URL, {
+    // ⚠ next.revalidate だけに任せると、いちど保存した中身が居座り続けることがある。
+    // 2026-09-24 に実際に起きた：本番が 9/21 07:20 生成のまま3日間止まり、台風25号の後半の
+    // 2,651件が地図に出ていなかった（本家は 9/24 08:30 生成・9,312件）。
+    // そこで URL の末尾に「10分ごとに変わる印」を付け、保存の鍵そのものを入れ替える。
+    // 先方へ取りに行く回数は従来どおり10分に1回のまま（規約の「大量リクエスト」に当たらない）。
+    const bucket = Math.floor(Date.now() / (CACHE_SECONDS * 1000))
+    const response = await fetch(`${SOURCE_URL}?cbi=${bucket}`, {
       headers: { Accept: 'application/json', 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
-      // Next.js のデータキャッシュ。10分間は先方へ取りに行かない
+      // 10分間は先方へ取りに行かない（鍵が変わるまでは保存した中身を使う）
       next: { revalidate: CACHE_SECONDS },
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -147,6 +153,10 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         generatedAt: payload.generated_at ?? '',
+        // 本家が作ってから何分たっているか。大きいままなら取り込みが止まっている（2026-09-24 追加）
+        generatedAgeMinutes: payload.generated_at
+          ? Math.round((Date.now() - new Date(payload.generated_at).getTime()) / 60000)
+          : null,
         fetchedAt: new Date().toISOString(),
         count: roads.length,
         hiddenCount: hidden.length,
