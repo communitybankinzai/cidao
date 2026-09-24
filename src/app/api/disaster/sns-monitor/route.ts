@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { runDisasterSnsMonitor } from '@/lib/disaster-sns-monitor'
+import { processSnsRoadCandidates } from '@/lib/disaster-sns-road-ai'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -141,7 +142,15 @@ export async function POST(request: Request) {
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   try {
     const result = await runDisasterSnsMonitor(supabase)
-    return json(request, result)
+    // 巡回のついでに、通行に触れた未判定の投稿を数件だけ AI に掛ける（2026-09-25・失敗しても巡回結果は返す）
+    let roadReports: unknown = null
+    try {
+      roadReports = await processSnsRoadCandidates(supabase, { limit: 4 })
+    } catch (roadError) {
+      roadReports = { error: roadError instanceof Error ? roadError.message : String(roadError) }
+      console.error('[disaster/sns-monitor] road reports', roadReports)
+    }
+    return json(request, { ...result, roadReports })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[disaster/sns-monitor]', message)
