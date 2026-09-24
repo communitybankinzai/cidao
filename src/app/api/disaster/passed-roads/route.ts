@@ -39,6 +39,14 @@ const MIN_LENGTH_M = 50
 const KINDS = new Set(['passed', 'blocked'])
 const SOURCES = new Set(['gps', 'map']) // gps=現地でGPS記録／map=地図の長押しで後から指定
 const MAX_LENGTH_M = 30000
+// 後から登録してよい災害の期間（2026-09-25）。ここに書いたものだけ、24時間より前でも受ける。
+// 画面の「いつの状況？」の選択肢と揃えること（site/inzai-disaster-map の index.html・app.js）。
+// 新しい災害を足すときは、始まりと終わりを実際の発生に合わせて書く。
+const PAST_EVENTS = [
+  { key: 'typhoon25', label: '台風25号', from: Date.parse('2026-09-20T00:00:00+09:00'), to: Date.parse('2026-09-24T23:59:59+09:00') },
+  { key: 'aug2026', label: '8月の豪雨', from: Date.parse('2026-08-13T00:00:00+09:00'), to: Date.parse('2026-08-16T23:59:59+09:00') },
+]
+
 const MAX_NOTE = 200
 
 // 運営（いたずら対応）用の合言葉。Vercel の環境変数 DISASTER_MODERATION_KEY に置く。
@@ -242,8 +250,13 @@ export async function POST(request: Request) {
   const now = Date.now()
   if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) return json(request, { error: 'invalid_time' }, 400)
   if (endedAt.getTime() < startedAt.getTime()) return json(request, { error: 'invalid_time' }, 400)
-  // 端末時計のずれは許すが、1日以上ずれた記録は受けない（過去の記録を後から捏造させない）
-  if (Math.abs(now - endedAt.getTime()) > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+  // 端末時計のずれは許すが、1日以上ずれた記録は受けない（過去の記録を後から捏造させない）。
+  // ただし、決まった災害の期間の中に入る時刻だけは後からでも受ける（2026-09-25）。
+  // 台風25号の冠水を集め直すことになったが、選べる時刻が12時間前までで登録できなかったため。
+  // ⚠ 期間は下の PAST_EVENTS に書いたものだけ。任意の過去は今までどおり受けない
+  const inPastEvent = PAST_EVENTS.some((e) => endedAt.getTime() >= e.from && endedAt.getTime() <= e.to)
+  if (!inPastEvent && Math.abs(now - endedAt.getTime()) > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+  if (endedAt.getTime() > now + 60 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
 
   const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
   const hash = ipHash(request)
