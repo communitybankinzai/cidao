@@ -1,0 +1,395 @@
+{
+  "credit": "国土交通省 全国のアンダーパス箇所マップ（公共データ利用規約1.0）および © OpenStreetMap contributors（ODbL 1.0）を加工",
+  "points": [
+    {
+      "name": "六幸橋",
+      "aliases": [
+        "六幸橋"
+      ],
+      "lat": 35.840668,
+      "lng": 140.147341,
+      "sourceUrl": "https://www.openstreetmap.org/way/31049640",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "コスモス大橋",
+      "aliases": [
+        "コスモス大橋"
+      ],
+      "lat": 35.8006226,
+      "lng": 140.1188302,
+      "sourceUrl": "https://www.openstreetmap.org/way/64250464",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "亀成橋",
+      "aliases": [
+        "亀成橋"
+      ],
+      "lat": 35.828933,
+      "lng": 140.1190485,
+      "sourceUrl": "https://www.openstreetmap.org/way/84149457",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "山田橋",
+      "aliases": [
+        "山田橋"
+      ],
+      "lat": 35.7738806,
+      "lng": 140.2283957,
+      "sourceUrl": "https://www.openstreetmap.org/way/92336662",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "富ヶ谷橋",
+      "aliases": [
+        "富ヶ谷橋"
+      ],
+      "lat": 35.7761811,
+      "lng": 140.0615617,
+      "sourceUrl": "https://www.openstreetmap.org/way/93152108",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "甚兵衛大橋",
+      "aliases": [
+        "甚兵衛大橋"
+      ],
+      "lat": 35.7929236,
+      "lng": 140.2490239,
+      "sourceUrl": "https://www.openstreetmap.org/way/126737028",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "郷部橋",
+      "aliases": [
+        "郷部橋"
+      ],
+      "lat": 35.7841981,
+      "lng": 140.3116028,
+      "sourceUrl": "https://www.openstreetmap.org/way/126737042",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "公津橋",
+      "aliases": [
+        "公津橋"
+      ],
+      "lat": 35.7659041,
+      "lng": 140.3034426,
+      "sourceUrl": "https://www.openstreetmap.org/way/126738427",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "吾妻橋",
+      "aliases": [
+        "吾妻橋"
+      ],
+      "lat": 35.7870037,
+      "lng": 140.3295912,
+      "sourceUrl": "https://www.openstreetmap.org/way/126738570",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "阿利耶橋",
+      "aliases": [
+        "阿利耶橋"
+      ],
+      "lat": 35.7710711,
+      "lng": 140.3093417,
+      "sourceUrl": "https://www.openstreetmap.org/way/126739491",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "白山大橋",
+      "aliases": [
+        "白山大橋"
+      ],
+      "lat": 35.8309953,
+      "lng": 140.2540966,
+      "sourceUrl": "https://www.openstreetmap.org/way/127687519",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "田中橋",
+      "aliases": [
+        "田中橋"
+      ],
+      "lat": 35.8330648,
+      "lng": 140.2477515,
+      "sourceUrl": "https://www.openstreetmap.org/way/127688070",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "堀口橋",
+      "aliases": [
+        "堀口橋"
+      ],
+      "lat": 35.8388844,
+      "lng": 140.244234,
+      "sourceUrl": "https://www.openstreetmap.org/way/127688197",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "白井橋",
+      "aliases": [
+        "白井橋"
+      ],
+      "lat": 35.8021463,
+      "lng": 140.0689174,
+      "sourceUrl": "https://www.openstreetmap.org/way/139503404",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "小室橋",
+      "aliases": [
+        "小室橋"
+      ],
+      "lat": 35.794844,
+      "lng": 140.0781198,
+      "sourceUrl": "https://www.openstreetmap.org/way/139503855",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "新東和田橋",
+      "aliases": [
+        "新東和田橋"
+      ],
+      "lat": 35.7779119,
+      "lng": 140.3252949,
+      "sourceUrl": "https://www.openstreetmap.org/way/157540396",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "不動トンネル",
+      "aliases": [
+        "不動トンネル"
+      ],
+      "lat": 35.7721912,
+      "lng": 140.3088423,
+      "sourceUrl": "https://www.openstreetmap.org/way/178906564",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "なかよしトンネル",
+      "aliases": [
+        "なかよしトンネル"
+      ],
+      "lat": 35.7800587,
+      "lng": 140.3150417,
+      "sourceUrl": "https://www.openstreetmap.org/way/188557845",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "市井橋",
+      "aliases": [
+        "市井橋"
+      ],
+      "lat": 35.7760217,
+      "lng": 140.2309655,
+      "sourceUrl": "https://www.openstreetmap.org/way/229080009",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "木戸川5号橋",
+      "aliases": [
+        "木戸川5号橋"
+      ],
+      "lat": 35.7401069,
+      "lng": 140.044039,
+      "sourceUrl": "https://www.openstreetmap.org/way/279160968",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "木戸川2号橋",
+      "aliases": [
+        "木戸川2号橋"
+      ],
+      "lat": 35.7446942,
+      "lng": 140.0526455,
+      "sourceUrl": "https://www.openstreetmap.org/way/279160976",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "木戸川3号橋",
+      "aliases": [
+        "木戸川3号橋"
+      ],
+      "lat": 35.7421575,
+      "lng": 140.0482016,
+      "sourceUrl": "https://www.openstreetmap.org/way/279160989",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "木戸川4号橋",
+      "aliases": [
+        "木戸川4号橋"
+      ],
+      "lat": 35.7411642,
+      "lng": 140.0458094,
+      "sourceUrl": "https://www.openstreetmap.org/way/279160993",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "古和釜橋",
+      "aliases": [
+        "古和釜橋"
+      ],
+      "lat": 35.747773,
+      "lng": 140.0576416,
+      "sourceUrl": "https://www.openstreetmap.org/way/279161048",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "鈴身川1号橋",
+      "aliases": [
+        "鈴身川1号橋"
+      ],
+      "lat": 35.7795774,
+      "lng": 140.0847048,
+      "sourceUrl": "https://www.openstreetmap.org/way/306423534",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "白井大橋",
+      "aliases": [
+        "白井大橋"
+      ],
+      "lat": 35.7845418,
+      "lng": 140.0473948,
+      "sourceUrl": "https://www.openstreetmap.org/way/327006211",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "駒込川6号橋",
+      "aliases": [
+        "駒込川6号橋"
+      ],
+      "lat": 35.7378585,
+      "lng": 140.0560445,
+      "sourceUrl": "https://www.openstreetmap.org/way/329488788",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "郷部大橋",
+      "aliases": [
+        "郷部大橋"
+      ],
+      "lat": 35.7864136,
+      "lng": 140.3063431,
+      "sourceUrl": "https://www.openstreetmap.org/way/330601577",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "寺見橋",
+      "aliases": [
+        "寺見橋"
+      ],
+      "lat": 35.7821761,
+      "lng": 140.3251183,
+      "sourceUrl": "https://www.openstreetmap.org/way/330603438",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "長殿橋",
+      "aliases": [
+        "長殿橋"
+      ],
+      "lat": 35.7900759,
+      "lng": 140.067698,
+      "sourceUrl": "https://www.openstreetmap.org/way/463090754",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "長生橋",
+      "aliases": [
+        "長生橋"
+      ],
+      "lat": 35.9056198,
+      "lng": 140.2363332,
+      "sourceUrl": "https://www.openstreetmap.org/way/765160973",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "半田大橋",
+      "aliases": [
+        "半田大橋"
+      ],
+      "lat": 35.9131371,
+      "lng": 140.2366084,
+      "sourceUrl": "https://www.openstreetmap.org/way/1051720988",
+      "basis": "OpenStreetMapの道路形状から橋・隧道の代表点（2026-07-24取得、位置の目安）"
+    },
+    {
+      "name": "取手市白山５丁目 関東鉄道常総線下",
+      "aliases": [
+        "取手市白山５丁目 関東鉄道常総線下"
+      ],
+      "lat": 35.90978,
+      "lng": 140.05832,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "柴崎台１丁目地先（利根山隧道）",
+      "aliases": [
+        "柴崎台１丁目地先（利根山隧道）"
+      ],
+      "lat": 35.873068,
+      "lng": 140.035662,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "北８０－３地先(国道356号バイパス道路ガード下)",
+      "aliases": [
+        "北８０－３地先(国道356号バイパス道路ガード下)"
+      ],
+      "lat": 35.855425,
+      "lng": 140.20826,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "北４４４－４地先(国道356号バイパス道路ガード下)",
+      "aliases": [
+        "北４４４－４地先(国道356号バイパス道路ガード下)"
+      ],
+      "lat": 35.855036,
+      "lng": 140.205325,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "柴崎（天王谷ランプ）",
+      "aliases": [
+        "柴崎（天王谷ランプ）"
+      ],
+      "lat": 35.878253,
+      "lng": 140.033158,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "布佐アンダー",
+      "aliases": [
+        "布佐アンダー"
+      ],
+      "lat": 35.845113,
+      "lng": 140.135131,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    },
+    {
+      "name": "千葉県-02-095",
+      "aliases": [
+        "千葉県-02-095"
+      ],
+      "lat": 35.838039,
+      "lng": 140.13714,
+      "sourceUrl": "https://www.mlit.go.jp/road/saigai/underpass/index.html",
+      "basis": "国土交通省アンダーパス箇所マップの地点（2026-09-23取得）"
+    }
+  ]
+}
