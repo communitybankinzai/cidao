@@ -187,19 +187,21 @@ export async function GET(request: Request) {
       if (m !== null && (oldest === null || m > oldest)) oldest = m
     }
     const staleAlert = oldest !== null && oldest > 24 * 60
+    // 発令が無いときは「新しくならない」のが正常なので、経過では警告しない。
+    // 防災速報そのものが取れているかは、下の「公式発表の巡回」が見ている
     rows.push({
       group: '市の発表',
       label: '市の避難情報（発令・解除）',
       lastAt: savedAt,
       ageMinutes: age,
-      expectMinutes: 180,
-      level: staleAlert ? 'danger' : levelOf(age, 180),
+      expectMinutes: alerts.length ? 180 : null,
+      level: staleAlert ? 'danger' : alerts.length ? levelOf(age, 180) : 'ok',
       detail: alerts.length
         ? `発令中 ${alerts.length}件${lastBroadcastAt ? `／最後の放送 ${lastBroadcastAt}` : ''}`
         : `発令なし${lastBroadcastAt ? `／最後の放送 ${lastBroadcastAt}` : ''}`,
       judgedAgeText: alerts.length
         ? `いちばん古い発令は ${hoursText(oldest)}${staleAlert ? '（24時間を超えています）' : ''}`
-        : '—',
+        : '発令なし',
     })
   }
 
@@ -207,7 +209,7 @@ export async function GET(request: Request) {
   {
     const last = setting('shelter_last_open') ?? {}
     const savedAt = typeof last.savedAt === 'string' ? last.savedAt : null
-    const open = Array.isArray(last.names) ? last.names.length : Array.isArray(last.open) ? (last.open as unknown[]).length : null
+    const open = Array.isArray(last.openNames) ? (last.openNames as unknown[]).length : null
     const age = minutesSince(savedAt)
     rows.push({
       group: '市の発表',
@@ -217,6 +219,7 @@ export async function GET(request: Request) {
       expectMinutes: 360,
       level: levelOf(age, 360),
       detail: open === null ? '直前の判定は保存されていません' : `直前に開設中と判定した施設 ${open}件`,
+      judgedAgeText: typeof last.lastBroadcastAt === 'string' ? `最後の放送 ${last.lastBroadcastAt}` : '—',
     })
   }
 
@@ -257,9 +260,12 @@ export async function GET(request: Request) {
       lastAt: null,
       ageMinutes: age,
       expectMinutes: 120,
-      level: levelOf(age, 120),
+      // 発表から60日を超えた通行止めが残っているのは「古い判断が生き続けている」形なので目立たせる
+      level: oldest !== null && oldest > 60 * 24 * 60 ? 'late' : levelOf(age, 120),
       detail: `通行止め中 ${active.length}件`,
-      judgedAgeText: active.length ? `いちばん古い発表は ${hoursText(oldest)}` : '—',
+      judgedAgeText: active.length
+        ? `いちばん古い発表は ${hoursText(oldest)}${oldest !== null && oldest > 60 * 24 * 60 ? '（解除の取りこぼしがないか確認）' : ''}`
+        : '—',
     })
   }
 
