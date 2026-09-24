@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { distanceM, rainAt, type LatLon, type RainInfo } from '@/lib/disaster-amedas-rain'
+import { normalizeRoadMediaUrls } from '@/lib/disaster-road-media'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,7 +140,7 @@ async function getUncached(request: Request) {
 
   let query = supabase
     .from('disaster_passed_roads')
-    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, created_at, hidden, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
+    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, image_urls, source_urls, created_at, hidden, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
   if (!wantAll) query = query.eq('hidden', false)
@@ -175,6 +176,8 @@ async function getUncached(request: Request) {
             source: row.source,
             recordedAt: row.ended_at,
             note: row.note ?? '',
+            imageUrls: normalizeRoadMediaUrls(row.image_urls ?? []) ?? [],
+            sourceUrls: normalizeRoadMediaUrls(row.source_urls ?? []) ?? [],
             lengthM: Number(row.length_m),
             rain: rainOf(row),
           },
@@ -198,6 +201,8 @@ async function getUncached(request: Request) {
       startedAt: row.started_at,
       endedAt: row.ended_at,
       note: row.note ?? '',
+      imageUrls: normalizeRoadMediaUrls(row.image_urls ?? []) ?? [],
+      sourceUrls: normalizeRoadMediaUrls(row.source_urls ?? []) ?? [],
       createdAt: row.created_at,
       hidden: Boolean(row.hidden),
       rain: rainOf(row),
@@ -371,15 +376,24 @@ export async function PATCH(request: Request) {
   const id = params.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
 
-  let body: { endedAt?: unknown; note?: unknown }
+  let body: { endedAt?: unknown; note?: unknown; imageUrls?: unknown; sourceUrls?: unknown }
   try {
     body = await request.json()
   } catch {
     return json(request, { error: 'invalid_json' }, 400)
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return json(request, { error: 'invalid_json' }, 400)
+
   const update: Record<string, unknown> = {}
   if (typeof body.note === 'string') update.note = body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE)
+  // Missing fields preserve attachments; an explicit [] clears them.
+  for (const [field, column] of [['imageUrls', 'image_urls'], ['sourceUrls', 'source_urls']] as const) {
+    if (body[field] === undefined) continue
+    const urls = normalizeRoadMediaUrls(body[field])
+    if (!urls) return json(request, { error: `invalid_${column}`, hint: '最大3件の http(s) URL を指定してください。' }, 400)
+    update[column] = urls
+  }
 
   let rainOut: RainInfo | null = null
   if (body.endedAt !== undefined && body.endedAt !== null && body.endedAt !== '') {
@@ -425,7 +439,10 @@ export async function PATCH(request: Request) {
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
   if (!updated?.length) return json(request, { error: 'not_found' }, 404)
-  return json(request, { ok: true, id, endedAt: update.ended_at ?? null, note: update.note ?? null, rain: rainOut })
+  return json(request, { ok: true, id, endedAt: update.ended_at ?? null, note: update.note ?? null, rain: rainOut,
+    ...(update.image_urls !== undefined ? { imageUrls: update.image_urls } : {}),
+    ...(update.source_urls !== undefined ? { sourceUrls: update.source_urls } : {}),
+  })
 }
 
 export function OPTIONS(request: Request) {
