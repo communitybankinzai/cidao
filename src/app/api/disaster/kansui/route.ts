@@ -11,16 +11,15 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { isOnLand } from '@/lib/land-mask-chiba'
+import { isInsideInzai } from '@/lib/inzai-city-boundary'
 
 const SOURCE_URL = 'https://mintsuku-chiba-kansuimap.com/data/hazard_reports.json'
 const SOURCE_PAGE = 'https://mintsuku-chiba-kansuimap.com/'
 const CACHE_SECONDS = 600
 
-// 千葉県全域を囲む四角（2026-09-22 に印西市周辺から拡大）
-const WEST = 139.70
-const SOUTH = 34.85
-const EAST = 140.90
-const NORTH = 36.15
+// 範囲は印西市の市域ポリゴン（src/lib/inzai-city-boundary.ts）。
+// 2026-09-22 に台風25号対応で千葉県全域へ広げたが、先方運営から「印西市のみ」の約束だったと
+// 指摘を受け、2026-09-25 に市域内だけへ戻した。CBI 自前の通れた道／通れない道（passed-roads）は別で、県全域のまま。
 
 const ALLOWED_ORIGINS = new Set([
   'https://communitybankinzai.github.io',
@@ -102,14 +101,14 @@ export function OPTIONS(request: Request) {
 
 type Road = { id?: number; status?: string; created_at?: string; geometry?: { type?: string; coordinates?: unknown } }
 
-// 範囲の四角の中で、しかも陸地にある点を1つでも含む投稿だけ残す（海の上の誤投稿を除く・2026-09-22）
+// 印西市の市域の中で、しかも陸地にある点を1つでも含む投稿だけ残す（海の上の誤投稿を除く・2026-09-22／市域限定・2026-09-25）
 function insideArea(coordinates: unknown): boolean {
   if (!Array.isArray(coordinates)) return false
   for (const point of coordinates) {
     if (!Array.isArray(point) || point.length < 2) continue
     const [lon, lat] = point as [number, number]
     if (typeof lon !== 'number' || typeof lat !== 'number') continue
-    if (lon >= WEST && lon <= EAST && lat >= SOUTH && lat <= NORTH && isOnLand(lat, lon)) return true
+    if (isInsideInzai(lat, lon) && isOnLand(lat, lon)) return true
   }
   return false
 }
