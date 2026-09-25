@@ -3,7 +3,7 @@
 // npx tsx scripts/rescan-sns-road-reports.ts [--dry] [--sample N] [--include 文字列] [--relocate]
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { locateRoadReport, mediaImageUrls, processSnsRoadCandidates, SNS_ROAD_SCAN_TABLE, SNS_ROAD_TABLE, UNLOCATED_BASIS } from '../src/lib/disaster-sns-road-ai'
+import { loadLearnedPlaces, locateRoadReport, locateSection, mediaImageUrls, MOVED_BASIS, processSnsRoadCandidates, SNS_ROAD_SCAN_TABLE, SNS_ROAD_TABLE, UNLOCATED_BASIS } from '../src/lib/disaster-sns-road-ai'
 
 for (const line of fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)) {
   const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
@@ -16,9 +16,11 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 async function relocate(dry: boolean) {
   const { data } = await supabase.from(SNS_ROAD_TABLE).select('id, location_name, location_basis, latitude, longitude, confidence, hidden')
   let moved = 0, hid = 0, same = 0
+  const learned = await loadLearnedPlaces(supabase)
   for (const r of data ?? []) {
-    if (r.hidden || String(r.location_basis).startsWith(UNLOCATED_BASIS)) continue
-    const located = await locateRoadReport({ location_text: r.location_name })
+    if (r.hidden || String(r.location_basis).startsWith(UNLOCATED_BASIS) || String(r.location_basis).startsWith(MOVED_BASIS)) continue
+    const section = locateSection({ location_text: r.location_name, section_from: '', section_to: '' }, learned)
+    const located = section ?? await locateRoadReport({ location_text: r.location_name }, fetch, learned)
     const fromImage = String(r.location_basis).includes('・場所名は写真に写った文字から') ? '・場所名は写真に写った文字から' : ''
     if (!located) {
       hid++
@@ -28,7 +30,7 @@ async function relocate(dry: boolean) {
       moved++
       console.log(`動かす: ${r.location_name} ${Number(r.latitude).toFixed(4)},${Number(r.longitude).toFixed(4)} → ${located.lat.toFixed(4)},${located.lng.toFixed(4)}`)
       if (!dry) await supabase.from(SNS_ROAD_TABLE).update({
-        latitude: located.lat, longitude: located.lng, location_basis: `${located.basis}${fromImage}`,
+        latitude: located.lat, longitude: located.lng, location_basis: `${located.basis}${fromImage}`, path: section?.path ?? null, section_label: section?.label ?? '',
         confidence: located.byModel && r.confidence === 'high' ? 'medium' : r.confidence, updated_at: new Date().toISOString(),
       }).eq('id', r.id)
     } else same++

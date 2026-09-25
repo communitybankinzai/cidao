@@ -8,6 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import places from './disaster-sns-road-places.json'
+import road464 from './disaster-sns-road-464.json'
 
 export const SNS_ROAD_MODEL = 'claude-haiku-4-5'
 export const SNS_ROAD_EVENT_START = '2026-09-20T00:00:00+09:00'
@@ -38,6 +39,8 @@ type Extraction = {
   location_kind: 'bridge' | 'station' | 'road' | 'town' | 'facility' | 'other' | ''
   image_findings: string
   location_source: 'text' | 'image' | 'both' | ''
+  section_from: string
+  section_to: string
   observed_at: string | null
   confidence: Confidence
   summary: string
@@ -63,10 +66,14 @@ export type SnsRoadReport = {
   imageNote: string
   embedUrl: string
   unlocated: boolean
+  path: Array<[number, number]> | null
+  sectionLabel: string
 }
 
 // 読み直しで場所が決まらず自動で伏せた点の印（location_basis の先頭）
 export const UNLOCATED_BASIS = '場所を特定できず'
+// 運営が地図で置き直した点の印（location_basis の先頭）。読み直しても場所を変えない
+export const MOVED_BASIS = '運営が地図で指定'
 
 export function inArea(lat: number, lng: number) {
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= AREA.south && lat <= AREA.north && lng >= AREA.west && lng <= AREA.east
@@ -92,13 +99,15 @@ const EXTRACTION_SCHEMA = {
     location_kind: { type: 'string', enum: ['bridge', 'station', 'road', 'town', 'facility', 'other', ''] },
     image_findings: { type: 'string', description: '添付写真から読み取れた場所の手掛かり（看板・駅名標・橋の名板・店名など、写っている文字）と状況（冠水・通行止めの柵など）。写真が無い・手掛かりが無いときは空文字。推測で地名を足さない' },
     location_source: { type: 'string', enum: ['text', 'image', 'both', ''], description: 'location_text の根拠。本文だけ=text、写真に写った文字だけ=image、両方=both、場所なし=空' },
+    section_from: { type: 'string', description: '「AからBまで」「A〜B」のような区間のとき、始まりの地点名（交差点・駅・インター・町名。道路名は付けない）。区間でなければ空文字' },
+    section_to: { type: 'string', description: '区間の終わりの地点名。区間でなければ空文字' },
     observed_at: { type: ['string', 'null'], description: '投稿者がその状況を見た日時（ISO 8601・日本時間 +09:00）。本文に時刻や「今」「昨日18時」などの手掛かりがあるときだけ。無ければ null。投稿時刻で埋めない' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'high=特定の1か所と状態が本文にはっきり書かれ、投稿者自身の見聞。medium=場所が地区・町名程度、または人づて・公式発表の転記。low=推測や曖昧' },
     summary: { type: 'string', description: '地図の吹き出しに出す1文（40字以内・敬体不要・例：国道464号の台方〜北須賀が冠水で通行止め）' },
     quote: { type: 'string', description: '判断の根拠になった本文の一節（そのまま・80字以内）' },
     reason: { type: 'string', description: '判定理由（短く）' },
   },
-  required: ['is_road_report', 'kind', 'location_text', 'location_kind', 'image_findings', 'location_source', 'observed_at', 'confidence', 'summary', 'quote', 'reason'],
+  required: ['is_road_report', 'kind', 'location_text', 'location_kind', 'image_findings', 'location_source', 'section_from', 'section_to', 'observed_at', 'confidence', 'summary', 'quote', 'reason'],
   additionalProperties: false,
 } as const
 
@@ -188,7 +197,7 @@ async function loadImages(urls: string[], fetcher: typeof fetch): Promise<ImageB
 
 // model：既定は SNS_ROAD_MODEL。モデル比較（scripts/compare-sns-road-models.ts）のときだけ別のモデルを渡す。
 // Haiku 4.5 は effort を受け付けないので、effort は Haiku 以外のときだけ付ける
-export async function extractRoadReport(client: Anthropic, candidate: Candidate, fetcher: typeof fetch = fetch, model: string = SNS_ROAD_MODEL, effort?: 'low' | 'medium' | 'high'): Promise<{ extraction: Extraction; usage: { input: number; output: number }; imageCount: number }> {
+export async function extractRoadReport(client: Anthropic, candidate: Candidate, fetcher: typeof fetch = fetch, model: string = SNS_ROAD_MODEL, effort?: 'low' | 'medium' | 'high', examplesText = ''): Promise<{ extraction: Extraction; usage: { input: number; output: number }; imageCount: number }> {
   const postedJst = new Date(candidate.posted_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false })
   const images = await loadImages(mediaImageUrls(candidate), fetcher)
   const response = await client.messages.create({
@@ -200,6 +209,7 @@ export async function extractRoadReport(client: Anthropic, candidate: Candidate,
       role: 'user',
       content: [
         ...images,
+        ...(examplesText ? [{ type: 'text' as const, text: examplesText }] : []),
         { type: 'text', text: `媒体: ${candidate.platform}\n添付写真: ${images.length}枚\n投稿時刻（日本時間・参考）: ${postedJst}\n本文:\n${String(candidate.body_text || '').slice(0, 1500)}` },
       ],
     }],
@@ -270,14 +280,135 @@ async function fromGsi(name: string, fetcher: typeof fetch): Promise<Located | n
   return far ? null : { lat: hits[0].lat, lng: hits[0].lng, basis: '国土地理院 住所検索（町名の代表点）', byModel: false }
 }
 
+// ── 覚えた地点（disaster_sns_places）──────────────────────────────
+// OpenStreetMap から取った国道464号沿いの地点と、運営が地図で置き直したときに教えた地名（2026-09-25 事業主決定B）
+export type LearnedPlace = { name: string; lat: number; lng: number; road_ref: string; source: 'osm' | 'moderator' }
+export const SNS_PLACES_TABLE = 'disaster_sns_places'
+export const SNS_FEEDBACK_TABLE = 'disaster_sns_road_feedback'
+
+export async function loadLearnedPlaces(supabase: SupabaseClient): Promise<LearnedPlace[]> {
+  const { data } = await supabase.from(SNS_PLACES_TABLE).select('name, lat, lng, road_ref, source').limit(2000)
+  return (data ?? []) as LearnedPlace[]
+}
+
+// 覚えた地点の名前が場所名に含まれていれば採る。いちばん長く一致したものを、同じ長さなら運営が教えたものを優先
+export function fromLearned(text: string, learned: LearnedPlace[]): (Located & { place: LearnedPlace }) | null {
+  const core = coreLocationName(text)
+  if (core.length < 2) return null
+  let best: LearnedPlace | null = null, bestLen = 0
+  for (const p of learned) {
+    const name = coreLocationName(p.name)
+    if (name.length < 2 || !(core === name || core.includes(name))) continue
+    if (name.length > bestLen || (name.length === bestLen && p.source === 'moderator' && best?.source !== 'moderator')) { best = p; bestLen = name.length }
+  }
+  if (!best || !inArea(best.lat, best.lng)) return null
+  return {
+    lat: best.lat, lng: best.lng, byModel: false, place: best,
+    basis: best.source === 'moderator' ? `運営が教えた地点「${best.name}」` : `覚えた地点「${best.name}」（OpenStreetMap）`,
+  }
+}
+
+// ── 国道464号の区間（「台方〜北須賀」など）を道路の形に沿った線にする ─────────────
+type Pt = [number, number]
+let road464Graph: { nodes: Pt[]; edges: Map<number, Array<[number, number]>> } | null = null
+function metersBetween(a: Pt, b: Pt) {
+  return Math.hypot((a[0] - b[0]) * 111320, (a[1] - b[1]) * 111320 * Math.cos((a[0] * Math.PI) / 180))
+}
+function graph464() {
+  if (road464Graph) return road464Graph
+  const index = new Map<string, number>(); const nodes: Pt[] = []; const edges = new Map<number, Array<[number, number]>>()
+  const id = (p: Pt) => { const k = `${p[0]},${p[1]}`; let i = index.get(k); if (i === undefined) { i = nodes.length; nodes.push(p); index.set(k, i) } return i }
+  for (const way of road464.ways as Pt[][]) {
+    for (let i = 1; i < way.length; i++) {
+      const a = id(way[i - 1]), b = id(way[i]), d = metersBetween(way[i - 1], way[i])
+      if (!edges.has(a)) edges.set(a, []); if (!edges.has(b)) edges.set(b, [])
+      edges.get(a)!.push([b, d]); edges.get(b)!.push([a, d])
+    }
+  }
+  road464Graph = { nodes, edges }
+  return road464Graph
+}
+function nearestNode(p: Pt) {
+  const { nodes } = graph464(); let best = -1, bestD = Infinity
+  nodes.forEach((n, i) => { const d = metersBetween(p, n); if (d < bestD) { bestD = d; best = i } })
+  return { index: best, distance: bestD }
+}
+// 2点を464号の上でつなぐ（最短経路）。どちらかが道路から300m以上離れている・20km超・つながらないときは null
+export function path464(from: Pt, to: Pt): Pt[] | null {
+  const a = nearestNode(from), b = nearestNode(to)
+  if (a.index < 0 || b.index < 0 || a.distance > 300 || b.distance > 300 || a.index === b.index) return null
+  const { nodes, edges } = graph464()
+  const dist = new Map<number, number>([[a.index, 0]]), prev = new Map<number, number>(), done = new Set<number>()
+  for (;;) {
+    let u = -1, du = Infinity
+    for (const [k, v] of dist) if (!done.has(k) && v < du) { u = k; du = v }
+    if (u < 0 || du > 20000) return null
+    if (u === b.index) break
+    done.add(u)
+    for (const [v, w] of edges.get(u) ?? []) if (du + w < (dist.get(v) ?? Infinity)) { dist.set(v, du + w); prev.set(v, u) }
+  }
+  const path: Pt[] = []
+  for (let u: number | undefined = b.index; u !== undefined; u = prev.get(u)) path.unshift(nodes[u])
+  return path.length >= 2 ? path : null
+}
+
+// 区間の始まりと終わりが両方とも「覚えた地点」で、464号の上でつながるときだけ線にする
+export function locateSection(extraction: Pick<Extraction, 'location_text' | 'section_from' | 'section_to'>, learned: LearnedPlace[]) {
+  let from = (extraction.section_from || '').trim(), to = (extraction.section_to || '').trim()
+  if (!from || !to) {
+    const m = coreLocationName(extraction.location_text || '').match(/([^～〜~、,]+?)(?:[～〜~]|から)([^～〜~、,]+?)(?:まで|方面|区間)?$/u)
+    if (m) { from = m[1]; to = m[2] }
+  }
+  if (!from || !to) return null
+  const strip = (s: string) => s.replace(/^(国道\d+号線?|北千葉道路|旧道?464号線?)/u, '')
+  const a = fromLearned(strip(from), learned), b = fromLearned(strip(to), learned)
+  if (!a || !b) return null
+  const path = path464([a.lat, a.lng], [b.lat, b.lng])
+  if (!path) return null
+  const mid = path[Math.floor(path.length / 2)]
+  return { lat: mid[0], lng: mid[1], path, label: `${a.place.name}〜${b.place.name}`, basis: `国道464号の区間（${a.place.name}〜${b.place.name}・道路の形は © OpenStreetMap contributors）`, byModel: false }
+}
+
+// ── 運営の判断例（disaster_sns_road_feedback）を AI に添える ───────────────────
+type FeedbackRow = { action: string; reason: string; place_name: string; kind: string; body_excerpt: string }
+export async function loadFeedbackExamples(supabase: SupabaseClient): Promise<FeedbackRow[]> {
+  const { data } = await supabase.from(SNS_FEEDBACK_TABLE).select('action, reason, place_name, kind, body_excerpt').neq('body_excerpt', '').order('created_at', { ascending: false }).limit(200)
+  return (data ?? []) as FeedbackRow[]
+}
+function bigrams(text: string) {
+  const t = String(text || '').normalize('NFKC').replace(/[\s#＃、。！!？?「」（）()・:：]/g, '')
+  const set = new Set<string>(); for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2)); return set
+}
+const REASON_LABELS: Record<string, string> = { not_road: '通行情報ではない', wrong_place: '場所が違う', stale: '古い・重複', other: 'その他' }
+// 本文が似ている判断例を最大5件、AI への指示に添える文にする（似ていなければ添えない）
+export function examplesFor(body: string, feedback: FeedbackRow[]): string {
+  const mine = bigrams(body)
+  if (!mine.size) return ''
+  const scored = feedback.map((f) => {
+    const other = bigrams(f.body_excerpt); let shared = 0
+    for (const g of other) if (mine.has(g)) shared++
+    return { f, score: shared / Math.max(1, Math.min(mine.size, other.size)) }
+  }).filter((x) => x.score >= 0.15).sort((a, b) => b.score - a.score).slice(0, 5)
+  if (!scored.length) return ''
+  const lines = scored.map(({ f }) => {
+    const verdict = f.action === 'move' ? `場所は「${f.place_name}」（運営が地図で確かめた）`
+      : f.action === 'hide' ? `地図から伏せた（理由：${REASON_LABELS[f.reason] || f.reason || '不明'}）`
+      : `通行情報として正しい（${f.kind === 'passed' ? '通れた' : f.kind === 'cleared' ? '解除' : '通れない'}）`
+    return `- 投稿「${f.body_excerpt.slice(0, 160)}」→ ${verdict}`
+  })
+  return `参考：運営が確かめた、似た投稿の過去の判断例（同じ書き方・同じ場所なら同じように判断する）\n${lines.join('\n')}`
+}
+
 // 場所の決め方（2026-09-25 見直し）：
 // 1. 道路名・沼・市町村などの広い名前だけなら置かない
-// 2. 丸ごとの名前で 辞書 → OpenStreetMap → 国土地理院
+// 2. 覚えた地点（運営が教えた地名・464号沿い）→ 丸ごとの名前で 辞書 → OpenStreetMap → 国土地理院
 // 3. 見つからなければ断片（「国道464号 成田湯川駅付近」→「成田湯川駅」）で探す。駅・橋・交差点などの目印を先に。目安扱い（confidence は medium まで）
 // AI が答えた座標は使わない（成田湯川駅を約5km、手賀大橋を印西市内に置いていた）
-export async function locateRoadReport(extraction: Pick<Extraction, 'location_text'>, fetcher: typeof fetch = fetch): Promise<Located | null> {
+export async function locateRoadReport(extraction: Pick<Extraction, 'location_text'>, fetcher: typeof fetch = fetch, learned: LearnedPlace[] = []): Promise<Located | null> {
   const name = extraction.location_text
   if (!name || isWideArea(name)) return null
+  const known = fromLearned(name, learned)
+  if (known) return { lat: known.lat, lng: known.lng, basis: known.basis, byModel: false }
   const dictionary = fromPlaces(name)
   if (dictionary) return dictionary
   const osm = await fromNominatim(name, fetcher).catch(() => null)
@@ -298,7 +429,7 @@ export async function locateRoadReport(extraction: Pick<Extraction, 'location_te
 
 export function locationTokens(text: string) {
   const core = coreLocationName(text)
-  const parts = core.split(/[、,・/／〜~\s]|国道\d+号線?|県道\d+号線?|北千葉道路|交差点|バイパス|インター|IC|付近|方面/u).map((p) => p.trim()).filter((p) => p.length >= 2 && !/^\d+$/.test(p))
+  const parts = core.split(/[、,・/／〜～~\s]|から|まで|国道\d+号線?|県道\d+号線?|北千葉道路|交差点|バイパス|インター|IC|付近|方面/u).map((p) => p.trim()).filter((p) => p.length >= 2 && !/^\d+$/.test(p))
   const seen = new Set<string>()
   const tokens: string[] = []
   // 目印（駅・橋・交差点…）の断片を先に。語尾を削った形（手賀大橋→手賀）は別の町に当たるので使わない
@@ -333,25 +464,36 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
   const result = { scanned: 0, reports: 0, noLocation: 0, none: 0, errors: 0, inputTokens: 0, outputTokens: 0, remaining: 0, errorSamples: [] as string[] }
   if (!targets.length) return result
   let client = options.client ?? anthropicClient()
+  // 覚えた地点と運営の判断例は1回の処理につき1度だけ読む
+  const [learned, feedback] = await Promise.all([loadLearnedPlaces(supabase), loadFeedbackExamples(supabase)])
   for (const candidate of targets) {
     result.scanned++
     let scan: { result: 'report' | 'none' | 'no_location' | 'error'; detail: string; input_tokens: number; output_tokens: number } = { result: 'error', detail: '', input_tokens: 0, output_tokens: 0 }
     try {
       let extracted: Awaited<ReturnType<typeof extractRoadReport>>
       try {
-        extracted = await extractRoadReport(client, candidate, fetcher)
+        extracted = await extractRoadReport(client, candidate, fetcher, SNS_ROAD_MODEL, undefined, examplesFor(candidate.body_text, feedback))
       } catch (firstError) {
         if (!needsWorkspaceHeader(firstError) || options.client) throw firstError
         // 「ワークスペース指定が必須」と言われたキー（手元用など）だけヘッダー付きに切り替えて、以降もそれを使う
         client = anthropicClient(true)
-        extracted = await extractRoadReport(client, candidate, fetcher)
+        extracted = await extractRoadReport(client, candidate, fetcher, SNS_ROAD_MODEL, undefined, examplesFor(candidate.body_text, feedback))
       }
       const { extraction, usage, imageCount } = extracted
       scan.input_tokens = usage.input; scan.output_tokens = usage.output
       result.inputTokens += usage.input; result.outputTokens += usage.output
       const imageNote = imageCount ? extraction.image_findings.trim().slice(0, 200) : ''
-      const located = !extraction.is_road_report || extraction.kind === 'unknown' ? null : await locateRoadReport(extraction, fetcher)
-      if (!extraction.is_road_report || extraction.kind === 'unknown' || !located) {
+      const isReport = extraction.is_road_report && extraction.kind !== 'unknown'
+      // 区間（464号の上でつながる2地点）→ 1地点 の順に決める
+      const section = isReport ? locateSection(extraction, learned) : null
+      const located = !isReport ? null : section ?? await locateRoadReport(extraction, fetcher, learned)
+      const { data: existing } = await supabase.from(SNS_ROAD_TABLE).select('hidden, location_basis').eq('candidate_id', candidate.id).maybeSingle()
+      // 運営が地図で置き直した点は、読み直しても場所・公開状態を変えない（運営の判断が AI より優先）
+      const movedByModerator = String(existing?.location_basis || '').startsWith(MOVED_BASIS)
+      if (movedByModerator) {
+        scan = { ...scan, result: 'report', detail: `運営が置いた場所を維持｜${extraction.kind} ${extraction.location_text}`.slice(0, 300) }
+        await supabase.from(SNS_ROAD_TABLE).update({ summary: extraction.summary.slice(0, 120), quote: extraction.quote.slice(0, 200), image_note: imageNote, embed_url: embedUrlOf(candidate), updated_at: new Date().toISOString() }).eq('candidate_id', candidate.id)
+      } else if (!isReport || !located) {
         scan = !extraction.is_road_report || extraction.kind === 'unknown'
           ? { ...scan, result: 'none', detail: extraction.reason.slice(0, 300) }
           : { ...scan, result: 'no_location', detail: `${extraction.location_text || '(場所なし)'}｜${extraction.reason}`.slice(0, 300) }
@@ -367,8 +509,8 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
           && new Date(extraction.observed_at).getTime() <= new Date(candidate.posted_at).getTime() + 15 * 60000
           ? new Date(extraction.observed_at).toISOString() : null
         const fromImage = extraction.location_source === 'image' || extraction.location_source === 'both'
-        const { data: existing } = await supabase.from(SNS_ROAD_TABLE).select('hidden, location_basis').eq('candidate_id', candidate.id).maybeSingle()
         const row: Record<string, unknown> = {
+          path: section?.path ?? null, section_label: section?.label ?? '',
           candidate_id: candidate.id, platform: candidate.platform, permalink: candidate.permalink, posted_at: candidate.posted_at,
           observed_at: observedAt, kind: extraction.kind, location_name: extraction.location_text.slice(0, 80),
           location_basis: `${located.basis}${fromImage ? '・場所名は写真に写った文字から' : ''}`,
@@ -406,5 +548,6 @@ export function toPublicReport(row: Record<string, unknown>): SnsRoadReport {
     summary: String(row.summary ?? ''), quote: String(row.quote ?? ''), hidden: Boolean(row.hidden),
     imageNote: String(row.image_note ?? ''), embedUrl: String(row.embed_url ?? ''),
     unlocated: String(row.location_basis ?? '').startsWith(UNLOCATED_BASIS),
+    path: Array.isArray(row.path) ? (row.path as Array<[number, number]>) : null, sectionLabel: String(row.section_label ?? ''),
   }
 }

@@ -1,10 +1,16 @@
 // SNS投稿から AI が読み取った通行情報（未確認）。
 // GET  : 一般向け（confidence=high・hidden=false だけ・120秒の配信キャッシュ）。?all=1＋合言葉で運営向け全件
 // POST : 未判定の候補を AI に掛ける（合言葉か CRON_SECRET）。?limit= で件数（既定6・最大60）
-// PATCH: ?id=… {hidden:true|false} 運営が伏せる／戻す（合言葉）
-import { createClient } from '@supabase/supabase-js'
+// PATCH: ?id=… 運営の操作（合言葉）。どの操作も disaster_sns_road_feedback に残し、AI に「過去の判断例」として添える
+//   {hidden:true|false, reason?}                 伏せる／戻す。reason は not_road|wrong_place|stale|other
+//   {move:{lat,lng,placeName,learn,publish}}     地図で置き直す。learn なら地名を disaster_sns_places に覚え、
+//                                                同じ地名で場所が決まらず伏せていた投稿も置き直す。publish なら確度を高にして一般公開
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { processSnsRoadCandidates, SNS_ROAD_EVENT_START, SNS_ROAD_TABLE, toPublicReport } from '@/lib/disaster-sns-road-ai'
+import {
+  coreLocationName, inArea, loadLearnedPlaces, locateRoadReport, locateSection, MOVED_BASIS, processSnsRoadCandidates,
+  SNS_FEEDBACK_TABLE, SNS_PLACES_TABLE, SNS_ROAD_EVENT_START, SNS_ROAD_TABLE, toPublicReport, UNLOCATED_BASIS,
+} from '@/lib/disaster-sns-road-ai'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -58,7 +64,7 @@ export async function GET(request: Request) {
   if (wantAll && !isModerator(request)) return json(request, { error: 'forbidden' }, 403)
 
   let query = supabase.from(SNS_ROAD_TABLE)
-    .select('id, kind, latitude, longitude, location_name, location_basis, observed_at, posted_at, permalink, platform, confidence, summary, quote, hidden, image_note, embed_url')
+    .select('id, kind, latitude, longitude, location_name, location_basis, observed_at, posted_at, permalink, platform, confidence, summary, quote, hidden, image_note, embed_url, path, section_label')
     .gte('posted_at', SNS_ROAD_EVENT_START).order('posted_at', { ascending: false }).limit(500)
   if (!wantAll) query = query.eq('hidden', false).eq('confidence', 'high')
   const { data, error } = await query
@@ -97,14 +103,71 @@ export async function PATCH(request: Request) {
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   const id = new URL(request.url).searchParams.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
-  let body: { hidden?: unknown }
+  let body: { hidden?: unknown; reason?: unknown; move?: { lat?: unknown; lng?: unknown; placeName?: unknown; learn?: unknown; publish?: unknown } }
   try { body = await request.json() } catch { return json(request, { error: 'invalid_json' }, 400) }
+  const { data: report } = await supabase.from(SNS_ROAD_TABLE).select('id, candidate_id, kind, location_name, confidence').eq('id', id).maybeSingle()
+  if (!report) return json(request, { error: 'not_found' }, 404)
+  const now = new Date().toISOString()
+
+  if (body?.move) {
+    const lat = Number(body.move.lat), lng = Number(body.move.lng)
+    const placeName = String(body.move.placeName ?? '').normalize('NFKC').trim().slice(0, 40)
+    if (!inArea(lat, lng)) return json(request, { error: 'out_of_area' }, 400)
+    const learn = body.move.learn === true && coreLocationName(placeName).length >= 2
+    const publish = body.move.publish === true
+    const { error } = await supabase.from(SNS_ROAD_TABLE).update({
+      latitude: lat, longitude: lng, path: null, section_label: '', hidden: false,
+      location_basis: `${MOVED_BASIS}${placeName ? `（地名「${placeName}」）` : ''}`,
+      confidence: publish ? 'high' : report.confidence === 'high' ? 'medium' : report.confidence, updated_at: now,
+    }).eq('id', id)
+    if (error) return json(request, { error: 'update_failed' }, 500)
+    await recordFeedback(supabase, report, { action: 'move', place_name: placeName, lat, lng })
+    let relocated = 0
+    if (learn) {
+      await supabase.from(SNS_PLACES_TABLE).upsert({ name: placeName, lat, lng, source: 'moderator', basis: '運営が地図で指定', updated_at: now }, { onConflict: 'name' })
+      relocated = await relocateUnlocated(supabase, placeName)
+    }
+    return json(request, { ok: true, id, moved: true, learned: learn, relocated })
+  }
+
   if (typeof body?.hidden !== 'boolean') return json(request, { error: 'invalid_hidden' }, 400)
+  const reason = ['not_road', 'wrong_place', 'stale', 'other'].includes(String(body.reason)) ? String(body.reason) : ''
   const { data, error } = await supabase.from(SNS_ROAD_TABLE)
-    .update({ hidden: body.hidden, updated_at: new Date().toISOString() }).eq('id', id).select('id, hidden').maybeSingle()
+    .update({ hidden: body.hidden, updated_at: now }).eq('id', id).select('id, hidden').maybeSingle()
   if (error) return json(request, { error: 'update_failed' }, 500)
   if (!data) return json(request, { error: 'not_found' }, 404)
+  await recordFeedback(supabase, report, { action: body.hidden ? 'hide' : 'unhide', reason })
   return json(request, { ok: true, id: data.id, hidden: data.hidden })
+}
+
+// 運営の操作を判断例として残す。本文の抜粋は候補（disaster_sns_candidates）から取る
+async function recordFeedback(supabase: SupabaseClient, report: { id: string; candidate_id: string; kind: string }, fields: Record<string, unknown>) {
+  const { data: candidate } = await supabase.from('disaster_sns_candidates').select('body_text').eq('id', report.candidate_id).maybeSingle()
+  await supabase.from(SNS_FEEDBACK_TABLE).insert({
+    report_id: report.id, candidate_id: report.candidate_id, kind: report.kind,
+    body_excerpt: String(candidate?.body_text ?? '').replace(/\s+/g, ' ').slice(0, 300), ...fields,
+  })
+}
+
+// 地名を覚えたら、同じ地名を含む「場所を特定できず」の投稿を置き直す（最大30件）。
+// 運営が手で伏せたものは触らない（location_basis が UNLOCATED_BASIS で始まるものだけ）
+async function relocateUnlocated(supabase: SupabaseClient, placeName: string) {
+  const learned = await loadLearnedPlaces(supabase)
+  const core = coreLocationName(placeName)
+  const { data } = await supabase.from(SNS_ROAD_TABLE).select('id, location_name, confidence')
+    .like('location_basis', `${UNLOCATED_BASIS}%`).limit(300)
+  let count = 0
+  for (const row of (data ?? []).filter((r) => coreLocationName(String(r.location_name)).includes(core)).slice(0, 30)) {
+    const section = locateSection({ location_text: String(row.location_name), section_from: '', section_to: '' }, learned)
+    const located = section ?? await locateRoadReport({ location_text: String(row.location_name) }, fetch, learned)
+    if (!located) continue
+    await supabase.from(SNS_ROAD_TABLE).update({
+      latitude: located.lat, longitude: located.lng, location_basis: located.basis, path: section?.path ?? null,
+      section_label: section?.label ?? '', hidden: false, updated_at: new Date().toISOString(),
+    }).eq('id', row.id)
+    count++
+  }
+  return count
 }
 
 export function OPTIONS(request: Request) {
