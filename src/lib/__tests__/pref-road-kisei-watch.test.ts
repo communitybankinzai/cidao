@@ -13,6 +13,18 @@ describe('readPrefKiseiPage', () => {
   it('PDFのリンクと時点の文字を読む', () => {
     expect(readPrefKiseiPage(PAGE)).toEqual({ pdfUrl: PDF, stamp: STAMP })
   })
+  it('ファイル名が変わってもリンクの文字で見つける', () => {
+    const renamed = PAGE.replace('kisei20260925.pdf', 'R8taifu25_douro_0926.pdf')
+    expect(readPrefKiseiPage(renamed).pdfUrl).toBe(PDF.replace('kisei20260925.pdf', 'R8taifu25_douro_0926.pdf'))
+  })
+  it('ほかのPDF（様式など）は拾わず、状況図のリンクを選ぶ', () => {
+    const withOther = `<a href="/doukan/documents/youshiki.pdf">申請様式（PDF）</a>${PAGE}`
+    expect(readPrefKiseiPage(withOther).pdfUrl).toBe(PDF)
+  })
+  it('リンクの文字が変わっても元のファイル名の形なら見つける', () => {
+    const plain = '<a href="/doukan/douroiji/documents/kisei20260926.pdf">PDF（1MB）</a>'
+    expect(readPrefKiseiPage(plain).pdfUrl).toBe(PDF.replace('0925', '0926'))
+  })
   it('リンクが無ければ掲載なし', () => {
     expect(readPrefKiseiPage('<p>現在、規制情報はありません</p>')).toEqual({ pdfUrl: null, stamp: '' })
   })

@@ -2,15 +2,20 @@
 // 防災MAP（cbi-site）の取り込み（.github/workflows/pref-road-kisei.yml）を起動する。
 //
 // 取り込みそのもの（PDFの画像を地理院地図と照合して赤線を線に直す）は重いので GitHub Actions で行う。
-// Actions の定期実行は GitHub に間引かれ最長12時間ほど空くため、ここ（毎時の通行止め巡回）で県ページだけを見て、
+// Actions の定期実行は GitHub に間引かれ最長12時間ほど空くため、ここで県ページだけを見て、
 // 公開中の pref-road-kisei.json と食い違うときだけ repository_dispatch で呼ぶ（2026-09-25 事業主決定）。
+// 呼び出しは pg_cron `cidao_pref_road_kisei`（30分ごと・POST /api/disaster/pref-road-kisei。2026-09-26 事業主指示）。
 //
 // 記録は持たない。比べる相手は公開中の JSON なので、取り込みが失敗して JSON が古いままなら次の回にまた呼ぶ。
 // 読む規則（PDFリンク・時点の文字）は site/inzai-disaster-map/pipeline/build_pref_road_kisei.py と揃えること。
 
 const PAGE_URL = 'https://www.pref.chiba.lg.jp/doukan/douroiji/kiseijyouhou.html'
 const PUBLISHED_JSON = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/pref-road-kisei.json'
-const PDF_RE = /href="([^"]*documents\/kisei[^"]*\.pdf)"/i
+// PDF はファイル名（今は kisei<日付>.pdf）に頼らず、リンクの文字で見つける。
+// 「規制」か「状況図」を含むリンクを先に、無ければ元のファイル名の形、それも無ければ掲載なし
+const PDF_LINK_RE = /<a\b[^>]*href="([^"]+\.pdf)"[^>]*>([\s\S]*?)<\/a>/gi
+const PDF_TEXT_RE = /規制|状況図/
+const PDF_NAME_RE = /documents\/kisei[^"]*\.pdf$/i
 const STAMP_RE = /令和[^<>]{0,40}?時\s*時点/
 const UA = 'CBI-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)'
 
@@ -22,11 +27,20 @@ export type PrefKiseiWatchResult = {
 
 type PageState = { pdfUrl: string | null; stamp: string }
 
+export function findPrefKiseiPdf(html: string): string | null {
+  const links = [...html.matchAll(PDF_LINK_RE)].map((m) => ({
+    href: m[1],
+    text: m[2].replace(/<[^>]*>/g, ''),
+  }))
+  const hit = links.find((l) => PDF_TEXT_RE.test(l.text)) ?? links.find((l) => PDF_NAME_RE.test(l.href))
+  return hit ? new URL(hit.href, PAGE_URL).toString() : null
+}
+
 export function readPrefKiseiPage(html: string): PageState {
-  const m = PDF_RE.exec(html)
-  if (!m) return { pdfUrl: null, stamp: '' }
+  const pdfUrl = findPrefKiseiPdf(html)
+  if (!pdfUrl) return { pdfUrl: null, stamp: '' }
   const stamp = STAMP_RE.exec(html)?.[0].replace(/\s+/g, '') ?? ''
-  return { pdfUrl: new URL(m[1], PAGE_URL).toString(), stamp }
+  return { pdfUrl, stamp }
 }
 
 // 取り込み直すべきか。理由の文字列（空なら不要）

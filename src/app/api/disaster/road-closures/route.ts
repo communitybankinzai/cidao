@@ -8,8 +8,6 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { ROAD_CLOSURE_KINDS } from '@/lib/disaster-road-closures'
 import { runRoadClosures } from '@/lib/disaster-timeline'
-import { watchPrefRoadKisei } from '@/lib/pref-road-kisei-watch'
-
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
@@ -71,15 +69,9 @@ export async function POST(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 })
   try {
-    // 県の道路規制状況図の見張りは通行止めと同時に走らせ、失敗しても通行止めの巡回は止めない
-    const [results, prefKisei] = await Promise.all([
-      runRoadClosures(supabase),
-      watchPrefRoadKisei().catch((error) => ({
-        dispatched: false,
-        reason: `error: ${error instanceof Error ? error.message : String(error)}`,
-      })),
-    ])
-    return NextResponse.json({ ranAt: new Date().toISOString(), results, prefKisei }, { headers: { 'Cache-Control': 'no-store' } })
+    // 県の道路規制状況図の見張りは 2026-09-26 に /api/disaster/pref-road-kisei（30分ごと）へ分けた
+    const results = await runRoadClosures(supabase)
+    return NextResponse.json({ ranAt: new Date().toISOString(), results }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error('[disaster/road-closures]', message)
