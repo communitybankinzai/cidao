@@ -23,6 +23,7 @@ export type PrefKiseiWatchResult = {
   dispatched: boolean
   reason: string
   pdfUrl?: string | null
+  stamp?: string
 }
 
 type PageState = { pdfUrl: string | null; stamp: string }
@@ -75,11 +76,11 @@ async function fetchPublished() {
 export async function watchPrefRoadKisei(): Promise<PrefKiseiWatchResult> {
   const [page, published] = await Promise.all([fetchPage(), fetchPublished()])
   const reason = prefKiseiNeedsRebuild(page, published)
-  if (!reason) return { dispatched: false, reason: 'unchanged', pdfUrl: page.pdfUrl }
+  if (!reason) return { dispatched: false, reason: 'unchanged', pdfUrl: page.pdfUrl, stamp: page.stamp }
 
   const token = process.env.GITHUB_DISPATCH_TOKEN
   const repo = process.env.GITHUB_DISPATCH_REPO ?? 'communitybankinzai/cbi-site'
-  if (!token) return { dispatched: false, reason: `${reason} / GITHUB_DISPATCH_TOKEN not configured`, pdfUrl: page.pdfUrl }
+  if (!token) return { dispatched: false, reason: `${reason} / GITHUB_DISPATCH_TOKEN not configured`, pdfUrl: page.pdfUrl, stamp: page.stamp }
   const res = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
     method: 'POST',
     headers: {
@@ -92,7 +93,7 @@ export async function watchPrefRoadKisei(): Promise<PrefKiseiWatchResult> {
     signal: AbortSignal.timeout(8000),
   })
   if (!res.ok) {
-    return { dispatched: false, reason: `${reason} / GitHub ${res.status} ${(await res.text()).slice(0, 120)}`, pdfUrl: page.pdfUrl }
+    return { dispatched: false, reason: `${reason} / GitHub ${res.status} ${(await res.text()).slice(0, 120)}`, pdfUrl: page.pdfUrl, stamp: page.stamp }
   }
-  return { dispatched: true, reason, pdfUrl: page.pdfUrl }
+  return { dispatched: true, reason, pdfUrl: page.pdfUrl, stamp: page.stamp }
 }
