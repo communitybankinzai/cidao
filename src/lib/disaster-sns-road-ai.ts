@@ -429,7 +429,9 @@ export async function locateRoadReport(extraction: Pick<Extraction, 'location_te
 
 export function locationTokens(text: string) {
   const core = coreLocationName(text)
-  const parts = core.split(/[、,・/／〜～~\s]|から|まで|国道\d+号線?|県道\d+号線?|北千葉道路|交差点|バイパス|インター|IC|付近|方面/u).map((p) => p.trim()).filter((p) => p.length >= 2 && !/^\d+$/.test(p))
+  const parts = core.split(/[、,・/／〜～~\s]|から|まで|国道\d+号線?|県道\d+号線?|北千葉道路|交差点|バイパス|インター|IC|付近|方面/u).map((p) => p.trim())
+    // 数字だけ・ひらがなだけの断片（「との」など）は地名ではない（「国道464号との交差点」の「との」が町名検索に当たった）
+    .filter((p) => p.length >= 2 && !/^\d+$/.test(p) && !/^[ぁ-ゖー]+$/u.test(p))
   const seen = new Set<string>()
   const tokens: string[] = []
   // 目印（駅・橋・交差点…）の断片を先に。語尾を削った形（手賀大橋→手賀）は別の町に当たるので使わない

@@ -45,7 +45,17 @@ async function main() {
   if (error) throw error
   // --sample N：写真つきの投稿を優先して N 件だけ試す（--include <文字列> で本文に含む投稿を1件足す）
   const sampleArg = process.argv.indexOf('--sample')
+  let once = sampleArg > 0
   let scans = allScans
+  // --match <文字列>：本文にその文字列を含む投稿だけ読み直す（例：--match 464）
+  const matchArg = process.argv.indexOf('--match')
+  if (matchArg > 0) {
+    const word = process.argv[matchArg + 1] || ''
+    const { data: cands } = await supabase.from('disaster_sns_candidates').select('id, body_text').in('id', (allScans ?? []).map((s) => s.candidate_id))
+    const picked = new Set((cands ?? []).filter((c) => String(c.body_text).includes(word)).map((c) => c.id))
+    scans = (allScans ?? []).filter((s) => picked.has(s.candidate_id))
+    once = true // 1回の処理で終える
+  }
   if (sampleArg > 0) {
     const n = Number(process.argv[sampleArg + 1] || 5)
     const includeArg = process.argv.indexOf('--include')
@@ -68,7 +78,7 @@ async function main() {
     const result = await processSnsRoadCandidates(supabase, { limit: Math.min(20, ids.length) })
     for (const k of Object.keys(total) as Array<keyof typeof total>) total[k] += result[k]
     console.log(JSON.stringify(result))
-    if (!result.scanned || !result.remaining || sampleArg > 0) break
+    if (!result.scanned || !result.remaining || once) break
   }
   console.log('合計', JSON.stringify(total))
   const { data } = await supabase.from(SNS_ROAD_TABLE).select('kind, confidence, hidden, location_name, location_basis, image_note, latitude, longitude').in('candidate_id', ids).order('posted_at')
