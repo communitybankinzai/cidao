@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   if (wantAll && !isModerator(request)) return json(request, { error: 'forbidden' }, 403)
 
   let query = supabase.from(SNS_ROAD_TABLE)
-    .select('id, kind, latitude, longitude, location_name, location_basis, observed_at, posted_at, permalink, platform, confidence, summary, quote, hidden')
+    .select('id, kind, latitude, longitude, location_name, location_basis, observed_at, posted_at, permalink, platform, confidence, summary, quote, hidden, image_note, embed_url')
     .gte('posted_at', SNS_ROAD_EVENT_START).order('posted_at', { ascending: false }).limit(500)
   if (!wantAll) query = query.eq('hidden', false).eq('confidence', 'high')
   const { data, error } = await query
