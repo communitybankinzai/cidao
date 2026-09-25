@@ -129,12 +129,12 @@ function workspaceId() {
   const configured = (process.env.ANTHROPIC_WORKSPACE_ID ?? '').trim()
   return /^wrkspc_[A-Za-z0-9]+$/.test(configured) ? configured : DEFAULT_WORKSPACE_ID
 }
-function anthropicClient(withWorkspace = false) {
+export function anthropicClient(withWorkspace = false) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
   return new Anthropic({ apiKey, defaultHeaders: withWorkspace ? { 'anthropic-workspace-id': workspaceId() } : undefined })
 }
-function needsWorkspaceHeader(error: unknown) {
+export function needsWorkspaceHeader(error: unknown) {
   return error instanceof Anthropic.APIError && error.status === 400 && /anthropic-workspace-id/.test(error.message)
 }
 
@@ -186,14 +186,16 @@ async function loadImages(urls: string[], fetcher: typeof fetch): Promise<ImageB
   return blocks
 }
 
-export async function extractRoadReport(client: Anthropic, candidate: Candidate, fetcher: typeof fetch = fetch): Promise<{ extraction: Extraction; usage: { input: number; output: number }; imageCount: number }> {
+// model：既定は SNS_ROAD_MODEL。モデル比較（scripts/compare-sns-road-models.ts）のときだけ別のモデルを渡す。
+// Haiku 4.5 は effort を受け付けないので、effort は Haiku 以外のときだけ付ける
+export async function extractRoadReport(client: Anthropic, candidate: Candidate, fetcher: typeof fetch = fetch, model: string = SNS_ROAD_MODEL, effort?: 'low' | 'medium' | 'high'): Promise<{ extraction: Extraction; usage: { input: number; output: number }; imageCount: number }> {
   const postedJst = new Date(candidate.posted_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false })
   const images = await loadImages(mediaImageUrls(candidate), fetcher)
   const response = await client.messages.create({
-    model: SNS_ROAD_MODEL,
-    max_tokens: 1024,
+    model,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
-    output_config: { format: { type: 'json_schema', schema: EXTRACTION_SCHEMA } },
+    output_config: { format: { type: 'json_schema', schema: EXTRACTION_SCHEMA }, ...(effort && !model.includes('haiku') ? { effort } : {}) },
     messages: [{
       role: 'user',
       content: [
