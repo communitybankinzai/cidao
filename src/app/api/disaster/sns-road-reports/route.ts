@@ -5,10 +5,13 @@
 //   {hidden:true|false, reason?}                 伏せる／戻す。reason は not_road|wrong_place|stale|other
 //   {move:{lat,lng,placeName,learn,publish}}     地図で置き直す。learn なら地名を disaster_sns_places に覚え、
 //                                                同じ地名で場所が決まらず伏せていた投稿も置き直す。publish なら確度を高にして一般公開
+//   {section:{from:{lat,lng,name},to:{lat,lng,name},learn,publish}}
+//                                                運営が始点・終点を地図で指定し、国道464号の道なりの線（区間）にする（2026-09-25 事業主指示C）。
+//                                                learn なら2つの地名を覚え、次から「A〜B」「AからB」の投稿は AI が自動で線にする
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import {
-  coreLocationName, inArea, loadLearnedPlaces, locateRoadReport, locateSection, MOVED_BASIS, processSnsRoadCandidates,
+  coreLocationName, inArea, loadLearnedPlaces, locateRoadReport, locateSection, MOVED_BASIS, path464, processSnsRoadCandidates,
   SNS_FEEDBACK_TABLE, SNS_PLACES_TABLE, SNS_ROAD_EVENT_START, SNS_ROAD_TABLE, toPublicReport, UNLOCATED_BASIS,
 } from '@/lib/disaster-sns-road-ai'
 
@@ -103,7 +106,12 @@ export async function PATCH(request: Request) {
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   const id = new URL(request.url).searchParams.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
-  let body: { hidden?: unknown; reason?: unknown; move?: { lat?: unknown; lng?: unknown; placeName?: unknown; learn?: unknown; publish?: unknown } }
+  type EndPoint = { lat?: unknown; lng?: unknown; name?: unknown }
+  let body: {
+    hidden?: unknown; reason?: unknown
+    move?: { lat?: unknown; lng?: unknown; placeName?: unknown; learn?: unknown; publish?: unknown }
+    section?: { from?: EndPoint; to?: EndPoint; learn?: unknown; publish?: unknown }
+  }
   try { body = await request.json() } catch { return json(request, { error: 'invalid_json' }, 400) }
   const { data: report } = await supabase.from(SNS_ROAD_TABLE).select('id, candidate_id, kind, location_name, confidence').eq('id', id).maybeSingle()
   if (!report) return json(request, { error: 'not_found' }, 404)
@@ -128,6 +136,35 @@ export async function PATCH(request: Request) {
       relocated = await relocateUnlocated(supabase, placeName)
     }
     return json(request, { ok: true, id, moved: true, learned: learn, relocated })
+  }
+
+  if (body?.section) {
+    const ends = [body.section.from, body.section.to].map((e) => ({
+      lat: Number(e?.lat), lng: Number(e?.lng), name: String(e?.name ?? '').normalize('NFKC').trim().slice(0, 40),
+    }))
+    if (ends.some((e) => !inArea(e.lat, e.lng))) return json(request, { error: 'out_of_area' }, 400)
+    const path = path464([ends[0].lat, ends[0].lng], [ends[1].lat, ends[1].lng])
+    if (!path) return json(request, { error: 'no_route', hint: '2点が国道464号（北千葉道路・宗吾街道を含む）から300m以内で、道なりに20km以内につながる必要があります' }, 400)
+    const learn = body.section.learn === true
+    const publish = body.section.publish === true
+    const label = `${ends[0].name || '始点'}〜${ends[1].name || '終点'}`
+    const mid = path[Math.floor(path.length / 2)]
+    const { error } = await supabase.from(SNS_ROAD_TABLE).update({
+      latitude: mid[0], longitude: mid[1], path, section_label: label, hidden: false,
+      location_basis: `${MOVED_BASIS}（区間 ${label}・道路の形は © OpenStreetMap contributors）`,
+      confidence: publish ? 'high' : report.confidence === 'high' ? 'medium' : report.confidence, updated_at: now,
+    }).eq('id', id)
+    if (error) return json(request, { error: 'update_failed' }, 500)
+    await recordFeedback(supabase, report, { action: 'section', place_name: label, lat: mid[0], lng: mid[1] })
+    let learned = 0
+    if (learn) {
+      for (const e of ends) {
+        if (coreLocationName(e.name).length < 2) continue
+        const { error: placeError } = await supabase.from(SNS_PLACES_TABLE).upsert({ name: e.name, lat: e.lat, lng: e.lng, source: 'moderator', basis: '運営が区間の端として地図で指定', updated_at: now }, { onConflict: 'name' })
+        if (!placeError) learned += 1
+      }
+    }
+    return json(request, { ok: true, id, section: label, points: path.length, learned })
   }
 
   if (typeof body?.hidden !== 'boolean') return json(request, { error: 'invalid_hidden' }, 400)
