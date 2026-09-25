@@ -415,10 +415,10 @@ export async function PATCH(request: Request) {
     update[column] = urls
   }
 
-  // 運営が線の点を動かして直す（2026-09-25 事業主指示B）。線（2点以上）だけ受け、地点1点の記録は変えない
+  // 運営が線の点を動かして直す（2026-09-25 事業主指示B）。地点1点の記録も、点を道路上へ動かして直せるよう1点から受ける（同日追加）
   if (body.path !== undefined) {
-    const path = normalizePath(body.path, 2)
-    if (!path) return json(request, { error: 'invalid_path', hint: `2〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+    const path = normalizePath(body.path, 1)
+    if (!path) return json(request, { error: 'invalid_path', hint: `1〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
     if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
     const lengthM = pathLengthM(path)
     if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
