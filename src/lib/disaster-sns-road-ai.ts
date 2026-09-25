@@ -325,6 +325,25 @@ function graph464() {
       edges.get(a)!.push([b, d]); edges.get(b)!.push([a, d])
     }
   }
+  // 上下線が別の way で、交差点でも節点を共有していない（北須賀交差点で19m離れていて吉高〜北須賀がつながらなかった。2026-09-25）。
+  // 25m 以内の節点同士をつないで、車線をまたいで経路を引けるようにする（形の描画が目的なので、車線の違いは気にしない）
+  const LINK_M = 25
+  const cell = (p: Pt) => `${Math.floor(p[0] / 0.0004)},${Math.floor(p[1] / 0.0004)}`
+  const grid = new Map<string, number[]>()
+  nodes.forEach((p, i) => { const k = cell(p); if (!grid.has(k)) grid.set(k, []); grid.get(k)!.push(i) })
+  nodes.forEach((p, i) => {
+    const [cy, cx] = [Math.floor(p[0] / 0.0004), Math.floor(p[1] / 0.0004)]
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      for (const j of grid.get(`${cy + dy},${cx + dx}`) ?? []) {
+        if (j <= i) continue
+        const d = metersBetween(p, nodes[j])
+        if (d > LINK_M) continue
+        if (!edges.has(i)) edges.set(i, []); if (!edges.has(j)) edges.set(j, [])
+        if (edges.get(i)!.some(([v]) => v === j)) continue
+        edges.get(i)!.push([j, d]); edges.get(j)!.push([i, d])
+      }
+    }
+  })
   road464Graph = { nodes, edges }
   return road464Graph
 }
