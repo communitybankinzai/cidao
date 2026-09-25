@@ -43,7 +43,7 @@ export function prefKiseiNeedsRebuild(
 }
 
 async function fetchPage(): Promise<PageState> {
-  const res = await fetch(PAGE_URL, { headers: { 'User-Agent': UA }, cache: 'no-store', signal: AbortSignal.timeout(15000) })
+  const res = await fetch(PAGE_URL, { headers: { 'User-Agent': UA }, cache: 'no-store', signal: AbortSignal.timeout(8000) })
   // ページごと消えた＝掲載終了。それ以外の失敗は例外（一時的な不調で線を消さない）
   if (res.status === 404) return { pdfUrl: null, stamp: '' }
   if (!res.ok) throw new Error(`県ページ HTTP ${res.status}`)
@@ -52,7 +52,7 @@ async function fetchPage(): Promise<PageState> {
 
 async function fetchPublished() {
   // GitHub Pages は10分キャッシュするので、毎回違う問い合わせ文字列で最新を取る
-  const res = await fetch(`${PUBLISHED_JSON}?t=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
+  const res = await fetch(`${PUBLISHED_JSON}?t=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`公開中の JSON HTTP ${res.status}`)
   return (await res.json()) as { published?: boolean; pdfUrl?: string; pageStamp?: string }
@@ -75,7 +75,7 @@ export async function watchPrefRoadKisei(): Promise<PrefKiseiWatchResult> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ event_type: 'pref-road-kisei', client_payload: { reason } }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(8000),
   })
   if (!res.ok) {
     return { dispatched: false, reason: `${reason} / GitHub ${res.status} ${(await res.text()).slice(0, 120)}`, pdfUrl: page.pdfUrl }
