@@ -245,6 +245,8 @@ async function fromNominatim(name: string, fetcher: typeof fetch): Promise<Locat
     if (['natural', 'waterway', 'boundary', 'landuse'].includes(row.category || '')) continue
     if (['city', 'town', 'village', 'county', 'state', 'province', 'municipality', 'administrative'].includes(row.addresstype || row.type || '')) continue
     if (row.category === 'highway' && !LANDMARK.test(core)) continue
+    // 「阿蘇橋」のような名前のバス停は、橋そのものから離れていることがある
+    if (['bus_stop', 'platform', 'stop_position', 'stop'].includes(row.type || '')) continue
     const labels = [row.name || '', (row.display_name || '').split(',')[0]].map(coreLocationName).filter(Boolean)
     if (!labels.some((label) => label.includes(core) || core.includes(label))) continue
     const lat = Number(row.lat), lng = Number(row.lon)
@@ -259,13 +261,13 @@ async function fromGsi(name: string, fetcher: typeof fetch): Promise<Located | n
   const response = await fetcher(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(core)}`)
   if (!response.ok) return null
   const rows = await response.json().catch(() => []) as Array<{ geometry: { coordinates: [number, number] }; properties: { title?: string } }>
-  for (const row of rows) {
-    const title = coreLocationName(row.properties?.title || '')
-    if (!title.includes(core)) continue
-    const [lng, lat] = row.geometry.coordinates
-    if (inArea(lat, lng)) return { lat, lng, basis: '国土地理院 住所検索（町名の代表点）', byModel: false }
-  }
-  return null
+  const hits = rows.filter((row) => coreLocationName(row.properties?.title || '').includes(core))
+    .map((row) => ({ lng: row.geometry.coordinates[0], lat: row.geometry.coordinates[1] }))
+    .filter((p) => inArea(p.lat, p.lng))
+  if (!hits.length) return null
+  // 同じ名前の町が範囲内の離れた場所に複数あるときは決めない（「松崎」が印西市西部に当たり、成田市の松崎インターと10km以上ずれた）
+  const far = hits.some((p) => Math.hypot((p.lat - hits[0].lat) * 111, (p.lng - hits[0].lng) * 91) > 2)
+  return far ? null : { lat: hits[0].lat, lng: hits[0].lng, basis: '国土地理院 住所検索（町名の代表点）', byModel: false }
 }
 
 // 場所の決め方（2026-09-25 見直し）：
