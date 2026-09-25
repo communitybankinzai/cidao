@@ -396,7 +396,7 @@ export async function PATCH(request: Request) {
   const id = params.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
 
-  let body: { endedAt?: unknown; note?: unknown; imageUrls?: unknown; sourceUrls?: unknown }
+  let body: { endedAt?: unknown; note?: unknown; imageUrls?: unknown; sourceUrls?: unknown; path?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -413,6 +413,16 @@ export async function PATCH(request: Request) {
     const urls = normalizeRoadMediaUrls(body[field])
     if (!urls) return json(request, { error: `invalid_${column}`, hint: '最大3件の http(s) URL を指定してください。' }, 400)
     update[column] = urls
+  }
+
+  // 運営が線の点を動かして直す（2026-09-25 事業主指示B）。線（2点以上）だけ受け、地点1点の記録は変えない
+  if (body.path !== undefined) {
+    const path = normalizePath(body.path, 2)
+    if (!path) return json(request, { error: 'invalid_path', hint: `2〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+    if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
+    const lengthM = pathLengthM(path)
+    if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
+    Object.assign(update, { path, point_count: path.length, length_m: Math.round(lengthM * 10) / 10 })
   }
 
   let rainOut: RainInfo | null = null
@@ -436,7 +446,7 @@ export async function PATCH(request: Request) {
     // GPS の軌跡は所要時間を保つ（開始も同じだけずらす）
     const shift = at.getTime() - new Date(String(row.ended_at)).getTime()
     const started = new Date(new Date(String(row.started_at)).getTime() + (Number.isFinite(shift) ? shift : 0))
-    const path = row.path as LatLon[]
+    const path = (update.path as LatLon[] | undefined) ?? (row.path as LatLon[])
     rainOut = await rainAt(path[path.length - 1], at)
     Object.assign(update, {
       started_at: (Number.isNaN(started.getTime()) ? at : started).toISOString(),
@@ -462,6 +472,7 @@ export async function PATCH(request: Request) {
   return json(request, { ok: true, id, endedAt: update.ended_at ?? null, note: update.note ?? null, rain: rainOut,
     ...(update.image_urls !== undefined ? { imageUrls: update.image_urls } : {}),
     ...(update.source_urls !== undefined ? { sourceUrls: update.source_urls } : {}),
+    ...(update.path !== undefined ? { pointCount: update.point_count, lengthM: update.length_m } : {}),
   })
 }
 
