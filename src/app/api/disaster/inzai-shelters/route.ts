@@ -12,7 +12,15 @@ import { CITY_PORTAL_URL, fetchOfficialUpdates, type OfficialUpdate } from '@/li
 const LAST_OPEN_KEY = 'shelter_last_open'
 const STALE_KEEP_HOURS = 48
 
-type LastOpen = { openNames: string[]; evidence: OfficialUpdate | null; lastBroadcastAt: string; savedAt: string }
+// blanketClosure：施設名を挙げない一斉閉鎖の放送。速報が0件になった後も48時間はこれを返し、
+// MAP側の手動入力（LocalStorage）を閉鎖に倒せるようにする（2026-09-25。9/24 18:50 の閉鎖放送が消えた後に必要になった）
+type LastOpen = {
+  openNames: string[]
+  evidence: OfficialUpdate | null
+  blanketClosure?: OfficialUpdate | null
+  lastBroadcastAt: string
+  savedAt: string
+}
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -197,12 +205,18 @@ function normalizeMatchText(value: string) {
 // 「１６時、すべての避難所を閉鎖します。」のように施設名を挙げずに全所を閉じる放送がある。
 // 施設名の照合だけでは一致せず開設中の表示が残るため（2026-09-07 16:00 の放送で実際に発生）、
 // この形の放送を別に拾って全施設へ適用する。開設の放送より新しいときだけ有効にする。
-const BLANKET_CLOSURE = /(すべて|全て|全)の?避難所を?(閉鎖|閉所)|避難所を(すべて|全て|全)(閉鎖|閉所)/
+// 「避難指示を解除しました。これに伴い、開設していた避難所を閉鎖しました。」（2026-09-24 18:50）も
+// 施設名を挙げない全所閉鎖だが「すべて」の語が無く拾えなかったため、この形も加える（2026-09-25）。
+// 「土砂災害を対象として開設した避難所は午前７時に閉鎖します。…印旛公民館及び本埜公民館を引き続き開設しています」
+// （2026-09-22 07:00）のような一部閉鎖は、続きで開設を言っているので一斉閉鎖にしない。
+const BLANKET_CLOSURE = /(すべて|全て|全)の?避難所を?(閉鎖|閉所)|避難所を(すべて|全て|全)(閉鎖|閉所)|開設していた避難所を(閉鎖|閉所)/
+const STILL_OPEN = /引き続き[^。]{0,30}(避難所|開設)|開設して(い|お)ります|開設中の避難所/
 
 function findBlanketClosure(updates: OfficialUpdate[]) {
-  const hits = updates.filter((update) =>
-    BLANKET_CLOSURE.test(normalizeMatchText(`${update.title}\n${update.message}`)),
-  )
+  const hits = updates.filter((update) => {
+    const text = normalizeMatchText(`${update.title}\n${update.message}`)
+    return BLANKET_CLOSURE.test(text) && !STILL_OPEN.test(text)
+  })
   if (!hits.length) return null
   return hits.reduce((latest, update) =>
     String(update.publishedAt) > String(latest.publishedAt) ? update : latest,
@@ -270,7 +284,7 @@ async function getUncached(request: Request) {
     const supplemental = SUPPLEMENTAL_SHELTERS.filter(
       (extra) => !base.some((shelter) => shelter.name === extra.name),
     )
-    const blanketClosure = findBlanketClosure(officialUpdates)
+    let blanketClosure = findBlanketClosure(officialUpdates)
     const shelters = [...base, ...supplemental].map((shelter) => ({
       ...shelter,
       ...classifyOpeningStatus(shelter.name, officialUpdates, blanketClosure),
@@ -283,19 +297,23 @@ async function getUncached(request: Request) {
     if (officialUpdates.length) {
       const openNames = shelters.filter((s) => s.openingStatus === 'open').map((s) => s.name)
       const evidence = shelters.find((s) => s.openingStatus === 'open')?.openingEvidence ?? null
-      if (openNames.length || last?.openNames?.length) {
-        await writeLastOpen({ openNames, evidence, lastBroadcastAt, savedAt: new Date().toISOString() })
+      if (openNames.length || last?.openNames?.length || blanketClosure) {
+        await writeLastOpen({ openNames, evidence, blanketClosure, lastBroadcastAt, savedAt: new Date().toISOString() })
       }
-    } else if (last?.openNames?.length && Date.now() - Date.parse(last.savedAt) < STALE_KEEP_HOURS * 3600_000) {
+    } else if (last && Date.now() - Date.parse(last.savedAt) < STALE_KEEP_HOURS * 3600_000) {
       lastBroadcastAt = last.lastBroadcastAt
-      stale = true
-      const names = new Set(last.openNames)
-      shelters.forEach((s) => {
-        if (names.has(s.name)) {
-          s.openingStatus = 'open'
-          s.openingEvidence = last.evidence
-        }
-      })
+      // 一斉閉鎖も据え置いて返す。MAP側は blanketClosure の日時より前の手動「開設中」を閉鎖扱いにする
+      if (last.blanketClosure) blanketClosure = last.blanketClosure
+      if (last.openNames.length) {
+        stale = true
+        const names = new Set(last.openNames)
+        shelters.forEach((s) => {
+          if (names.has(s.name)) {
+            s.openingStatus = 'open'
+            s.openingEvidence = last.evidence
+          }
+        })
+      }
     }
 
     return json(request, {
