@@ -1,6 +1,6 @@
-// 通れた道・通れない地点に付ける雨の判定（最寄りアメダスの雨量から flood_likely / light_rain / no_rain / unknown）。
+// 通れた道・通れない地点に付ける雨の判定。rainVerdict は旧判定（2026-09-26 まで・今は使っていない）。
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rainAt, rainVerdict } from '@/lib/disaster-amedas-rain'
 
 afterEach(() => { vi.unstubAllGlobals() })
@@ -37,40 +37,45 @@ describe('rainVerdict：しきい値', () => {
   })
 })
 
-describe('rainAt：気象庁からの取得', () => {
-  const INZAI: [number, number] = [35.8325, 140.1454]   // 最寄りは我孫子
+describe('rainAt：周辺の観測点の10分値から判定（控えが無いときは気象庁）', () => {
+  const INZAI: [number, number] = [35.8325, 140.1454]
   const AT = new Date('2026-09-22T10:05:00+09:00')
+  // 記録の前24時間ぶんの10分値（どのファイルを頼まれても同じ中身を返す。窓の外の時刻は使われない）
+  const block = (mmPer10: number, flag = 0) => {
+    const out: Record<string, Record<string, [number, number]>> = {}
+    for (let i = 0; i < 150; i += 1) {
+      // 気象庁の10分値は 00分・10分… にそろっている
+      const t = new Date(Math.floor(AT.getTime() / 600000) * 600000 - i * 600000 + 9 * 3600000)
+      const key = t.toISOString().replace(/[-:T]/g, '').slice(0, 12) + '00'
+      out[key] = { precipitation10m: [mmPer10, flag] }
+    }
+    return out
+  }
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(AT.getTime() + 3600000)) })
+  afterEach(() => { vi.useRealTimers() })
 
-  it('取得した10分値から判定する（記録時刻以前で最新の行を使う）', async () => {
-    // 10:00 の行（1時間6mm）を使い、記録時刻より後の 10:10 の行は使わない
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
-      '20260922095000': { precipitation1h: [0, 0], precipitation3h: [0, 0], precipitation24h: [0, 0] },
-      '20260922100000': { precipitation1h: [6, 0], precipitation3h: [7, 0], precipitation24h: [8, 0] },
-      '20260922101000': { precipitation1h: [0, 0], precipitation3h: [0, 0], precipitation24h: [0, 0] },
-    })))
+  it('周辺4か所の平均で判定し、使った観測点の名前を返す', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(block(0))))
     const rain = await rainAt(INZAI, AT)
-    expect(rain).toMatchObject({ station: '我孫子', r1h: 6, r3h: 7, r24h: 8, verdict: 'flood_likely' })
+    expect(rain.station).toMatch(/我孫子/)
+    expect(rain.station).toMatch(/の平均$/)
+    // 24時間より前は取れない（控えが無い）ので72時間の合計も0、雨なし
+    expect(rain).toMatchObject({ verdict: 'no_rain', r24h: 0 })
+  })
+
+  it('1時間60mmの雨が続いていれば、雨の強さで flood_likely', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(block(10))))
+    expect(await rainAt(INZAI, AT)).toMatchObject({ verdict: 'flood_likely', basis: 'intensity' })
   })
 
   it('通信に失敗したら unknown', async () => {
-    // fetch 自体が例外（タイムアウト・DNS など）
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down') }))
-    expect(await rainAt(INZAI, AT)).toMatchObject({ station: '我孫子', verdict: 'unknown', r1h: null, r3h: null, r24h: null })
-  })
-
-  it('HTTP エラーなら unknown', async () => {
-    // 気象庁が 503 を返した
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
     expect((await rainAt(INZAI, AT)).verdict).toBe('unknown')
   })
 
   it('値がすべて品質フラグ付き（正常値でない）なら unknown', async () => {
-    // [数値, フラグ] のフラグが 0 以外の値は使わない → 使える値が無い
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
-      '20260922100000': { precipitation1h: [0, 5], precipitation3h: [0, 5], precipitation24h: [0, 5] },
-    })))
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(block(0, 5))))
     expect((await rainAt(INZAI, AT)).verdict).toBe('unknown')
   })
 })

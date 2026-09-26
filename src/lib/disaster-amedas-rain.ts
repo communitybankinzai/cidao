@@ -1,6 +1,8 @@
 // 通れた道・通れない地点の記録時刻に、最寄りアメダスでどれだけ雨が降っていたか（passed-roads/route.ts から切り出し。2026-09-24）。
 // 判定のしきい値をテストで確かめられるよう lib に置く。挙動は route.ts にあったときと同じ。
 
+import { DEFAULT_RAIN_PARAMS, rainContext, stationWeights, type RainParams } from '@/lib/disaster-rain-logic'
+
 export type LatLon = [number, number]
 
 // 2点間の距離（m）。短距離なので Haversine で十分
@@ -36,8 +38,22 @@ export const AMEDAS_STATIONS = [
   { code: '45371', name: '勝浦', lat: 35.15, lon: 140.3117 },
   { code: '45401', name: '館山', lat: 34.9867, lon: 139.865 },
 ]
-export type RainInfo = { station: string; at: string | null; r1h: number | null; r3h: number | null; r24h: number | null; verdict: 'flood_likely' | 'light_rain' | 'no_rain' | 'unknown' }
+export type RainInfo = {
+  station: string
+  at: string | null
+  r1h: number | null
+  r3h: number | null
+  r24h: number | null
+  verdict: 'flood_likely' | 'light_rain' | 'no_rain' | 'unknown'
+  // 2026-09-26 からの判定（disaster-rain-logic.ts）。古い判定の行では null
+  r72h?: number | null
+  peak1h?: number | null
+  bucket?: number | null
+  api?: number | null
+  basis?: 'intensity' | 'aftermath' | null
+}
 
+// ⚠ 2026-09-26 から判定には使っていない（rainAt は disaster-rain-logic.ts の rainContext で判定する）。
 // 1時間5mm以上・3時間10mm以上・24時間30mm以上のどれかで「冠水のおそれ」、すべて0なら「雨なし」、その間は「小雨」
 // （取れた値が1つも無いときは rainAt の側で unknown にする）
 export function rainVerdict(r1h: number | null, r3h: number | null, r24h: number | null): RainInfo['verdict'] {
@@ -71,72 +87,107 @@ function pickValue(entry: Record<string, [number, number]> | undefined, key: str
   return v[0]
 }
 
-// 手元に貯めたアメダスの控えから雨量を引く（2026-09-25）。
-// 気象庁の10分値は約1週間で消えるため、台風25号や8月の豪雨のように過ぎた災害では
-// 気象庁から取れない。控え（disaster_amedas_10min・PCの定期実行で貯めている）を先に見る。
-// 1時間値で補った行は3時間・24時間が空なので、控えの中で足し合わせて求める。
-async function rainFromBackup(stationCode: string, at: Date) {
+// ---------------------------------------------------------------------------
+// 記録の時刻までの10分雨量をそろえて判定する（2026-09-26 作り直し・判定は disaster-rain-logic.ts）
+// ---------------------------------------------------------------------------
+// 雨量は周辺4か所（30km以内）のアメダスを距離で重み付けした平均。7日分の10分値を使う。
+// 手元の控え（disaster_amedas_10min・PCの定期実行で貯めている）を主に使い、控えが記録の時刻に
+// 追いついていない直近ぶんだけ気象庁の10分値（3時間ごとのファイル・約1週間で消える）で埋める。
+
+const WINDOW_SLOTS = 1008 // 7日
+const SLOT_MS = 10 * 60 * 1000
+
+function floorSlot(ms: number) { return Math.floor(ms / SLOT_MS) * SLOT_MS }
+
+async function backupSeries(stationCode: string, fromMs: number, toMs: number) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  if (!url || !key) return null
-  const from = new Date(at.getTime() - 24 * 3600 * 1000).toISOString()
-  const to = at.toISOString()
+  const out = new Map<number, number>()
+  if (!url || !key) return out
   const query = `disaster_amedas_10min?station_id=eq.${stationCode}`
-    + `&observed_at=gte.${from}&observed_at=lte.${to}`
-    + '&select=observed_at,r10_mm,r1h_mm,r3h_mm,r24h_mm&order=observed_at.asc&limit=200'
-  const response = await fetch(`${url}/rest/v1/${query}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    cache: 'no-store',
-  })
-  if (!response.ok) return null
-  const rows = (await response.json()) as Array<{ observed_at: string; r10_mm: number | null; r1h_mm: number | null; r3h_mm: number | null; r24h_mm: number | null }>
-  if (!rows.length) return null
-  const last = rows[rows.length - 1]
-  // 記録の時刻から40分より古い行しか無いときは、その時刻の雨量とは言えないので使わない
-  if (at.getTime() - new Date(last.observed_at).getTime() > 40 * 60 * 1000) return null
-  const sumHourly = (hours: number) => {
-    const since = at.getTime() - hours * 3600 * 1000
-    const used = rows.filter((r) => new Date(r.observed_at).getTime() > since && r.r1h_mm !== null && r.r10_mm === null)
-    return used.length ? Math.round(used.reduce((a, r) => a + Number(r.r1h_mm), 0) * 10) / 10 : null
+    + `&observed_at=gt.${new Date(fromMs).toISOString()}&observed_at=lte.${new Date(toMs).toISOString()}`
+    + '&select=observed_at,r10_mm,r1h_mm&order=observed_at.asc&limit=1200'
+  const response = await fetch(`${url}/rest/v1/${query}`, { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: 'no-store' })
+  if (!response.ok) return out
+  const rows = (await response.json()) as Array<{ observed_at: string; r10_mm: number | null; r1h_mm: number | null }>
+  for (const r of rows) {
+    const t = floorSlot(new Date(r.observed_at).getTime())
+    if (r.r10_mm !== null) out.set(t, Number(r.r10_mm))
+    else if (r.r1h_mm !== null) {
+      // 1時間値だけの行（古い控え）は、その前の1時間の6コマに均等に配る
+      for (let j = 0; j < 6; j += 1) if (!out.has(t - j * SLOT_MS)) out.set(t - j * SLOT_MS, Number(r.r1h_mm) / 6)
+    }
   }
-  const r1h = last.r1h_mm === null ? null : Number(last.r1h_mm)
-  const r3h = last.r3h_mm === null ? sumHourly(3) : Number(last.r3h_mm)
-  const r24h = last.r24h_mm === null ? sumHourly(24) : Number(last.r24h_mm)
-  if (r1h === null && r3h === null && r24h === null) return null
-  return { at: new Date(last.observed_at).toISOString(), r1h, r3h, r24h }
+  return out
 }
 
-export async function rainAt(point: LatLon, at: Date): Promise<RainInfo> {
-  const station = AMEDAS_STATIONS.reduce((best, s) =>
-    distanceM(point, [s.lat, s.lon]) < distanceM(point, [best.lat, best.lon]) ? s : best)
-  const unknown: RainInfo = { station: station.name, at: null, r1h: null, r3h: null, r24h: null, verdict: 'unknown' }
-  // まず手元の控えを見る（過ぎた災害は気象庁から取れないため）。無ければ気象庁へ
-  try {
-    const kept = await rainFromBackup(station.code, at)
-    if (kept) return { station: station.name, at: kept.at, r1h: kept.r1h, r3h: kept.r3h, r24h: kept.r24h, verdict: rainVerdict(kept.r1h, kept.r3h, kept.r24h) }
-  } catch (error) {
-    console.error('[passed-roads/amedas-backup]', error instanceof Error ? error.message : String(error))
-  }
-  try {
-    // 気象庁の10分値は日本時間で3時間ごとのファイル。記録時刻以前で最新の行を使う
-    const jst = new Date(at.getTime() + 9 * 3600 * 1000)
-    const targetKey = jst.toISOString().replace(/[-:T]/g, '').slice(0, 12) + '00'
-    let block = await fetchAmedasBlock(station.code, jst)
-    let keys = Object.keys(block).filter((k) => k <= targetKey).sort()
-    if (!keys.length) {
-      // 3時間ブロックの先頭数分は前のファイルを見る
-      block = await fetchAmedasBlock(station.code, new Date(jst.getTime() - 3 * 3600 * 1000))
-      keys = Object.keys(block).filter((k) => k <= targetKey).sort()
+async function jmaSeries(stationCode: string, fromMs: number, toMs: number, into: Map<number, number>) {
+  // 3時間ごとのファイルを新しい方から最大9本（約1日分）まで取る
+  const files = new Set<string>()
+  for (let t = toMs; t > fromMs && files.size < 9; t -= 3 * 3600 * 1000) files.add(amedasFileUrl(stationCode, new Date(t + 9 * 3600 * 1000)))
+  for (const file of files) {
+    const response = await fetch(file, {
+      headers: { Accept: 'application/json', 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) continue
+    const block = (await response.json()) as Record<string, Record<string, [number, number]>>
+    for (const [k, entry] of Object.entries(block)) {
+      const t = new Date(`${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}T${k.slice(8, 10)}:${k.slice(10, 12)}:00+09:00`).getTime()
+      if (t <= fromMs || t > toMs) continue
+      const v = pickValue(entry, 'precipitation10m')
+      if (v !== null) into.set(t, v)
     }
-    const key = keys[keys.length - 1]
-    if (!key) return unknown
-    const entry = block[key]
-    const r1h = pickValue(entry, 'precipitation1h')
-    const r3h = pickValue(entry, 'precipitation3h')
-    const r24h = pickValue(entry, 'precipitation24h')
-    if (r1h === null && r3h === null && r24h === null) return unknown
-    const obsAt = new Date(`${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}T${key.slice(8, 10)}:${key.slice(10, 12)}:00+09:00`).toISOString()
-    return { station: station.name, at: obsAt, r1h, r3h, r24h, verdict: rainVerdict(r1h, r3h, r24h) }
+  }
+}
+
+/** 記録の地点・時刻の10分雨量（重み付け平均・7日分・古い順）と、使った観測点の名前 */
+export async function rainSeriesAt(point: LatLon, at: Date) {
+  const weights = stationWeights(point, AMEDAS_STATIONS, distanceM)
+  const toMs = floorSlot(at.getTime())
+  const fromMs = toMs - WINDOW_SLOTS * SLOT_MS
+  const perStation = await Promise.all(weights.map(async ({ station }) => {
+    let series = new Map<number, number>()
+    try { series = await backupSeries(station.code, fromMs, toMs) } catch (error) {
+      console.error('[amedas-backup]', error instanceof Error ? error.message : String(error))
+    }
+    const latest = series.size ? Math.max(...series.keys()) : fromMs
+    // 控えが記録の時刻に追いついていなければ、気象庁で埋める（約1週間より前は気象庁にも無い）
+    if (toMs - latest > 20 * 60 * 1000 && Date.now() - toMs < 6 * 24 * 3600 * 1000) {
+      try { await jmaSeries(station.code, latest, toMs, series) } catch (error) {
+        console.error('[amedas-jma]', error instanceof Error ? error.message : String(error))
+      }
+    }
+    return series
+  }))
+  const values: Array<number | null> = []
+  for (let i = WINDOW_SLOTS - 1; i >= 0; i -= 1) {
+    const t = toMs - i * SLOT_MS
+    let sum = 0
+    let w = 0
+    weights.forEach(({ weight }, j) => {
+      const v = perStation[j].get(t)
+      if (v !== undefined) { sum += v * weight; w += weight }
+    })
+    values.push(w > 0 ? sum / w : null)
+  }
+  return { values, stations: weights.map((x) => x.station.name), at: new Date(toMs).toISOString() }
+}
+
+export async function rainAt(point: LatLon, at: Date, params: RainParams = DEFAULT_RAIN_PARAMS): Promise<RainInfo> {
+  const near = stationWeights(point, AMEDAS_STATIONS, distanceM).map((x) => x.station.name).join('・')
+  const unknown: RainInfo = { station: near, at: null, r1h: null, r3h: null, r24h: null, verdict: 'unknown' }
+  try {
+    const { values, stations, at: slotAt } = await rainSeriesAt(point, at)
+    const c = rainContext(values, params)
+    return {
+      station: `${stations.join('・')}の平均`,
+      at: slotAt,
+      r1h: c.r1h, r3h: c.r3h, r24h: c.r24h, r72h: c.r72h,
+      peak1h: c.peak1h3h, bucket: c.bucketMax3h, api: c.api,
+      verdict: c.verdict, basis: c.basis,
+    }
   } catch (error) {
     console.error('[passed-roads/amedas]', error instanceof Error ? error.message : String(error))
     return unknown

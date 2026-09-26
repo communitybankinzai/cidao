@@ -12,6 +12,19 @@ import { createHash } from 'node:crypto'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { distanceM, rainAt, type LatLon, type RainInfo } from '@/lib/disaster-amedas-rain'
+import { RAIN_LOGIC_VERSION } from '@/lib/disaster-rain-logic'
+
+// 2026-09-26 からの判定（disaster-rain-logic.ts）の中身を保存する列
+function rainV2Columns(rain: RainInfo) {
+  return {
+    rain_72h_mm: rain.r72h ?? null,
+    rain_peak1h_mm: rain.peak1h ?? null,
+    rain_bucket_mm: rain.bucket ?? null,
+    rain_api_mm: rain.api ?? null,
+    rain_basis: rain.basis ?? null,
+    rain_logic: rain.verdict === 'unknown' ? null : RAIN_LOGIC_VERSION,
+  }
+}
 import { normalizeRoadMediaUrls } from '@/lib/disaster-road-media'
 
 export const dynamic = 'force-dynamic'
@@ -148,7 +161,7 @@ async function getUncached(request: Request) {
 
   let query = supabase
     .from('disaster_passed_roads')
-    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, image_urls, source_urls, created_at, hidden, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict')
+    .select('id, kind, source, path, point_count, length_m, started_at, ended_at, note, image_urls, source_urls, created_at, hidden, rain_station, rain_at, rain_1h_mm, rain_3h_mm, rain_24h_mm, rain_verdict, rain_72h_mm, rain_peak1h_mm, rain_bucket_mm, rain_api_mm, rain_basis, rain_logic')
     .order('created_at', { ascending: false })
     .limit(LIST_LIMIT)
   if (!wantAll) query = query.eq('hidden', false)
@@ -158,13 +171,21 @@ async function getUncached(request: Request) {
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
 
-  const rainOf = (row: { rain_station?: string; rain_at?: string | null; rain_1h_mm?: unknown; rain_3h_mm?: unknown; rain_24h_mm?: unknown; rain_verdict?: string }) => ({
-    station: row.rain_station ?? '',
-    at: row.rain_at ?? null,
-    r1h: row.rain_1h_mm === null || row.rain_1h_mm === undefined ? null : Number(row.rain_1h_mm),
-    r3h: row.rain_3h_mm === null || row.rain_3h_mm === undefined ? null : Number(row.rain_3h_mm),
-    r24h: row.rain_24h_mm === null || row.rain_24h_mm === undefined ? null : Number(row.rain_24h_mm),
-    verdict: row.rain_verdict ?? 'unknown',
+  const num = (x: unknown) => (x === null || x === undefined ? null : Number(x))
+  const rainOf = (row: Record<string, unknown>) => ({
+    station: String(row.rain_station ?? ''),
+    at: (row.rain_at as string | null) ?? null,
+    r1h: num(row.rain_1h_mm),
+    r3h: num(row.rain_3h_mm),
+    r24h: num(row.rain_24h_mm),
+    verdict: String(row.rain_verdict ?? 'unknown'),
+    // 2026-09-26 からの判定の中身（古い判定の行は null。logic で見分ける）
+    r72h: num(row.rain_72h_mm),
+    peak1h: num(row.rain_peak1h_mm),
+    bucket: num(row.rain_bucket_mm),
+    api: num(row.rain_api_mm),
+    basis: (row.rain_basis as string | null) ?? null,
+    logic: (row.rain_logic as string | null) ?? null,
   })
 
   // みんつく運営など外部への提供用。GeoJSON は [経度, 緯度] の順
@@ -307,6 +328,7 @@ export async function POST(request: Request) {
       rain_3h_mm: rain.r3h,
       rain_24h_mm: rain.r24h,
       rain_verdict: rain.verdict,
+      ...rainV2Columns(rain),
       point_count: path.length,
       length_m: Math.round(lengthM * 10) / 10,
       started_at: startedAt.toISOString(),
@@ -457,6 +479,7 @@ export async function PATCH(request: Request) {
       rain_3h_mm: rainOut.r3h,
       rain_24h_mm: rainOut.r24h,
       rain_verdict: rainOut.verdict,
+      ...rainV2Columns(rainOut),
     })
   }
   if (!Object.keys(update).length) return json(request, { error: 'nothing_to_update' }, 400)
