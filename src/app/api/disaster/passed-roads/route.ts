@@ -61,6 +61,12 @@ const PAST_EVENTS = [
 ]
 
 const MAX_NOTE = 200
+// 線を2本に切るとき（PATCH ?splitAt=）、後半の記録へ写す列。path・点数・距離・写真・path_original は写さない
+const SPLIT_COPY_COLUMNS = [
+  'device_id', 'kind', 'source', 'started_at', 'ended_at', 'note', 'ip_hash', 'source_urls',
+  'rain_station', 'rain_at', 'rain_1h_mm', 'rain_3h_mm', 'rain_24h_mm', 'rain_verdict',
+  'rain_72h_mm', 'rain_peak1h_mm', 'rain_bucket_mm', 'rain_api_mm', 'rain_basis', 'rain_logic',
+] as const
 
 // 運営（いたずら対応）用の合言葉。Vercel の環境変数 DISASTER_MODERATION_KEY に置く。
 // 一致したときだけ、端末IDと10分の制限なしで hidden を切り替えられる（行は消さない）。
@@ -426,6 +432,49 @@ export async function PATCH(request: Request) {
   }
 
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json(request, { error: 'invalid_json' }, 400)
+
+  // 運営が1本の線を2本に切る（2026-09-26）。なぞりで離れた2点を結んだ直線（例：5km）は、点を動かしても消せないため。
+  // ?splitAt=N（0始まり。N番の点から後ろが後半）。body.path があれば、動かした点をその線として切る。
+  // 前半は元の記録を更新し、後半は時刻・メモ・雨量・端末IDを引き継いだ新しい記録として複製する（写真は元の記録に残す）。
+  // path_original は両方とも消す（一括の道なり補正 route_snap.py が元の1本から計算し直して直線を戻さないように）
+  const splitAtRaw = params.get('splitAt')
+  if (splitAtRaw !== null) {
+    const splitAt = Number(splitAtRaw)
+    if (!Number.isInteger(splitAt)) return json(request, { error: 'invalid_split' }, 400)
+    const { data: row, error: readError } = await supabase.from('disaster_passed_roads').select('*').eq('id', id).maybeSingle()
+    if (isMissingTable(readError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (readError) return json(request, { error: readError.message }, 500)
+    if (!row) return json(request, { error: 'not_found' }, 404)
+    const source = row as Record<string, unknown>
+    const base = body.path === undefined ? (source.path as LatLon[]) : normalizePath(body.path, 4)
+    if (!Array.isArray(base) || base.length < 4) return json(request, { error: 'invalid_path', hint: '切るには4点以上の線が必要です' }, 400)
+    if (splitAt < 2 || splitAt > base.length - 2) return json(request, { error: 'invalid_split', hint: `splitAt は 2〜${base.length - 2}（前後とも2点以上）` }, 400)
+    const first = base.slice(0, splitAt)
+    const second = base.slice(splitAt)
+    if (!first.some(insideInzai) || !second.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
+    const firstLen = pathLengthM(first)
+    const secondLen = pathLengthM(second)
+    if (firstLen > MAX_LENGTH_M || secondLen > MAX_LENGTH_M) return json(request, { error: 'too_long' }, 400)
+    const copy: Record<string, unknown> = {}
+    for (const col of SPLIT_COPY_COLUMNS) if (col in source) copy[col] = source[col]
+    const { data: inserted, error: insertError } = await supabase
+      .from('disaster_passed_roads')
+      .insert({ ...copy, path: second, point_count: second.length, length_m: Math.round(secondLen * 10) / 10, path_original: null, snapped_at: null, image_urls: [], hidden: false })
+      .select('id, created_at')
+      .single()
+    if (insertError) return json(request, { error: insertError.message }, 500)
+    const { data: updatedFirst, error: updateError } = await supabase
+      .from('disaster_passed_roads')
+      .update({ path: first, point_count: first.length, length_m: Math.round(firstLen * 10) / 10, path_original: null })
+      .eq('id', id)
+      .select('id')
+    if (updateError) return json(request, { error: updateError.message, secondId: inserted?.id ?? null }, 500)
+    if (!updatedFirst?.length) return json(request, { error: 'not_found', secondId: inserted?.id ?? null }, 404)
+    return json(request, {
+      ok: true, id, pointCount: first.length, lengthM: Math.round(firstLen * 10) / 10,
+      second: { id: inserted?.id ?? null, createdAt: inserted?.created_at ?? null, pointCount: second.length, lengthM: Math.round(secondLen * 10) / 10 },
+    })
+  }
 
   const update: Record<string, unknown> = {}
   if (typeof body.note === 'string') update.note = body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE)
