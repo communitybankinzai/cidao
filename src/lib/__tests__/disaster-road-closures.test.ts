@@ -6,6 +6,7 @@ import {
   inzaiRoadOf,
   kokudoClosureOf,
   parseInzaiStatusPage,
+  parseInzaiTrunkList,
   prefRoadOf,
   scanInzai,
   scanKokudo,
@@ -143,6 +144,39 @@ describe('印西市', () => {
     expect(scan.active).toHaveLength(1)
     expect(scan.active[0]).toMatchObject({ road: '市道師戸・江川線', place: '一部区間', reason: '道路冠水', publishedAt: '2026-09-21T00:00:00+09:00' })
     expect(scan.active[0].raw?.mapUrl).toBe('https://www.city.inzai.lg.jp/cmsfiles/contents/0000022/22576/itizu.pdf')
+  })
+
+  // 2026-09-26 に市のページ（0000022584）で実際に見た形を縮めたもの
+  const TRUNK = `${TOP}0000022584.html`
+  const trunkPage = `<div class="mol_contents"><h2>主要幹線道路等の通行止めの状況</h2><div class="mol_textblock"><p>台風25号の影響による大雨に伴い、以下の幹線道路等が通行止めとなっております。<br>【令和8年9月26日　8：00現在】<br>県道千葉竜ケ崎線　　八千代市との行政界付近　<br>県道八千代宗像線　　八千代市との行政界付近　⇒　通行止め解除<br>市道山田・平賀線　　中平橋付近（酒々井町側）⇒　通行止め解除(片側通行)<br>市道師戸・江川線　　別添位置図参照</p><h3>通行止め状況位置図</h3></div></div>`
+
+  it('路線を並べた一覧を1行ずつ読む（通行止めと解除を分ける）', () => {
+    const list = parseInzaiTrunkList(trunkPage)
+    expect(list?.asOf).toBe('2026-09-25T23:00:00.000Z')
+    expect(list?.items).toEqual([
+      { road: '県道千葉竜ケ崎線', place: '八千代市との行政界付近', cleared: false, note: '' },
+      { road: '県道八千代宗像線', place: '八千代市との行政界付近', cleared: true, note: '通行止め解除' },
+      { road: '市道山田・平賀線', place: '中平橋付近(酒々井町側)', cleared: true, note: '通行止め解除(片側通行)' },
+      { road: '市道師戸・江川線', place: '別添位置図参照', cleared: false, note: '' },
+    ])
+    expect(parseInzaiTrunkList(detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'))).toBeNull()
+  })
+
+  it('一覧のページは記事1件と読まず、新しい通行止めを足し、解除された路線の記事も解除する', async () => {
+    mockSite({
+      [TOP]: topPage([['./0000022578.html', '道路の通行止めの状況']]),
+      [STATUS]: statusPage([[D1, '市道師戸・江川線の一部区間'], [D2, '市道山田・平賀線の中平橋付近'], [TRUNK, '主要幹線道路等の通行止めの状況']]),
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+      [D2]: detail('道路冠水により、市道山田・平賀線の中平橋付近を通行止めにしています。'),
+      [TRUNK]: trunkPage,
+    })
+    const blankRow: ExistingClosure = { closure_key: TRUNK, url: TRUNK, in_area: true, cleared_at: null, clear_reason: null, raw: { road: '', place: '' } }
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [blankRow])
+    const roads = scan.active.map((a) => a.road).sort()
+    expect(roads).toEqual(['市道師戸・江川線', '県道千葉竜ケ崎線'])
+    expect(scan.cleared[D2]).toBe('announced')
+    expect(scan.cleared[TRUNK]).toBe('disappeared')
+    expect(scan.active.find((a) => a.road === '県道千葉竜ケ崎線')).toMatchObject({ place: '八千代市との行政界付近', publishedAt: '2026-09-25T23:00:00.000Z', url: TRUNK })
   })
 
   const onStatusRow = (url: string): ExistingClosure => ({

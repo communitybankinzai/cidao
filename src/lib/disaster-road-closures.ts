@@ -407,6 +407,46 @@ export function inzaiRoadOf(text: string) {
   return { road: '', place: near ? near[1] : '' }
 }
 
+/**
+ * 「主要幹線道路等の通行止めの状況」（0000022584 など）のように、1ページに路線を並べた一覧。
+ * 本文の「【令和8年9月26日 8：00現在】」から「通行止め状況位置図」までの各行を
+ * 「県道千葉竜ケ崎線　八千代市との行政界付近　⇒　通行止め解除」の形で読む（2026-09-26 事業主指摘：
+ * このページを記事1件と読み違え、県道千葉竜ケ崎線の通行止めと中平橋付近の解除を取りこぼしていた）。
+ * 一覧が無いページは null。
+ */
+export function parseInzaiTrunkList(html: string) {
+  const root = parseHtml(html)
+  const body = root.querySelector('.mol_contents')
+  if (!body) return null
+  const text = body.innerHTML
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h\d|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .normalize('NFKC')
+  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(\d+)\s*[:：]\s*(\d+)\s*現在\s*】/)
+  if (!head) return null
+  const [y, mo, d, h, mi] = head.slice(1).map(Number)
+  const asOf = new Date(Date.UTC(2018 + y, mo - 1, d, h - 9, mi)).toISOString()
+  const after = text.slice((head.index ?? 0) + head[0].length)
+  const end = after.search(/通行止め状況位置図|PDFファイルの閲覧/)
+  const lines = (end >= 0 ? after.slice(0, end) : after).split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  const items: Array<{ road: string; place: string; cleared: boolean; note: string }> = []
+  for (const line of lines) {
+    const m = line.match(/^((?:県道|国道|市道|町道)\s*[^\s⇒]*?(?:線|号))\s*(.*)$/)
+    if (!m) continue
+    const [placePart, ...rest] = m[2].split('⇒')
+    const outcome = rest.join('⇒').trim()
+    items.push({
+      road: m[1].replace(/\s+/g, ''),
+      place: placePart.trim(),
+      cleared: /解除/.test(outcome),
+      note: outcome,
+    })
+  }
+  return items.length ? { asOf, items } : null
+}
+
 export async function scanInzai(source: ClosureSource, existing: ExistingClosure[]): Promise<ClosureScan> {
   const topUrl = source.url || INZAI_TOP
   const news = parseInzaiNews(await fetchRequired(topUrl), topUrl)
@@ -437,12 +477,14 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
 
   // 確かめる記事：新着の通行止め記事＋まとめページの記事＋いま通行止め中の行
   const candidates = new Map<string, string>()
-  for (const item of news) if (/通行止/.test(item.title) && !/解除/.test(item.title)) candidates.set(item.url, item.title)
+  // まとめページ自身は記事ではないので候補にしない（題名に「通行止め」があり、路線名が空の行になっていた）
+  for (const item of news) if (/通行止/.test(item.title) && !/解除/.test(item.title) && !statusUrls.has(item.url)) candidates.set(item.url, item.title)
   for (const [url, info] of statusOf) if (!candidates.has(url)) candidates.set(url, info.title)
   for (const row of activeRows) if (row.url && !candidates.has(row.url)) candidates.set(row.url, '')
 
   const active: ClosureDraft[] = []
   const cleared: Record<string, ClearReason> = {}
+  const trunkLists: Array<{ url: string; asOf: string; items: Array<{ road: string; place: string; cleared: boolean; note: string }>; mapUrl: string | null }> = []
   let fetched = 0
   for (const [url, listTitle] of candidates) {
     const prev = known.get(url)
@@ -457,6 +499,14 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       if (page.status === 404 || page.status === 410) { cleared[url] = 'disappeared'; continue }
       if (prev && !prev.cleared_at) active.push(keepAsIs(prev, url))
       notes.push(`記事を読めませんでした（${page.status}）: ${url}`)
+      continue
+    }
+    // 路線を並べた一覧のページは、記事1件ではなく一覧として読む（後でまとめて反映）
+    const trunk = parseInzaiTrunkList(page.text)
+    if (trunk) {
+      trunkLists.push({ url, ...trunk, mapUrl: parseInzaiMapPdf(page.text, url) })
+      // 以前このページを記事1件と読んでいた行（路線名が空）は外す
+      if (prev && !prev.cleared_at) cleared[url] = 'disappeared'
       continue
     }
     const title = parseInzaiDetailTitle(page.text)
@@ -491,6 +541,37 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       publishedAt: parseJpDate(listTitle) ?? parseJpDate(title),
       raw: { statusUrl: statusUrl ?? null, onStatus: Boolean(onStatus || prevRaw.onStatus), mapUrl: parseInzaiMapPdf(page.text, url) },
     })
+  }
+
+  // 一覧のページの各行を反映する。記事で出している路線は二重に出さない。
+  // 一覧で「⇒ 通行止め解除」とされた路線は、同じ路線の記事の行も解除する（一覧のほうが新しいため）
+  for (const list of trunkLists) {
+    notes.push(`路線の一覧 ${list.items.length}行（${list.asOf} 現在）を確認: ${list.url}`)
+    for (const item of list.items) {
+      const key = `${list.url}#${item.road}#${item.place}`
+      const sameRoad = active.filter((a) => a.key !== key && a.road === item.road)
+      if (item.cleared) {
+        for (const a of sameRoad) {
+          cleared[a.key] = 'announced'
+          active.splice(active.indexOf(a), 1)
+        }
+        if (known.has(key)) cleared[key] = 'announced'
+        continue
+      }
+      if (sameRoad.length) continue
+      active.push({
+        key,
+        road: item.road,
+        place: item.place,
+        reason: '道路冠水',
+        municipality: '印西市',
+        inArea: true,
+        url: list.url,
+        sourceTitle: '主要幹線道路等の通行止めの状況',
+        publishedAt: list.asOf,
+        raw: { trunkList: true, asOf: list.asOf, note: item.note, mapUrl: list.mapUrl },
+      })
+    }
   }
   return { active, cleared, notes }
 }
