@@ -61,6 +61,7 @@ const PAST_EVENTS = [
 ]
 
 const MAX_NOTE = 200
+const MAX_SEGMENTS = 10 // GPS 軌跡を途切れで分けて送るときの区間数の上限（POST body.segments）
 // 線を2本に切るとき（PATCH ?splitAt=）、後半の記録へ写す列。path・点数・距離・写真・path_original は写さない
 const SPLIT_COPY_COLUMNS = [
   'device_id', 'kind', 'source', 'started_at', 'ended_at', 'note', 'ip_hash', 'source_urls',
@@ -249,7 +250,7 @@ export async function POST(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
 
-  let body: { deviceId?: unknown; kind?: unknown; source?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown; sourceUrls?: unknown }
+  let body: { deviceId?: unknown; kind?: unknown; source?: unknown; path?: unknown; startedAt?: unknown; endedAt?: unknown; note?: unknown; sourceUrls?: unknown; segments?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -261,29 +262,53 @@ export async function POST(request: Request) {
 
   const kind = typeof body.kind === 'string' && KINDS.has(body.kind) ? body.kind : 'passed'
   const source = typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : 'gps'
-  // 地点（1点）は従来どおり可。地図で描いた線は2点から、GPS軌跡は3点・50m以上。
-  const path = normalizePath(body.path, 1)
-  if (!path) return json(request, { error: 'invalid_path', hint: `1〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
-  const minLinePoints = source === 'map' ? 2 : MIN_POINTS
-  if (path.length > 1 && path.length < minLinePoints) return json(request, { error: 'invalid_path', hint: `線は${minLinePoints}点以上` }, 400)
-  if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
-
-  const lengthM = path.length === 1 ? 0 : pathLengthM(path)
-  if (source === 'gps' && path.length > 1 && lengthM < MIN_LENGTH_M) return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
-  if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
-
-  const startedAt = new Date(String(body.startedAt ?? ''))
-  const endedAt = new Date(String(body.endedAt ?? ''))
   const now = Date.now()
-  if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) return json(request, { error: 'invalid_time' }, 400)
-  if (endedAt.getTime() < startedAt.getTime()) return json(request, { error: 'invalid_time' }, 400)
-  // 端末時計のずれは許すが、1日以上ずれた記録は受けない（過去の記録を後から捏造させない）。
-  // ただし、決まった災害の期間の中に入る時刻だけは後からでも受ける（2026-09-25）。
-  // 台風25号の冠水を集め直すことになったが、選べる時刻が12時間前までで登録できなかったため。
-  // ⚠ 期間は下の PAST_EVENTS に書いたものだけ。任意の過去は今までどおり受けない
-  const inPastEvent = PAST_EVENTS.some((e) => endedAt.getTime() >= e.from && endedAt.getTime() <= e.to)
-  if (!inPastEvent && Math.abs(now - endedAt.getTime()) > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
-  if (endedAt.getTime() > now + 60 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
+  // GPS の軌跡は、測位の途切れ（60秒超・300m超）で区間に分けて送られてくる（2026-09-26）。`segments` で複数区間を1回で登録する
+  // （1件ずつ送ると同じ端末の連投制限 MIN_INTERVAL_SECONDS に当たるため）。従来の path／startedAt／endedAt の1件も同じ道を通す。
+  // 区間が複数のときは、短すぎる区間（3点未満・50m未満）だけ飛ばして残りを登録し、飛ばした番号を `skipped` で返す。
+  type Item = { path: LatLon[]; startedAt: Date; endedAt: Date; lengthM: number }
+  type RawItem = { path?: unknown; startedAt?: unknown; endedAt?: unknown }
+  const rawItems: RawItem[] = Array.isArray(body.segments)
+    ? (body.segments as RawItem[])
+    : [{ path: body.path, startedAt: body.startedAt, endedAt: body.endedAt }]
+  if (!rawItems.length || rawItems.length > MAX_SEGMENTS) return json(request, { error: 'invalid_segments', hint: `区間は1〜${MAX_SEGMENTS}本` }, 400)
+  const multi = rawItems.length > 1
+  const items: Item[] = []
+  const skipped: Array<{ index: number; reason: string }> = []
+  for (const [index, raw] of rawItems.entries()) {
+    // 地点（1点）は従来どおり可。地図で描いた線は2点から、GPS軌跡は3点・50m以上。
+    const path = normalizePath(raw && typeof raw === 'object' ? raw.path : undefined, 1)
+    if (!path) return json(request, { error: 'invalid_path', hint: `1〜${MAX_POINTS}点の [緯度, 経度] 配列` }, 400)
+    const minLinePoints = source === 'map' ? 2 : MIN_POINTS
+    if (path.length > 1 && path.length < minLinePoints) {
+      if (multi) { skipped.push({ index, reason: 'too_few_points' }); continue }
+      return json(request, { error: 'invalid_path', hint: `線は${minLinePoints}点以上` }, 400)
+    }
+    if (!path.some(insideInzai)) return json(request, { error: 'outside_inzai' }, 400)
+
+    const lengthM = path.length === 1 ? 0 : pathLengthM(path)
+    if (source === 'gps' && path.length > 1 && lengthM < MIN_LENGTH_M) {
+      if (multi) { skipped.push({ index, reason: 'too_short' }); continue }
+      return json(request, { error: 'too_short', lengthM: Math.round(lengthM) }, 400)
+    }
+    if (lengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(lengthM) }, 400)
+
+    const startedAt = new Date(String(raw?.startedAt ?? ''))
+    const endedAt = new Date(String(raw?.endedAt ?? ''))
+    if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) return json(request, { error: 'invalid_time' }, 400)
+    if (endedAt.getTime() < startedAt.getTime()) return json(request, { error: 'invalid_time' }, 400)
+    // 端末時計のずれは許すが、1日以上ずれた記録は受けない（過去の記録を後から捏造させない）。
+    // ただし、決まった災害の期間の中に入る時刻だけは後からでも受ける（2026-09-25）。
+    // 台風25号の冠水を集め直すことになったが、選べる時刻が12時間前までで登録できなかったため。
+    // ⚠ 期間は下の PAST_EVENTS に書いたものだけ。任意の過去は今までどおり受けない
+    const inPastEvent = PAST_EVENTS.some((e) => endedAt.getTime() >= e.from && endedAt.getTime() <= e.to)
+    if (!inPastEvent && Math.abs(now - endedAt.getTime()) > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+    if (endedAt.getTime() > now + 60 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
+    items.push({ path, startedAt, endedAt, lengthM })
+  }
+  if (!items.length) return json(request, { error: 'too_short', skipped }, 400)
+  const totalLengthM = items.reduce((sum, item) => sum + item.lengthM, 0)
+  if (totalLengthM > MAX_LENGTH_M) return json(request, { error: 'too_long', lengthM: Math.round(totalLengthM) }, 400)
 
   const note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim().slice(0, MAX_NOTE) : ''
   // 記録した本人が、もとになったSNSの投稿URLを1つだけ添えられる（2026-09-25）。
@@ -318,38 +343,43 @@ export async function POST(request: Request) {
     }
   }
 
-  // 記録時刻の雨量（取れなくても保存は続ける）。線のときは終点で判定
-  const rain = await rainAt(path[path.length - 1], endedAt)
+  // 記録時刻の雨量（取れなくても保存は続ける）。線のときは終点で判定（区間ごと）
+  const rains: RainInfo[] = await Promise.all(items.map((item) => rainAt(item.path[item.path.length - 1], item.endedAt)))
 
+  const rows = items.map((item, i) => ({
+    device_id: deviceId,
+    kind,
+    source,
+    path: item.path,
+    rain_station: rains[i].station,
+    rain_at: rains[i].at,
+    rain_1h_mm: rains[i].r1h,
+    rain_3h_mm: rains[i].r3h,
+    rain_24h_mm: rains[i].r24h,
+    rain_verdict: rains[i].verdict,
+    ...rainV2Columns(rains[i]),
+    point_count: item.path.length,
+    length_m: Math.round(item.lengthM * 10) / 10,
+    started_at: item.startedAt.toISOString(),
+    ended_at: item.endedAt.toISOString(),
+    note,
+    source_urls: sourceUrls,
+    ip_hash: hash,
+  }))
   const { data: inserted, error } = await supabase
     .from('disaster_passed_roads')
-    .insert({
-      device_id: deviceId,
-      kind,
-      source,
-      path,
-      rain_station: rain.station,
-      rain_at: rain.at,
-      rain_1h_mm: rain.r1h,
-      rain_3h_mm: rain.r3h,
-      rain_24h_mm: rain.r24h,
-      rain_verdict: rain.verdict,
-      ...rainV2Columns(rain),
-      point_count: path.length,
-      length_m: Math.round(lengthM * 10) / 10,
-      started_at: startedAt.toISOString(),
-      ended_at: endedAt.toISOString(),
-      note,
-      source_urls: sourceUrls,
-      ip_hash: hash,
-    })
+    .insert(rows)
     .select('id, created_at')
-    .single()
 
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
 
-  return json(request, { ok: true, id: inserted?.id, kind, createdAt: inserted?.created_at, pointCount: path.length, lengthM: Math.round(lengthM), rain }, 201)
+  // 応答は従来の1件の形（id・pointCount・lengthM・rain＝最初の区間）に、区間ごとの `records` と飛ばした `skipped` を足したもの
+  const records = (inserted ?? []).map((row, i) => ({
+    id: row.id, createdAt: row.created_at, pointCount: items[i]?.path.length ?? null, lengthM: Math.round(items[i]?.lengthM ?? 0), rain: rains[i] ?? null,
+  }))
+  const first = records[0]
+  return json(request, { ok: true, id: first?.id, kind, createdAt: first?.createdAt, pointCount: items[0].path.length, lengthM: Math.round(items[0].lengthM), rain: rains[0], records, skipped }, 201)
 }
 
 export async function DELETE(request: Request) {
