@@ -7,7 +7,9 @@
 //
 //  (A) 排水が追いつかない雨（バケツ）：10分ごとに雨を足し、1時間あたり D mm ずつ抜く。
 //      記録の前3時間にあふれた量（バケツの水位の最大）が bucketMm 以上なら「大雨の最中・直後」。
-//      D の既定 50mm/h は、国の下水道の計画降雨の基本（5年に1回程度の雨）で千葉市が採っていた値。
+//      D の既定 20mm/h は、台風25号の降っている最中の「通れない」記録から逆算した値（2026-09-26 事業主決定）。
+//      一般的な値としては、国の下水道の計画降雨の基本（5年に1回程度の雨）で千葉市が採っていた 50mm/h があり、
+//      説明ページで比べられる。農道・低地・沼沿いの道は下水道より排水が弱いと考えられる。
 //  (B) 水が引くまでの時間（先行降雨）：ここ数日の雨を、半分になるまで halfLifeH 時間で割り引いて足す。
 //      apiMm 以上なら「大雨の後で水が残っているおそれ」。既定値は台風25号の記録で当てはめた値。
 //
@@ -23,10 +25,10 @@ export type RainParams = {
 }
 
 // 判定の版。式や既定値を変えたら上げ、scripts/backfill-rain-logic.ts で全記録を判定し直す
-export const RAIN_LOGIC_VERSION = 'v2-2026-09-26'
+export const RAIN_LOGIC_VERSION = 'v2.1-2026-09-26'
 
 export const DEFAULT_RAIN_PARAMS: RainParams = {
-  drainMmPerHour: 50,
+  drainMmPerHour: 20,
   bucketMm: 1,
   halfLifeH: 48,
   apiMm: 150,

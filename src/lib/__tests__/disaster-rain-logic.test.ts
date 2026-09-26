@@ -12,15 +12,15 @@ describe('rainContext', () => {
     expect(rainContext(dry(7 * DAY))).toMatchObject({ verdict: 'no_rain', basis: null, r72h: 0 })
   })
 
-  it('1時間60mm（排水50mm/hを超える）が30分続けば、雨の強さで flood_likely', () => {
+  it('1時間60mm（排水20mm/hを超える）が30分続けば、雨の強さで flood_likely', () => {
     const c = rainContext([...dry(7 * DAY - 3), ...rain(3, 60)])
-    // 10分ごとに 10mm 降り 8.33mm 抜ける → 3コマで約5mm あふれる
+    // 10分ごとに 10mm 降り 3.33mm 抜ける → 3コマで約20mm あふれる
     expect(c).toMatchObject({ verdict: 'flood_likely', basis: 'intensity' })
     expect(c.bucketMax3h).toBeGreaterThanOrEqual(DEFAULT_RAIN_PARAMS.bucketMm)
   })
 
-  it('降り始め：1時間20mmが1時間だけなら排水が追いつき、冠水のおそれにしない', () => {
-    expect(rainContext([...dry(7 * DAY - 6), ...rain(6, 20)])).toMatchObject({ verdict: 'light_rain', bucketMax3h: 0 })
+  it('降り始め：1時間15mm（排水20mm/h以下）が1時間だけなら排水が追いつき、冠水のおそれにしない', () => {
+    expect(rainContext([...dry(7 * DAY - 6), ...rain(6, 15)])).toMatchObject({ verdict: 'light_rain', bucketMax3h: 0 })
   })
 
   it('大雨の後：24時間で約300mm降り、止んでから1日たっても aftermath で flood_likely', () => {
@@ -39,8 +39,8 @@ describe('rainContext', () => {
     expect(rainContext(values).verdict).toBe('unknown')
   })
 
-  it('数値を変えると判定が変わる（排水を10mm/hにすると1時間20mmでもあふれる）', () => {
-    const values = [...dry(7 * DAY - 6), ...rain(6, 20)]
+  it('数値を変えると判定が変わる（排水を10mm/hにすると1時間15mmでもあふれる）', () => {
+    const values = [...dry(7 * DAY - 6), ...rain(6, 15)]
     expect(rainContext(values, { ...DEFAULT_RAIN_PARAMS, drainMmPerHour: 10 })).toMatchObject({ verdict: 'flood_likely', basis: 'intensity' })
   })
 })
