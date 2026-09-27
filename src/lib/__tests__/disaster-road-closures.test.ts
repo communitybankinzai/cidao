@@ -183,6 +183,32 @@ describe('印西市', () => {
     expect(scan.cleared[D2]).toBe('announced')
     expect(scan.cleared[TRUNK]).toBe('disappeared')
     expect(scan.active.find((a) => a.road === '県道千葉竜ケ崎線')).toMatchObject({ place: '八千代市との行政界付近', publishedAt: '2026-09-25T23:00:00.000Z', url: TRUNK })
+    expect(scan.warnings).toEqual([])
+  })
+
+  it('時刻の書き方の揺れ（曜日・午後・「17時現在」）も読む', () => {
+    const asOf = (stamp: string) => parseInzaiTrunkList(trunkPage.replace('8：00現在', stamp))?.asOf
+    expect(asOf('午後5時45分現在')).toBe('2026-09-26T08:45:00.000Z')
+    expect(asOf('17時現在')).toBe('2026-09-26T08:00:00.000Z')
+    expect(parseInzaiTrunkList(trunkPage.replace('9月26日　8：00現在', '9月26日（土）17:45現在'))?.asOf).toBe('2026-09-26T08:45:00.000Z')
+  })
+
+  it('一覧のページが読めないときは空の行を作らず、一覧から出していた行を残して警告する', async () => {
+    mockSite({
+      [TOP]: topPage([['./0000022578.html', '道路の通行止めの状況']]),
+      [STATUS]: statusPage([[TRUNK, '主要幹線道路等の通行止めの状況']]),
+      [TRUNK]: trunkPage.replace('【令和8年9月26日　8：00現在】', '【9月26日 夕方時点】'),
+    })
+    const trunkRow: ExistingClosure = {
+      closure_key: `${TRUNK}#県道千葉竜ケ崎線#八千代市との行政界付近`, url: TRUNK, in_area: true, cleared_at: null, clear_reason: null,
+      raw: { road: '県道千葉竜ケ崎線', place: '八千代市との行政界付近', reason: '道路冠水', trunkList: true },
+    }
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [trunkRow])
+    expect(scan.active.map((a) => a.key)).toEqual([trunkRow.closure_key])
+    expect(scan.active[0].road).toBe('県道千葉竜ケ崎線')
+    expect(scan.active.some((a) => a.road === '')).toBe(false)
+    expect(scan.warnings).toHaveLength(1)
+    expect(scan.warnings?.[0]).toContain(TRUNK)
   })
 
   const onStatusRow = (url: string): ExistingClosure => ({

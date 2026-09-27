@@ -50,6 +50,8 @@ export type ClosureScan = {
   /** 今回の読み取りで解除と分かった鍵と理由。active に無い既存行は、ここに無ければ disappeared として解除する */
   cleared: Record<string, ClearReason>
   notes: string[]
+  /** 読めたが気づいてほしいこと（ページの形が変わった等）。あれば情報源の状態を「一部失敗」にして管理画面に出す */
+  warnings?: string[]
 }
 
 /** DB に既にある行（読むだけ。解除の判定と、周辺かどうかの判定結果の使い回しに使う） */
@@ -424,10 +426,15 @@ export function parseInzaiTrunkList(html: string) {
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .normalize('NFKC')
-  // 時刻は「8：00現在」と「17時45分現在」の両方がある（2026-09-27 に後者へ変わり、一覧を丸ごと読み落とした）
-  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(\d+)\s*(?:[:：]|時)\s*(\d+)\s*分?\s*現在\s*】/)
+  // 時刻は「8：00現在」と「17時45分現在」の両方がある（2026-09-27 に後者へ変わり、一覧を丸ごと読み落とした）。
+  // 念のため「(日)」の曜日、「午前／午後5時45分」「17時現在」も読む。読めなければ scanInzai が警告を出す
+  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(?:\([^)]*\)\s*)?(午前|午後)?\s*(\d+)\s*(?:[:：]\s*(\d+)|時\s*(?:(\d+)\s*分)?)\s*現在\s*】/)
   if (!head) return null
-  const [y, mo, d, h, mi] = head.slice(1).map(Number)
+  const [y, mo, d] = head.slice(1, 4).map(Number)
+  let h = Number(head[5])
+  if (head[4] === '午後' && h < 12) h += 12
+  if (head[4] === '午前' && h === 12) h = 0
+  const mi = Number(head[6] ?? head[7] ?? 0)
   const asOf = new Date(Date.UTC(2018 + y, mo - 1, d, h - 9, mi)).toISOString()
   const after = text.slice((head.index ?? 0) + head[0].length)
   const end = after.search(/通行止め状況位置図|PDFファイルの閲覧/)
@@ -448,12 +455,21 @@ export function parseInzaiTrunkList(html: string) {
   return items.length ? { asOf, items } : null
 }
 
+/** 路線を並べた一覧のページらしいか（「⇒」や「【…現在】」がある）。一覧として読めなかったときの警告に使う */
+export function looksLikeInzaiTrunkList(html: string) {
+  const body = parseHtml(html).querySelector('.mol_contents')
+  if (!body) return false
+  const text = body.innerHTML.replace(/<[^>]+>/g, '').normalize('NFKC')
+  return /⇒/.test(text) || /現在\s*】/.test(text)
+}
+
 export async function scanInzai(source: ClosureSource, existing: ExistingClosure[]): Promise<ClosureScan> {
   const topUrl = source.url || INZAI_TOP
   const news = parseInzaiNews(await fetchRequired(topUrl), topUrl)
   if (!news.length) throw new Error('印西市トップの新着情報が読めません（ページの形が変わった可能性）')
 
   const notes: string[] = [`新着 ${news.length}件を確認`]
+  const warnings: string[] = []
   const known = new Map(existing.map((row) => [row.closure_key, row]))
   const activeRows = existing.filter((row) => !row.cleared_at)
 
@@ -508,6 +524,14 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       trunkLists.push({ url, ...trunk, mapUrl: parseInzaiMapPdf(page.text, url) })
       // 以前このページを記事1件と読んでいた行（路線名が空）は外す
       if (prev && !prev.cleared_at) cleared[url] = 'disappeared'
+      continue
+    }
+    if (looksLikeInzaiTrunkList(page.text)) {
+      // 一覧のページなのに読めない（2026-09-27 は見出しの時刻の書き方が変わっただけで読めなくなった）。
+      // 記事1件として読むと路線名が空の行になるので読まず、この一覧から出していた行は前回のまま残して警告する
+      for (const row of activeRows) if (row.closure_key.startsWith(`${url}#`)) active.push(keepAsIs(row, url))
+      if (prev && !prev.cleared_at) cleared[url] = 'disappeared'
+      warnings.push(`路線の一覧らしいページを読めませんでした（見出し「【令和…現在】」の書き方が変わった可能性）。前回の状態のまま残しています: ${url}`)
       continue
     }
     const title = parseInzaiDetailTitle(page.text)
@@ -574,7 +598,7 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       })
     }
   }
-  return { active, cleared, notes }
+  return { active, cleared, notes, warnings }
 }
 
 function keepAsIs(prev: ExistingClosure, url: string): ClosureDraft {

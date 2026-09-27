@@ -50,7 +50,7 @@ export type SourceRunResult = {
   sourceId: string
   label: string
   kind: string
-  status: 'success' | 'failed'
+  status: 'success' | 'failed' | 'partial'
   fetched: number
   inserted: number
   updated: number
@@ -1292,10 +1292,12 @@ export async function runRoadClosures(supabase: SupabaseClient): Promise<SourceR
       const scan = await scanRoadClosures(source, existing)
       const counts = await syncRoadClosures(supabase, source.id, scan, existing)
       await markRoadClosureFetched(supabase, source)
+      // 読めたが気づいてほしいこと（一覧のページの形が変わった等）は「一部失敗」として管理画面と点検画面に出す
+      const warning = scan.warnings?.length ? scan.warnings.join(' ／ ').slice(0, 1000) : null
       await supabase.from('disaster_info_sources').update({
-        last_fetched_at: fetchedAt, last_status: 'success', last_error: null, updated_at: fetchedAt,
+        last_fetched_at: fetchedAt, last_status: warning ? 'partial' : 'success', last_error: warning, updated_at: fetchedAt,
       }).eq('id', source.id)
-      return { sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared }
+      return { sourceId: source.id, label: source.label, kind: source.kind, status: warning ? 'partial' : 'success', fetched: scan.active.length, inserted: counts.inserted, updated: counts.updated, unchanged: 0, cleared: counts.cleared, ...(warning ? { error: warning } : {}) }
     } catch (e) {
       const message = errorMessage(e)
       await supabase.from('disaster_info_sources').update({
