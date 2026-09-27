@@ -37,6 +37,32 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /**
+ * 一定時間で打ち切る。ブラウザの通知まわりは失敗してもエラーを返さず
+ * 待ち続けることがあり（Edge が許可ダイアログをアドレスバーのベルに隠す等）、
+ * そのままだとボタンが「処理中…」から戻らないため。
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
+const PERMISSION_TIMEOUT_MS = 30_000
+const READY_TIMEOUT_MS = 10_000
+const SUBSCRIBE_TIMEOUT_MS = 15_000
+
+const PERMISSION_TIMEOUT_MSG =
+  'ブラウザの通知許可の返事がありません。アドレスバーのベル（🔔）または鍵マークから「許可」を選び、もう一度押してください'
+const READY_TIMEOUT_MSG =
+  '通知の準備が終わりませんでした。ページを再読み込みして、もう一度押してください'
+const SUBSCRIBE_TIMEOUT_MSG =
+  '通知サーバーから応答がありません。時間をおいて試すか、別のブラウザ（Chrome など）でお試しください'
+
+/**
  * マイページの「スマホ・PCへのプッシュ通知」設定カード。
  * 有効化するとアプリを閉じていても待機画面に通知が届く。
  */
@@ -73,17 +99,25 @@ export function PushToggle() {
     setBusy(true)
     setError(null)
     try {
-      const permission = await Notification.requestPermission()
+      const permission = await withTimeout(
+        Notification.requestPermission(),
+        PERMISSION_TIMEOUT_MS,
+        PERMISSION_TIMEOUT_MSG,
+      )
       if (permission !== 'granted') {
         setError('ブラウザの通知が許可されませんでした（端末の設定から許可できます）')
         return
       }
-      const reg = await navigator.serviceWorker.ready
+      const reg = await withTimeout(navigator.serviceWorker.ready, READY_TIMEOUT_MS, READY_TIMEOUT_MSG)
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ''
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-      })
+      const sub = await withTimeout(
+        reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+        }),
+        SUBSCRIBE_TIMEOUT_MS,
+        SUBSCRIBE_TIMEOUT_MSG,
+      )
       const json = sub.toJSON()
       await savePushSubscription({
         endpoint: sub.endpoint,
@@ -101,7 +135,7 @@ export function PushToggle() {
     setBusy(true)
     setError(null)
     try {
-      const reg = await navigator.serviceWorker.ready
+      const reg = await withTimeout(navigator.serviceWorker.ready, READY_TIMEOUT_MS, READY_TIMEOUT_MSG)
       const sub = await reg.pushManager.getSubscription()
       if (sub) {
         await deletePushSubscription(sub.endpoint)
