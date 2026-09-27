@@ -50,8 +50,9 @@ describe('座標化', () => {
     const located = await locateRoadReport(extraction({ location_text: '舟戸大橋', lat: 35.7526, lng: 140.1787 }), fetcher)
     expect(calls.some((u) => u.includes('nominatim'))).toBe(true)
     expect(calls.some((u) => u.includes('gsi.go.jp'))).toBe(true)
-    // 外部で決まらなければ AI の推定を目安として使う
-    expect(located).toMatchObject({ lat: 35.7526, lng: 140.1787, byModel: true })
+    // 外部で決まらなければ置かない。AI の推定座標は渡されても使わない
+    // （2026-09-25 6b86b97 で廃止：成田湯川駅を約5km違う所に置いていた。このテストだけ旧仕様のまま残っていた）
+    expect(located).toBeNull()
   })
   it('Nominatim の名前が一致すれば採用する（駅）', async () => {
     const { fetcher } = fakeFetch({
