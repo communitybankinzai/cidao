@@ -162,6 +162,12 @@ describe('印西市', () => {
     expect(parseInzaiTrunkList(detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'))).toBeNull()
   })
 
+  it('「17時45分現在」の書き方でも一覧を読む（2026-09-27 に市の書き方が変わった）', () => {
+    const list = parseInzaiTrunkList(trunkPage.replace('8：00現在', '17時45分現在'))
+    expect(list?.asOf).toBe('2026-09-26T08:45:00.000Z')
+    expect(list?.items.find((i) => i.road === '市道山田・平賀線')?.cleared).toBe(true)
+  })
+
   it('一覧のページは記事1件と読まず、新しい通行止めを足し、解除された路線の記事も解除する', async () => {
     mockSite({
       [TOP]: topPage([['./0000022578.html', '道路の通行止めの状況']]),

@@ -424,7 +424,8 @@ export function parseInzaiTrunkList(html: string) {
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .normalize('NFKC')
-  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(\d+)\s*[:：]\s*(\d+)\s*現在\s*】/)
+  // 時刻は「8：00現在」と「17時45分現在」の両方がある（2026-09-27 に後者へ変わり、一覧を丸ごと読み落とした）
+  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(\d+)\s*(?:[:：]|時)\s*(\d+)\s*分?\s*現在\s*】/)
   if (!head) return null
   const [y, mo, d, h, mi] = head.slice(1).map(Number)
   const asOf = new Date(Date.UTC(2018 + y, mo - 1, d, h - 9, mi)).toISOString()
