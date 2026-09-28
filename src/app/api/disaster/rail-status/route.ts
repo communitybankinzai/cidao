@@ -1,6 +1,12 @@
 // 鉄道・バスの運休情報を防災MAPへ配る。
 //
-// 登録（どの区間が止まっているか）は人が app_settings へ入れる。ここでやるのは解除だけを自動にすること。
+// 登録（どの区間が止まっているか）は2通り。どちらも app_settings（disaster_rail_status）に入る。
+//   ・市の「災害時の公共交通のご案内」：巡回が書き換わりを見つけると、src/lib/disaster-rail-watch.ts の
+//     handleCityTransitChange が鉄道の区間（地図の駅名と照合）と路線バスを読み取って自動で反映し、運営へメールする
+//     （2026-09-23 事業主判断A。それまでは承認リンクを押したときだけ鉄道を反映していた）
+//   ・事業者の発表（JR東日本・京成など、市より早いもの）：運営が確認して手で入れる（sourceType 'operator'。expiresAt か、無ければ
+//     disaster-rail-status.ts の DEFAULT_TTL_HOURS＝12時間で自動的に消える）
+// このルートがやるのは配ることと、解除を自動にすること。
 // 判定は src/lib/disaster-rail-status.ts（テストあり）。市が運転再開を発表すると
 // 「災害時の公共交通のご案内」の本文から運休の記述が消えるので、すでに取り込んでいる
 // その本文（disaster_timeline_items）と突き合わせ、記述が消えた項目と期限切れの項目を落とす。
