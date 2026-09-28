@@ -75,6 +75,9 @@ function hasLocationSignal(text: string): boolean {
 // 2026-09-21 夕：事業主が集めた大雨中の実投稿の言い回しから追加（閉鎖＝「高速道路閉鎖中」、消防＝「消防隊が活動中」、
 // 不動車・Uターン・立ち往生＝車が進めない状況の書き方）。一覧と出典は保管庫 cidao/2026-09-21_大雨時のSNS投稿の言い回し.md
 const DISASTER_SIGNAL = /冠水|浸水|洪水|氾濫|越水|大雨|豪雨|線状降水帯|通行止|通行不可|通行不能|通れな|通行でき|溢れ|あふれ|マンホール|閉鎖|消防|不動車|Uターン|立ち往生|道路.{0,8}水|アンダーパス|土砂|土石流|崖崩|がけ崩|倒木|停電|断水|救助|取り残|避難|地震|揺れ|震度|倒壊|液状化|警報|注意報|河川.{0,8}(増水|危険)|水没|水浸し|冠水注意|池のよう|川のよう|濁り水|信号.{0,4}(消え|停止)|電柱.{0,4}(倒|折)|屋根.{0,6}(飛|剥が|壊)|瓦.{0,4}(飛|落)|看板.{0,4}(倒|飛)|土のう|土嚢/
+// 平時の道路・交通の困りごと（2026-09-28 事業主決定：災害時だけでなく常時使う）。場所語との両方が必要なのは災害と同じ。
+// 「工事」だけ・「穴」だけは店の工事や別の話が多いので、道路の話と分かる組み合わせに絞った
+const TRAFFIC_SIGNAL = /通行規制|交通規制|車線規制|片側交互|片側通行|工事.{0,8}(通行止|規制|片側|迂回|う回|渋滞|通れ)|迂回|う回路|事故|渋滞|陥没|段差|道路.{0,6}(穴|ひび|割れ|凸凹|でこぼこ)|落下物|倒木|信号.{0,4}(故障|消え|止ま)/
 const LOOKBACK_MS = 6 * 60 * 60 * 1000
 const MAX_INITIAL_LOOKBACK_MS = 24 * 60 * 60 * 1000
 
@@ -163,11 +166,11 @@ function isExcludedAccount(item: MonitorItem): boolean {
   return Boolean(handle) && EXCLUDED_ACCOUNTS.has(handle)
 }
 
-function matchesScope(item: MonitorItem): boolean {
+export function matchesScope(item: MonitorItem): boolean {
   if (isExcludedAccount(item)) return false
   const searchable = `${item.text}\n${item.commentsText}\n${item.locationName}`
   return (hasLocationSignal(searchable) || hasLocationSignal(item.query))
-    && (DISASTER_SIGNAL.test(searchable) || DISASTER_SIGNAL.test(item.query))
+    && (DISASTER_SIGNAL.test(searchable) || DISASTER_SIGNAL.test(item.query) || TRAFFIC_SIGNAL.test(searchable))
 }
 
 function itemWithinRange(item: MonitorItem, since: Date, until: Date): boolean {

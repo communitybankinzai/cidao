@@ -12,14 +12,21 @@ import road464 from './disaster-sns-road-464.json'
 
 export const SNS_ROAD_MODEL = 'claude-haiku-4-5'
 export const SNS_ROAD_EVENT_START = '2026-09-20T00:00:00+09:00'
+// 巡回のたびに AI へ掛ける候補の範囲（日数）。古い候補は読んでも地図の「直近24時間」に出ないので読まない
+export const SNS_ROAD_RECENT_DAYS = 14
 export const SNS_ROAD_TABLE = 'disaster_sns_road_reports'
 export const SNS_ROAD_SCAN_TABLE = 'disaster_sns_road_scans'
 // 地図の範囲（防災MAPと同じ）。この外の座標は捨てる
 const AREA = { south: 35.72, north: 35.92, west: 140.03, east: 140.34 }
-// AI に渡す前の粗いふるい。通行に触れていない投稿（避難所・停電など）に AI 費用を掛けない
-const ROAD_WORDS = /通れ|通行|冠水|水没|開通|封鎖|迂回|橋|国道|道路|道が|アンダーパス|渋滞|抜けられ/
+// AI に渡す前の粗いふるい。通行に触れていない投稿（避難所・停電など）に AI 費用を掛けない。
+// 2026-09-28 平時にも使うため、工事・事故・道路の傷みの言葉を足した（事業主決定：道路・交通の困りごと）
+const ROAD_WORDS = /通れ|通行|冠水|水没|開通|封鎖|迂回|う回|橋|国道|道路|道が|アンダーパス|渋滞|抜けられ|工事|事故|規制|片側|車線|陥没|段差|倒木|落下物/
 
-export type RoadKind = 'passed' | 'blocked' | 'cleared'
+// caution＝通れるが支障あり（片側交互通行・車線規制・渋滞・陥没・落下物など）。2026-09-28 平時のために追加
+export type RoadKind = 'passed' | 'blocked' | 'cleared' | 'caution'
+// 通行に支障が出た理由。空文字は不明（台風25号の分は読み取っていない）
+export type RoadCause = 'flood' | 'construction' | 'accident' | 'fallen_tree' | 'damage' | 'congestion' | 'other' | ''
+export const ROAD_CAUSES: RoadCause[] = ['flood', 'construction', 'accident', 'fallen_tree', 'damage', 'congestion', 'other', '']
 export type Confidence = 'high' | 'medium' | 'low'
 
 type Candidate = {
@@ -35,6 +42,7 @@ type Candidate = {
 type Extraction = {
   is_road_report: boolean
   kind: RoadKind | 'unknown'
+  cause: RoadCause
   location_text: string
   location_kind: 'bridge' | 'station' | 'road' | 'town' | 'facility' | 'other' | ''
   image_findings: string
@@ -51,6 +59,7 @@ type Extraction = {
 export type SnsRoadReport = {
   id: string
   kind: RoadKind
+  cause: RoadCause
   lat: number
   lng: number
   locationName: string
@@ -93,8 +102,9 @@ export function coreLocationName(text: string) {
 const EXTRACTION_SCHEMA = {
   type: 'object',
   properties: {
-    is_road_report: { type: 'boolean', description: '投稿者自身が、特定の道・橋・場所の「通れた／通れない／通行止めが解除された」を伝えているか' },
-    kind: { type: 'string', enum: ['passed', 'blocked', 'cleared', 'unknown'], description: 'passed=通れた・通行可能、blocked=通れない・通行止め・冠水で不通、cleared=通行止めの解除・開通、unknown=判断できない' },
+    is_road_report: { type: 'boolean', description: '投稿者自身が、特定の道・橋・場所の通行の状態（通れた／通れない／解除された／通れるが支障がある）を伝えているか' },
+    kind: { type: 'string', enum: ['passed', 'blocked', 'cleared', 'caution', 'unknown'], description: 'passed=通れた・通行可能、blocked=通れない・通行止め・冠水で不通、cleared=通行止めの解除・開通、caution=通れるが支障あり（片側交互通行・車線規制・渋滞・陥没や段差・落下物・事故処理中で徐行など）、unknown=判断できない' },
+    cause: { type: 'string', enum: ['flood', 'construction', 'accident', 'fallen_tree', 'damage', 'congestion', 'other', ''], description: '支障の理由。flood=冠水・浸水、construction=工事、accident=事故、fallen_tree=倒木・落下物、damage=陥没・段差・穴など道路の傷み、congestion=渋滞、other=その他、空文字=本文から分からない。passed で理由が無いときも空文字' },
     location_text: { type: 'string', description: '投稿に書かれた場所の名前（例：舟戸大橋、成田湯川駅付近、国道464号 台方〜北須賀）。1か所に特定できないときは空文字' },
     location_kind: { type: 'string', enum: ['bridge', 'station', 'road', 'town', 'facility', 'other', ''] },
     image_findings: { type: 'string', description: '添付写真から読み取れた場所の手掛かり（看板・駅名標・橋の名板・店名など、写っている文字）と状況（冠水・通行止めの柵など）。写真が無い・手掛かりが無いときは空文字。推測で地名を足さない' },
@@ -107,17 +117,21 @@ const EXTRACTION_SCHEMA = {
     quote: { type: 'string', description: '判断の根拠になった本文の一節（そのまま・80字以内）' },
     reason: { type: 'string', description: '判定理由（短く）' },
   },
-  required: ['is_road_report', 'kind', 'location_text', 'location_kind', 'image_findings', 'location_source', 'section_from', 'section_to', 'observed_at', 'confidence', 'summary', 'quote', 'reason'],
+  required: ['is_road_report', 'kind', 'cause', 'location_text', 'location_kind', 'image_findings', 'location_source', 'section_from', 'section_to', 'observed_at', 'confidence', 'summary', 'quote', 'reason'],
   additionalProperties: false,
 } as const
 
 const SYSTEM_PROMPT = `あなたは千葉県印西市とその周辺（成田市・白井市・佐倉市・栄町）の防災マップの係です。
-SNSの投稿1件を読み、「特定の道・橋・場所が 通れた／通れない／通行止めが解除された」という通行情報を取り出します。
+SNSの投稿1件を読み、「特定の道・橋・場所が 通れた／通れない／通行止めが解除された／通れるが支障がある」という通行情報と、その理由を取り出します。
+大雨などの災害のときだけでなく、ふだんの工事・事故・渋滞・倒木・道路の傷み（陥没・段差・穴）も対象です。
 
 判断の決まり：
 - 投稿者自身が見聞きした、または明確に伝えている通行の状態だけを通行情報とする。
 - 「通行止めが解除された」「開通した」「通れるようになった」は cleared。過去形の「通行止めだった」は現在の状態ではないので、解除や開通の文脈なら cleared、そうでなければ unknown。
 - 疑問・推測（〜かも、〜らしい、〜そう）、他人への質問、ニュース記事の丸ごと転載、「多くの道が通行止め」のように場所が1か所に定まらないものは、location_text を空にする（is_road_report は内容に従う）。
+- 片側交互通行・車線規制・渋滞・事故処理中で徐行・陥没や段差・落下物など、通れるが気を付ける必要があるものは caution。工事や事故でも通行止めなら blocked。
+- 理由（cause）は本文や写真にはっきり書かれているものだけを選ぶ。分からなければ空文字。
+- イベントの交通規制の予告、渋滞の一般論、ニュース記事の丸ごと転載は、場所と時間が特定できなければ location_text を空にする。
 - 「〜から〜まで通行止め」のような区間は、区間の代表となる場所を location_text にし、summary に区間を書く。
 - location_text を道路名だけ（「国道464号」など）にしない。本文に駅・橋・交差点・施設・町名が出てくれば、道路名に添えて必ず含める（例：「国道464号 成田湯川駅付近」「北千葉道路 北須賀交差点」）。
 - 場所の名前は本文に書かれた表記を使い、市名は付けない（例：舟戸大橋、成田湯川駅、はなのき台、中平橋）。
@@ -473,7 +487,8 @@ export type ProcessOptions = { limit?: number; since?: string; fetcher?: typeof 
 // 未判定の候補を古い順に limit 件だけ AI に掛ける。巡回（5分ごと）の末尾から呼ばれるので、1回の量は小さく保つ
 export async function processSnsRoadCandidates(supabase: SupabaseClient, options: ProcessOptions = {}) {
   const limit = Math.max(1, Math.min(options.limit ?? 6, 60))
-  const since = options.since ?? SNS_ROAD_EVENT_START
+  // 既定は直近14日（2026-09-28 平時にも使うため、台風25号の開始日固定をやめた。範囲の外の未判定の候補は読まない）
+  const since = options.since ?? new Date(Date.now() - SNS_ROAD_RECENT_DAYS * 86400000).toISOString()
   const fetcher = options.fetcher ?? fetch
   const { data: scanned } = await supabase.from(SNS_ROAD_SCAN_TABLE).select('candidate_id').limit(5000)
   const done = new Set((scanned ?? []).map((row) => String((row as { candidate_id: string }).candidate_id)))
@@ -533,7 +548,7 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
         const row: Record<string, unknown> = {
           path: section?.path ?? null, section_label: section?.label ?? '',
           candidate_id: candidate.id, platform: candidate.platform, permalink: candidate.permalink, posted_at: candidate.posted_at,
-          observed_at: observedAt, kind: extraction.kind, location_name: extraction.location_text.slice(0, 80),
+          observed_at: observedAt, kind: extraction.kind, cause: ROAD_CAUSES.includes(extraction.cause) ? extraction.cause : '', location_name: extraction.location_text.slice(0, 80),
           location_basis: `${located.basis}${fromImage ? '・場所名は写真に写った文字から' : ''}`,
           latitude: located.lat, longitude: located.lng, confidence, summary: extraction.summary.slice(0, 120), quote: extraction.quote.slice(0, 200),
           image_note: imageNote, embed_url: embedUrlOf(candidate), model: SNS_ROAD_MODEL, updated_at: new Date().toISOString(),
@@ -562,7 +577,7 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
 
 export function toPublicReport(row: Record<string, unknown>): SnsRoadReport {
   return {
-    id: String(row.id), kind: row.kind as RoadKind, lat: Number(row.latitude), lng: Number(row.longitude),
+    id: String(row.id), kind: row.kind as RoadKind, cause: (ROAD_CAUSES.includes(row.cause as RoadCause) ? row.cause : '') as RoadCause, lat: Number(row.latitude), lng: Number(row.longitude),
     locationName: String(row.location_name ?? ''), locationBasis: String(row.location_basis ?? ''),
     observedAt: row.observed_at ? String(row.observed_at) : null, postedAt: String(row.posted_at),
     sourceUrl: String(row.permalink ?? ''), platform: String(row.platform ?? ''), confidence: row.confidence as Confidence,
