@@ -184,10 +184,22 @@ export function kokudoClosureOf(title: string) {
   }
 }
 
-export async function scanKokudo(source: ClosureSource): Promise<ClosureScan> {
+export async function scanKokudo(source: ClosureSource, existing: ExistingClosure[] = [], now = new Date()): Promise<ClosureScan> {
   const url = source.url || 'https://www.ktr.mlit.go.jp/kisha/chiba_index.html'
   const entries = parseKokudoList(await fetchRequired(url), url)
   if (!entries.length) throw new Error('記者発表の一覧が読めません（ページの形が変わった可能性）')
+  const disasters = scanKokudoDisasters(source, entries)
+  // 平時の工事規制（防災MAPの平時化・段階2）。読めなくても記者発表の通行止めは止めない
+  const kisei = await scanKokudoKisei(source, existing, now)
+  return {
+    active: [...disasters.active, ...kisei.active],
+    cleared: { ...disasters.cleared, ...kisei.cleared },
+    notes: [...disasters.notes, ...kisei.notes],
+    ...(kisei.warnings.length ? { warnings: kisei.warnings } : {}),
+  }
+}
+
+function scanKokudoDisasters(source: ClosureSource, entries: KokudoEntry[]) {
   const routes = new Set(configList(source, 'routes', '16,6'))
 
   // 一覧は新しい順。古い順にたどり、最後の発表で状態を決める
@@ -216,6 +228,160 @@ export async function scanKokudo(source: ClosureSource): Promise<ClosureScan> {
     })
   }
   return { active: [...state.values()], cleared, notes: [`記者発表 ${entries.length}件を確認`] }
+}
+
+// ---------------------------------------------------------------------------
+// 千葉国道事務所 工事の交通規制（お知らせ一覧 https://www.ktr.mlit.go.jp/chiba/chiba_index010.html の「交通規制」）
+// ---------------------------------------------------------------------------
+// 防災MAPの平時化・段階2（2026-09-28 事業主決定A）。「国道51号伊能歩道橋（成田市伊能地先）の撤去工事に伴う
+// 車線規制（夜間）について」のように、工事ごとに1ページ。本文の【工事期間】か「規制期間：」の
+// 「令和N年M月D日～令和N年M月D日」を期間として、期間中だけ出す（始まる前は出さない・過ぎたら解除）。
+// 夜間だけ・日ごとの規制でも、期間中は1件として出す（細かい日時は出典で見てもらう）。
+// 車線規制・片側交互通行は「注意（通れるが支障あり）」＝raw.severity 'caution'。文章は写さず、路線・場所・期間だけを持つ。
+// 一覧は古い工事も残るので、発表日が KISEI_MAX_AGE_DAYS 以内の記事と、前回まで出していた記事だけを読む。
+
+const KOKUDO_KISEI_LIST = 'https://www.ktr.mlit.go.jp/chiba/chiba_index010.html'
+const KISEI_DETAIL_LIMIT = 8
+const KISEI_MAX_AGE_DAYS = 400
+
+export type KokudoKiseiEntry = { date: string | null; title: string; url: string }
+
+/** お知らせ一覧から「交通規制」の記事だけを拾う */
+export function parseKokudoKiseiList(html: string, baseUrl = KOKUDO_KISEI_LIST): KokudoKiseiEntry[] {
+  const root = parseHtml(html)
+  const out: KokudoKiseiEntry[] = []
+  for (const li of root.querySelectorAll('li')) {
+    const dt = li.querySelector('dt')
+    if (!dt || !/type_kise/.test(dt.getAttribute('class') ?? '')) continue
+    const a = li.querySelector('dd a')
+    const url = a ? resolve(a.getAttribute('href') ?? '', baseUrl) : null
+    const title = clean(a?.innerHTML ?? '')
+    if (url && title) out.push({ date: parseJpDate(li.querySelector('.date')?.text ?? ''), title, url })
+  }
+  return out
+}
+
+export type KokudoKiseiDetail = {
+  title: string
+  route: string
+  road: string
+  place: string
+  municipality: string
+  severity: 'caution' | 'closure'
+  night: boolean
+  periodText: string
+  cleared: boolean
+}
+
+/** 記事ページを読む。本文の枠か路線が読めなければ null */
+export function parseKokudoKiseiDetail(html: string): KokudoKiseiDetail | null {
+  const root = parseHtml(html)
+  const title = clean(root.querySelector('h1')?.innerHTML ?? '').normalize('NFKC')
+  const bodyEl = root.querySelector('.kisha_body') ?? root.querySelector('.wysiwyg_output')
+  if (!title || !bodyEl) return null
+  const body = clean(bodyEl.innerHTML.replace(/<br\s*\/?>/gi, ' ')).normalize('NFKC')
+  const route = (title.match(/国道\s*(\d+)\s*号/) ?? body.match(/国道\s*(\d+)\s*号/))?.[1]
+  if (!route) return null
+  // 期間：【工事期間】か「規制期間：」の後ろの最初の「令和…日 ～ 令和…日」
+  const periodAt = body.search(/工事期間|規制期間/)
+  const periodText = periodAt >= 0
+    ? (body.slice(periodAt).match(/令和\s*(?:\d{1,2}|元)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日[^～〜~]{0,12}[～〜~]\s*令和\s*(?:\d{1,2}|元)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日/)?.[0] ?? '')
+    : ''
+  // 場所：題名の「（成田市伊能地先）」「千葉県木更津市若葉町地先」など。無ければ本文の【…箇所】の行
+  const siteText = title.match(/([^\s()（）、]*?[市町村][^\s()（）、]*?地先)/)?.[1]
+    ?? body.match(/(?:工事箇所|規制箇所|工事場所)[^】]*】\s*■?\s*([^■【※]{2,60})/)?.[1]?.trim()
+    ?? ''
+  const place = siteText.replace(/^国道\s*\d+\s*号\s*/, '').replace(/^千葉県/, '').trim()
+  const municipality = place.match(/^(.+?[市町村])/)?.[1] ?? ''
+  const lane = /車線規制|車線減少|片側交互|車線幅員/.test(title)
+  return {
+    title,
+    route,
+    road: `国道${route}号`,
+    place,
+    municipality,
+    severity: lane || !/通行止/.test(title) ? 'caution' : 'closure',
+    night: /夜間/.test(title) || /(?:21|22)\s*[:：時]\s*00|午後\s*(?:9|10)\s*時/.test(body),
+    periodText,
+    cleared: /解除(?:しました|します|を予定)/.test(title),
+  }
+}
+
+async function scanKokudoKisei(source: ClosureSource, existing: ExistingClosure[], now: Date) {
+  const listUrl = configString(source, 'kiseiUrl', KOKUDO_KISEI_LIST)
+  const areas = configList(source, 'areas', DEFAULT_AREAS)
+  const active: ClosureDraft[] = []
+  const cleared: Record<string, ClearReason> = {}
+  const notes: string[] = []
+  const warnings: string[] = []
+  const activeRows = existing.filter((row) => !row.cleared_at && (row.raw as { kisei?: unknown } | null)?.kisei)
+  const keepRow = (row: ExistingClosure) => active.push({
+    ...keepAsIs(row, row.url ?? ''),
+    municipality: String((row.raw as Record<string, unknown> | null)?.municipality ?? ''),
+  })
+  if (listUrl === 'off') { activeRows.forEach(keepRow); return { active, cleared, notes, warnings } }
+
+  const list = await fetchPage(listUrl).catch(() => null)
+  const entries = list?.ok ? parseKokudoKiseiList(list.text, listUrl) : []
+  if (!entries.length) {
+    // 読めないときは前回のまま残す（一覧の不具合だけで工事の規制を全部消さない）
+    activeRows.forEach(keepRow)
+    warnings.push(`工事の交通規制の一覧が読めません（${list ? `HTTP ${list.status}` : '通信エラー'}・形が変わった可能性）: ${listUrl}`)
+    return { active, cleared, notes, warnings }
+  }
+
+  const since = now.getTime() - KISEI_MAX_AGE_DAYS * 86400000
+  const pages = new Map<string, string | null>()   // 記事URL → 一覧の発表日
+  for (const entry of entries) {
+    if (entry.date && Date.parse(entry.date) >= since) pages.set(entry.url, entry.date)
+  }
+  for (const row of activeRows) if (row.url && !pages.has(row.url)) pages.set(row.url, null)
+  notes.push(`工事の交通規制 ${entries.length}件のうち記事 ${pages.size}件を確認`)
+
+  let fetched = 0
+  for (const [pageUrl, listedAt] of pages) {
+    const rows = activeRows.filter((row) => row.url === pageUrl)
+    if (fetched >= KISEI_DETAIL_LIMIT) { rows.forEach(keepRow); continue }
+    fetched += 1
+    const page = await fetchPage(pageUrl).catch(() => null)
+    if (!page?.ok) {
+      if (page && (page.status === 404 || page.status === 410)) { for (const row of rows) cleared[row.closure_key] = 'disappeared'; continue }
+      rows.forEach(keepRow); notes.push(`記事を読めませんでした（${page?.status ?? '通信エラー'}）: ${pageUrl}`); continue
+    }
+    const detail = parseKokudoKiseiDetail(page.text)
+    if (!detail) { rows.forEach(keepRow); notes.push(`記事の形が読めませんでした: ${pageUrl}`); continue }
+    const key = `kisei|${pageUrl}`
+    if (detail.cleared) { cleared[key] = 'announced'; continue }
+    const { start, end } = parsePeriod(detail.periodText)
+    if (!start || !end) { rows.forEach(keepRow); continue }                                // 期間が読めない記事は出さない（前回出していれば残す）
+    if (Date.parse(end) < now.getTime()) { cleared[key] = 'announced'; continue }           // 期間が過ぎた
+    if (Date.parse(start) > now.getTime()) continue                                          // まだ始まっていない
+    active.push({
+      key,
+      road: detail.road,
+      place: detail.place,
+      reason: '工事',
+      municipality: detail.municipality,
+      inArea: detail.municipality ? areas.some((a) => detail.municipality.includes(a)) : false,
+      url: pageUrl,
+      sourceTitle: detail.title,
+      publishedAt: start,
+      raw: {
+        kisei: true,
+        severity: detail.severity,
+        night: detail.night,
+        route: detail.route,
+        road: detail.road,
+        place: detail.place,
+        reason: '工事',
+        municipality: detail.municipality,
+        periodStart: start,
+        periodEnd: end,
+        listedAt,
+      },
+    })
+  }
+  return { active, cleared, notes, warnings }
 }
 
 // ---------------------------------------------------------------------------
@@ -980,7 +1146,7 @@ export async function loadExistingClosures(supabase: SupabaseClient | null, sour
 }
 
 export async function scanRoadClosures(source: ClosureSource, existing: ExistingClosure[]): Promise<ClosureScan> {
-  if (source.kind === 'road-closure-kokudo') return scanKokudo(source)
+  if (source.kind === 'road-closure-kokudo') return scanKokudo(source, existing)
   if (source.kind === 'road-closure-pref') return scanPref(source, existing)
   if (source.kind === 'road-closure-inzai') return scanInzai(source, existing)
   if (source.kind === 'road-closure-inba') return scanInba(source, existing)

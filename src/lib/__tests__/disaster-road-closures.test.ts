@@ -7,6 +7,8 @@ import {
   kokudoClosureOf,
   parseInzaiStatusPage,
   parseInzaiTrunkList,
+  parseKokudoKiseiDetail,
+  parseKokudoKiseiList,
   prefRoadOf,
   scanInzai,
   scanKokudo,
@@ -64,6 +66,69 @@ describe('千葉国道事務所', () => {
   it('一覧が読めなければ例外（何も解除しない）', async () => {
     mockSite({ [KOKUDO_URL]: '<html><body>メンテナンス中</body></html>' })
     await expect(scanKokudo(source('road-closure-kokudo', KOKUDO_URL))).rejects.toThrow('読めません')
+  })
+})
+
+// 平時の工事規制（2026-09-28 の千葉国道事務所のお知らせ一覧・記事を縮めたもの）
+const KISEI_LIST = 'https://www.ktr.mlit.go.jp/chiba/chiba_index010.html'
+const kiseiItem = (date: string, type: string, page: string, title: string) =>
+  `<li><span class="date">${date}</span><dl><dt class="${type}">x</dt><dd><a href="/chiba/${page}"> ${title} </a></dd></dl></li>`
+const kiseiPage = (title: string, body: string) =>
+  `<h1>${title}</h1><ul><li class="kisha_body"><div class="wysiwyg_output"><p>${body}</p></div></li></ul>`
+const NARITA = kiseiPage('国道５１号伊能歩道橋（成田市伊能地先）の撤去工事に伴う車線規制（夜間）について',
+  '歩道橋の撤去工事を行います。<br /><strong>【工事期間】</strong><br />　　■令和８年９月１４日（月）～令和８年１２月１８日（金）<br />' +
+  '【歩道橋撤去工事に係る交通規制】<br />❶車線規制（片側交互通行）<br />１０月　２日（金）２１時００分 ～ １０月　３日（土）５時００分')
+const ICHIHARA = kiseiPage('国道１６号 千葉県市原市五井海岸地先における車線規制について',
+  '<strong>【工事箇所】</strong><br />■国道１６号　千葉県市原市五井海岸地先<br /><strong>【規制期間等】</strong><br />' +
+  '■規制期間：令和８年３月１６日（月）～令和８年９月３０日（水）（予定）<br />■規制時間：午後９時～翌日午前５時')
+const KISARAZU = kiseiPage('国道１６号千葉県木更津市若葉町地先における車線規制について',
+  '<strong>【工事期間】</strong><br />■<strong>令和８年１０月１２日（月）～令和８年１１月２３日（月）</strong>')
+
+describe('千葉国道事務所 工事の交通規制', () => {
+  const now = new Date('2026-09-28T12:00:00+09:00')
+  const kokudoOnly = kokudoPage([kokudoItem('2026年09月21日', '大雨による通行止めのお知らせ【第1報】　～国道16号　村田町アンダーパス～', 'k563.pdf')])
+
+  it('一覧は「交通規制」だけを拾い、記事から路線・場所・期間・夜間を読む', () => {
+    const list = parseKokudoKiseiList(kiseiItem('2026年09月28日', 'type_kise', 'chiba00677.html', '国道５１号…車線規制（夜間）について') +
+      kiseiItem('2026年07月23日', 'type_koho', 'chiba00655.html', '表彰式が行われました'))
+    expect(list).toEqual([{ date: '2026-09-28T00:00:00+09:00', title: '国道５１号…車線規制（夜間）について', url: 'https://www.ktr.mlit.go.jp/chiba/chiba00677.html' }])
+    expect(parseKokudoKiseiDetail(NARITA)).toMatchObject({ road: '国道51号', place: '成田市伊能地先', municipality: '成田市', severity: 'caution', night: true })
+    expect(parseKokudoKiseiDetail(ICHIHARA)).toMatchObject({ road: '国道16号', place: '市原市五井海岸地先', municipality: '市原市', night: true })
+    expect(parseKokudoKiseiDetail('<h1>国道16号</h1><p>本文の枠なし</p>')).toBeNull()
+  })
+
+  it('期間中だけ「注意」として出し、始まる前は出さず、過ぎたら解除。周辺かは市町村名で決める', async () => {
+    mockSite({
+      [KOKUDO_URL]: kokudoOnly,
+      [KISEI_LIST]: kiseiItem('2026年09月28日', 'type_kise', 'chiba00677.html', '成田') +
+        kiseiItem('2026年09月25日', 'type_kise', 'chiba00675.html', '木更津') +
+        kiseiItem('2026年07月01日', 'type_kise', 'chiba00641.html', '市原') +
+        kiseiItem('2018年11月22日', 'type_kise', 'chiba00209.html', '古い工事'),
+      'https://www.ktr.mlit.go.jp/chiba/chiba00677.html': NARITA,
+      'https://www.ktr.mlit.go.jp/chiba/chiba00675.html': KISARAZU,
+      'https://www.ktr.mlit.go.jp/chiba/chiba00641.html': ICHIHARA,
+    })
+    const scan = await scanKokudo(source('road-closure-kokudo', KOKUDO_URL), [], now)
+    const kisei = scan.active.filter((a) => a.raw?.kisei)
+    expect(kisei.map((a) => [a.place, a.inArea])).toEqual([['成田市伊能地先', true], ['市原市五井海岸地先', false]])
+    expect(kisei[0]).toMatchObject({ reason: '工事', publishedAt: '2026-09-14T00:00:00+09:00', raw: { severity: 'caution', periodEnd: '2026-12-18T23:59:59+09:00' } })
+    expect(scan.warnings).toBeUndefined()
+
+    const later = await scanKokudo(source('road-closure-kokudo', KOKUDO_URL), [], new Date('2026-10-01T12:00:00+09:00'))
+    expect(later.cleared['kisei|https://www.ktr.mlit.go.jp/chiba/chiba00641.html']).toBe('announced')
+    expect(later.active.filter((a) => a.raw?.kisei).map((a) => a.place)).toEqual(['成田市伊能地先'])   // 木更津は 10/12 から
+  })
+
+  it('工事の一覧が読めなくても記者発表の通行止めは読み、前回の工事の規制は残して警告する', async () => {
+    mockSite({ [KOKUDO_URL]: kokudoOnly, [KISEI_LIST]: 503 })
+    const prev: ExistingClosure = {
+      closure_key: 'kisei|https://www.ktr.mlit.go.jp/chiba/chiba00677.html', url: 'https://www.ktr.mlit.go.jp/chiba/chiba00677.html', in_area: true, cleared_at: null, clear_reason: null,
+      raw: { kisei: true, road: '国道51号', place: '成田市伊能地先', reason: '工事', municipality: '成田市', severity: 'caution' },
+    }
+    const scan = await scanKokudo(source('road-closure-kokudo', KOKUDO_URL), [prev], now)
+    expect(scan.active.map((a) => a.key)).toEqual(['国道16号|村田町アンダーパス', prev.closure_key])
+    expect(scan.active[1]).toMatchObject({ municipality: '成田市', inArea: true })
+    expect(scan.warnings?.[0]).toMatch('工事の交通規制の一覧が読めません')
   })
 })
 

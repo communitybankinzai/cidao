@@ -61,7 +61,7 @@ type Row = {
   cleared_at: string | null
   clear_reason: string | null
   path: unknown
-  raw: { mapUrl?: unknown; periodEnd?: unknown; cityPath?: unknown } | null
+  raw: { mapUrl?: unknown; periodEnd?: unknown; cityPath?: unknown; severity?: unknown; night?: unknown } | null
 }
 
 // 役所のページを読み直す（pg_cron が毎時呼ぶ）。情報源ごとに前回から50分空けるので、何度呼ばれても役所への取得は増えない
@@ -123,6 +123,10 @@ export async function GET(request: Request) {
       publishedAt: row.published_at,
       // 役所が示した規制期間の終わり（印旛土木事務所の工事など）。無ければ null＝解除の発表まで
       periodEnd: typeof row.raw?.periodEnd === 'string' ? row.raw.periodEnd : null,
+      // 'caution'＝通行止めではなく車線規制・片側交互通行（千葉国道事務所の工事など）。無ければ通行止め
+      severity: row.raw?.severity === 'caution' ? 'caution' : 'closure',
+      // 夜間だけの規制（細かい日時は出典で見てもらう）
+      night: row.raw?.night === true,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
       clearedAt: row.cleared_at,
