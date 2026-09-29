@@ -1060,6 +1060,7 @@ const PARSERS: Record<string, SourceParser> = {
   'road-closure-inba': roadClosurePreview,
   'road-closure-mymap': roadClosurePreview,
   'road-closure-sugumail': roadClosurePreview,
+  'road-closure-city-table': roadClosurePreview,
 }
 
 export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = [
@@ -1081,6 +1082,7 @@ export const SOURCE_KINDS: Array<{ id: string; label: string; help: string }> = 
   { id: 'road-closure-inba', label: '通行止め：千葉県 印旛土木事務所（新着の通行規制情報）', help: 'URL は https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html 。新着の「通行規制情報」記事の「規制内容／規制区間／規制期間」を1規制＝1件で読む。期間が始まるまでは出さず、期間が過ぎる・記事から消える・記事が消える で解除。config: areas、pageUrls（新着に無い記事を足すとき）、minIntervalMinutes' },
   { id: 'road-closure-mymap', label: '通行止め：市の Google マイマップ（佐倉市など）', help: 'URL は地図が埋め込まれた市の号外ページ。埋め込みの mid を拾い KML を読んで、1 Placemark＝1件。前回あって今回の KML に無ければ解除。config: municipality（例 佐倉市）、indexPages（「通行止め」の号外を探す一覧ページ・カンマ区切り）、pages（号外ページを足すとき）、mid（号外から拾えないときの予備）、minIntervalMinutes' },
   { id: 'road-closure-sugumail', label: '通行止め：自治体メール配信のバックナンバー（栄町さかえ情報メールなど）', help: 'URL はバックナンバー（例 https://plus.sugumail.com/usr/sakae/doc）。題名に「通行止」がある配信を道路名ごとに1件、同じ道路名の「解除」の配信で解除。押し出されても残し、maxAgeDays（既定14）で外す。config: municipality（例 栄町）、areas、maxAgeDays、minIntervalMinutes。解除と同時に伏せたい市民記録があれば、その行の raw.linkedPassedRoadIds に id を入れる' },
+  { id: 'road-closure-city-table', label: '通行止め：市の「日付｜場所｜被害状況」表（船橋市など）', help: 'URL は表つきの通行止めページ（例 https://www.city.funabashi.lg.jp/machi/douro/002/p123872.html）。見出し（caption）「通行止め場所一覧（全N箇所）」の表を1行＝1件で読む。路線番号が無いため road は「市道」固定。前回あって今回の表に無い行は解除、表が0件で「通行止めはありません」等の明示があれば全件解除。件数の食い違い・見出しが無い等は例外（何も解除しない）。config: municipality（例 船橋市）、areas、minIntervalMinutes' },
   { id: 'manual', label: '手動登録', help: '自動取得なし。管理画面から項目を直接追加する' },
 ]
 
@@ -1279,7 +1281,7 @@ export async function runRoadClosures(supabase: SupabaseClient): Promise<SourceR
     .from('disaster_info_sources')
     .select('id, kind, label, url, config, trust, enabled')
     .eq('enabled', true)
-    .in('kind', ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail'])
+    .in('kind', ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail', 'road-closure-city-table'])
   if (error) throw error
   return Promise.all((rows ?? []).map(async (row): Promise<SourceRunResult> => {
     const source = toInfoSource(row as Record<string, unknown>)

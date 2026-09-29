@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   inzaiRoadOf,
   kokudoClosureOf,
+  parseCityTablePage,
   parseInzaiStatusPage,
   parseInzaiTrunkList,
   parseKokudoKiseiDetail,
   parseKokudoKiseiList,
   prefRoadOf,
+  scanCityTable,
   scanInzai,
   scanKokudo,
   scanPref,
@@ -30,6 +32,18 @@ function mockSite(pages: Record<string, string | number>) {
 }
 
 const source = (kind: string, url: string, config: Record<string, unknown> = {}) => ({ id: 'src', kind, label: 'test', url, config })
+
+/** 保存先の代わり（syncRoadClosures の呼び出しを確かめるとき用） */
+function fakeSupabaseForClosures() {
+  const calls: Array<{ op: string; values?: unknown; key?: unknown }> = []
+  const table = {
+    insert: async (values: unknown) => { calls.push({ op: 'insert', values }); return { error: null } },
+    update: (values: unknown) => ({
+      eq: () => ({ eq: async (_col: string, key: unknown) => { calls.push({ op: 'update', values, key }); return { error: null } } }),
+    }),
+  }
+  return { client: { from: () => table } as never, calls }
+}
 
 // --- 千葉国道事務所 --------------------------------------------------------------
 
@@ -505,5 +519,99 @@ describe('マイマップ：線を引き直されても同じ行として扱う'
     })
     const scan = await scanMyMap(source('road-closure-mymap', SAKURA_PAGE, { municipality: '佐倉市' }), existing)
     expect(scan.active[0].key).toBe(`${MID}|通行止め(石川)|35.7100,140.2300`)
+  })
+})
+
+// --- 市の「日付｜場所｜被害状況」表（船橋市） -------------------------------------
+// 見本は 2026-09-29 に https://www.city.funabashi.lg.jp/machi/douro/002/p123872.html で実際に見た形を縮めたもの
+
+const FB_URL = 'https://www.city.funabashi.lg.jp/machi/douro/002/p123872.html'
+const fbRow = (date: string, place: string, reason: string) => `<tr><td>${date}</td><td>${place}</td><td>${reason}</td></tr>`
+const fbPage = (rows: string[], count: number, updated = '令和8(2026)年9月28日（月曜日）') => `
+<div class="boxEntryMetaRight"><p class="boxEntryDate">更新日：${updated}</p></div>
+<div class="boxEntryFreeform"><p>本文</p>
+<table><caption>通行止め場所一覧（全${count}箇所）</caption><tbody>
+<tr><td style="text-align: center;"><strong>日付</strong></td><td style="text-align: center;"><strong>場所</strong></td><td style="text-align: center;"><strong>被害状況</strong></td></tr>
+${rows.join('\n')}
+</tbody></table></div>`
+const FB_ROWS = [
+  fbRow('9/21～', '豊富町679付近', '道路冠水'),
+  fbRow('9/21～', '飯山満町2-548-1付近', '土砂流出'),
+  fbRow('9/22～', '高根町2334付近', '道路変状'),
+  fbRow('9/23～', '小野田町721付近', '倒木<br />\n        土砂流出'),
+  fbRow('9/23～', '鈴身町186付近', '土砂流出'),
+  fbRow('9/24～', '高根町1603付近', '道路陥没'),
+  fbRow('9/18～', '米ヶ崎町441-3付近', '道路変状'),
+]
+
+describe('市の「日付｜場所｜被害状況」表（船橋市）', () => {
+  it('表の見出しの件数と行数が合っていれば、1行＝1件として読む', async () => {
+    mockSite({ [FB_URL]: fbPage(FB_ROWS, 7) })
+    const scan = await scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }))
+    expect(scan.active).toHaveLength(7)
+    expect(scan.active.map((a) => a.key)).toEqual([
+      '豊富町679付近', '飯山満町2-548-1付近', '高根町2334付近', '小野田町721付近', '鈴身町186付近', '高根町1603付近', '米ヶ崎町441-3付近',
+    ])
+    expect(scan.active[0]).toMatchObject({
+      road: '市道', place: '豊富町679付近', reason: '道路冠水', municipality: '船橋市', inArea: true,
+      url: FB_URL, publishedAt: '2026-09-21T00:00:00+09:00',
+    })
+    // 被害状況が複数行のときは「・」で連結
+    expect(scan.active.find((a) => a.place === '小野田町721付近')).toMatchObject({ reason: '倒木・土砂流出' })
+    expect(scan.active[0].raw).toMatchObject({ pageUpdated: '2026-09-28T00:00:00+09:00', mapUrl: FB_URL })
+  })
+
+  it('更新日より未来の月日は前年（年またぎ）', () => {
+    const page = parseCityTablePage(fbPage([fbRow('12/28～', '境町地先', '道路冠水')], 1, '令和8(2026)年1月5日（月曜日）'))
+    expect(page?.pageUpdated).toBe('2026-01-05T00:00:00+09:00')
+  })
+
+  it('前回あって今回の表に無い場所は解除（既定の disappeared）', async () => {
+    const existing: ExistingClosure[] = [
+      { closure_key: '豊富町679付近', url: FB_URL, in_area: true, cleared_at: null, clear_reason: null, raw: {} },
+      { closure_key: '米ヶ崎町441-3付近', url: FB_URL, in_area: true, cleared_at: null, clear_reason: null, raw: {} },
+    ]
+    // 米ヶ崎町の行が表から消えた（全6箇所に減った）
+    mockSite({ [FB_URL]: fbPage(FB_ROWS.filter((_, i) => i !== 6), 6) })
+    const scan = await scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }), existing)
+    expect(scan.active.map((a) => a.key)).not.toContain('米ヶ崎町441-3付近')
+    const { client, calls } = fakeSupabaseForClosures()
+    const counts = await syncRoadClosures(client, 'src', scan, existing)
+    expect(counts.cleared).toBe(1)
+    const clears = calls.filter((c) => c.op === 'update' && (c.values as { clear_reason?: string }).clear_reason)
+      .map((c) => [c.key, (c.values as { clear_reason: string }).clear_reason])
+    expect(clears).toEqual([['米ヶ崎町441-3付近', 'disappeared']])
+  })
+
+  it('表が0件でも「通行止めはありません」等の明示があれば全件解除、明示が無ければ例外', async () => {
+    const existing: ExistingClosure[] = [{ closure_key: '豊富町679付近', url: FB_URL, in_area: true, cleared_at: null, clear_reason: null, raw: {} }]
+    mockSite({ [FB_URL]: `<div class="boxEntryFreeform"><p>現在、通行止めを実施している箇所はありません。</p><table><caption>通行止め場所一覧（全0箇所）</caption><tbody>
+      <tr><td>日付</td><td>場所</td><td>被害状況</td></tr>
+      </tbody></table></div>` })
+    const scan = await scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }), existing)
+    expect(scan.active).toHaveLength(0)
+    const { client, calls } = fakeSupabaseForClosures()
+    await syncRoadClosures(client, 'src', scan, existing)
+    expect(calls.filter((c) => c.op === 'update').map((c) => (c.values as { clear_reason: string }).clear_reason)).toEqual(['disappeared'])
+
+    // 見出しの件数も本文の言い切りも無いのに0件 → ページの形が変わった可能性として例外（解除しない）
+    mockSite({ [FB_URL]: `<div class="boxEntryFreeform"><table><caption>通行止め場所一覧</caption><tbody>
+      <tr><td>日付</td><td>場所</td><td>被害状況</td></tr>
+      </tbody></table></div>` })
+    await expect(scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }), existing)).rejects.toThrow('明示がありません')
+  })
+
+  it('見出しの表が見つからない・件数が食い違うときは例外（何も解除しない）', async () => {
+    mockSite({ [FB_URL]: '<div class="boxEntryFreeform"><p>ページを移転しました</p></div>' })
+    await expect(scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }))).rejects.toThrow('見出し')
+
+    // 見出しは「全7箇所」なのに実際は6行しか読めない
+    mockSite({ [FB_URL]: fbPage(FB_ROWS.slice(0, 6), 7) })
+    await expect(scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }))).rejects.toThrow('一致しません')
+  })
+
+  it('通信に失敗したら例外（何も解除しない）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down') }))
+    await expect(scanCityTable(source('road-closure-city-table', FB_URL, { municipality: '船橋市' }))).rejects.toThrow()
   })
 })

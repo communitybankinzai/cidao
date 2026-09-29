@@ -15,7 +15,7 @@
 import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail'] as const
+export const ROAD_CLOSURE_KINDS = ['road-closure-kokudo', 'road-closure-pref', 'road-closure-inzai', 'road-closure-inba', 'road-closure-mymap', 'road-closure-sugumail', 'road-closure-city-table'] as const
 export type RoadClosureKind = (typeof ROAD_CLOSURE_KINDS)[number]
 
 export function isRoadClosureKind(kind: string): kind is RoadClosureKind {
@@ -116,7 +116,10 @@ function resolve(href: string, base: string) {
 /** 「2026年09月22日」「令和8年9月21日」を JST の日付（ISO）にする。時刻は持たない */
 export function parseJpDate(text: string): string | null {
   const s = text.normalize('NFKC')
-  let m = s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/)
+  // 「令和8(2026)年9月28日」（船橋市の更新日の書き方。西暦が括弧で添えられる）
+  let m = s.match(/令和\s*(?:\d{1,2}|元)\s*\(\s*(\d{4})\s*\)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}T00:00:00+09:00`
+  m = s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/)
   if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}T00:00:00+09:00`
   m = s.match(/令和\s*(\d{1,2}|元)\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/)
   if (m) {
@@ -1132,6 +1135,111 @@ export async function scanSugumail(source: ClosureSource, existing: ExistingClos
 }
 
 // ---------------------------------------------------------------------------
+// 市の「日付｜場所｜被害状況」型の一覧ページ（船橋市「通行止めについて（お知らせ）」など）
+// ---------------------------------------------------------------------------
+// 船橋市 https://www.city.funabashi.lg.jp/machi/douro/002/p123872.html のように、1ページの表で
+// 「日付（9/21～）｜場所｜被害状況」を並べる市がある（2026-09-29 事業主決定で追加）。kind を汎用名にしたのは、
+// 同じ表の形の他市にも使い回せるようにするため。表の見出し（caption）に「通行止め場所一覧（全N箇所）」と
+// 件数が入るので、読めた行数と食い違えば例外にする（ページの形が変わった可能性）。路線番号は表に無いため
+// road は固定で「市道」。日付は「M/D～」＋更新日の年（月日が更新日より未来なら前年＝年またぎ）。
+// 解除：前回あって今回の表に無い行は syncRoadClosures の既定（disappeared）。表が0行のときは、
+// 「全0箇所」か「通行止め（は|を実施して）（い）？（ません|ありません）」等の明示があれば全件解除、
+// 明示が無ければページの形が変わったとみなし例外にする（何も解除しない）。船橋市の文章は写さず、
+// 日付・場所・被害状況の事実だけを持つ。
+
+const CITY_TABLE_HEADING = '通行止め場所一覧'
+const CITY_TABLE_ZERO = /全\s*0\s*箇所/
+const CITY_TABLE_NONE = /通行止め(?:は|を実施して)(?:い)?(?:ません|ありません)/
+
+export type CityTableRow = { dateText: string; place: string; reasons: string[] }
+export type CityTablePage = { pageUpdated: string | null; headingCount: number | null; rows: CityTableRow[] }
+
+/** 更新日つきの「日付｜場所｜被害状況」表を読む。見出し（caption）が見つからなければ null（読めない＝何も解除しない） */
+export function parseCityTablePage(html: string): CityTablePage | null {
+  const root = parseHtml(html)
+  const updatedText = clean(root.querySelector('.boxEntryDate')?.innerHTML ?? '')
+  const pageUpdated = parseJpDate(updatedText)
+
+  let table: ReturnType<typeof root.querySelector> = null
+  let captionText = ''
+  for (const t of root.querySelectorAll('table')) {
+    const caption = clean(t.querySelector('caption')?.innerHTML ?? '')
+    if (caption.includes(CITY_TABLE_HEADING)) { table = t; captionText = caption; break }
+  }
+  if (!table) return null
+
+  const headingMatch = captionText.normalize('NFKC').match(/全\s*(\d+)\s*箇所/)
+  const headingCount = headingMatch ? Number(headingMatch[1]) : null
+
+  const rows: CityTableRow[] = []
+  for (const tr of table.querySelectorAll('tr')) {
+    const tds = tr.querySelectorAll('td')
+    if (tds.length < 3) continue
+    const dateText = clean(tds[0].innerHTML)
+    if (dateText === '日付') continue   // 見出し行
+    const place = clean(tds[1].innerHTML)
+    if (!place) continue
+    const reasonMarked = tds[2].innerHTML.replace(/<br\s*\/?>/gi, '@@BR@@')
+    const reasons = clean(reasonMarked).split('@@BR@@').map((r) => r.trim()).filter(Boolean)
+    rows.push({ dateText, place, reasons })
+  }
+  return { pageUpdated, headingCount, rows }
+}
+
+/** 「9/21～」＋更新日から日付（JST 0時）。月日が更新日より未来なら前年（年またぎ） */
+function cityTableRowDate(dateText: string, pageUpdated: string | null): string | null {
+  if (!pageUpdated) return null
+  const m = dateText.normalize('NFKC').match(/(\d{1,2})\s*\/\s*(\d{1,2})/)
+  if (!m) return null
+  const month = Number(m[1])
+  const day = Number(m[2])
+  const uYear = Number(pageUpdated.slice(0, 4))
+  const uMonth = Number(pageUpdated.slice(5, 7))
+  const uDay = Number(pageUpdated.slice(8, 10))
+  const year = month * 100 + day > uMonth * 100 + uDay ? uYear - 1 : uYear
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+09:00`
+}
+
+export async function scanCityTable(source: ClosureSource, _existing: ExistingClosure[] = []): Promise<ClosureScan> {
+  const url = source.url
+  if (!url) throw new Error('URL（役所の通行止めページ）が必要です')
+  const html = await fetchRequired(url)
+  const municipality = configString(source, 'municipality', '')
+  const areas = configList(source, 'areas', DEFAULT_AREAS)
+  const inArea = municipality ? areas.some((a) => municipality.includes(a)) : false
+
+  const bodyText = clean(html)
+  const explicitZero = CITY_TABLE_ZERO.test(bodyText) || CITY_TABLE_NONE.test(bodyText)
+  const page = parseCityTablePage(html)
+
+  if (!page) {
+    if (explicitZero) return { active: [], cleared: {}, notes: [`見出し「${CITY_TABLE_HEADING}」の表は無いが、通行止めが無い旨の明示あり: 全件解除`] }
+    throw new Error(`見出し「${CITY_TABLE_HEADING}」の表が見つかりません（ページの形が変わった可能性）: ${url}`)
+  }
+  if (page.headingCount !== null && page.headingCount !== page.rows.length) {
+    throw new Error(`見出しの件数（全${page.headingCount}箇所）と表の行数（${page.rows.length}）が一致しません（ページの形が変わった可能性）: ${url}`)
+  }
+  if (page.rows.length === 0) {
+    if (!explicitZero) throw new Error(`表が0件ですが、通行止めが無い旨の明示がありません（ページの形が変わった可能性）: ${url}`)
+    return { active: [], cleared: {}, notes: [`${municipality || url} の通行止め 0件を確認`] }
+  }
+
+  const active: ClosureDraft[] = page.rows.map((row) => ({
+    key: normalizeKey(row.place),
+    road: '市道',
+    place: row.place,
+    reason: row.reasons.join('・'),
+    municipality,
+    inArea,
+    url,
+    sourceTitle: municipality ? `${municipality}の${CITY_TABLE_HEADING}` : CITY_TABLE_HEADING,
+    publishedAt: cityTableRowDate(row.dateText, page.pageUpdated),
+    raw: { pageUpdated: page.pageUpdated, mapUrl: url },
+  }))
+  return { active, cleared: {}, notes: [`${municipality || url} の通行止め ${active.length}件を確認`] }
+}
+
+// ---------------------------------------------------------------------------
 // 共通：読む・保存する
 // ---------------------------------------------------------------------------
 
@@ -1152,6 +1260,7 @@ export async function scanRoadClosures(source: ClosureSource, existing: Existing
   if (source.kind === 'road-closure-inba') return scanInba(source, existing)
   if (source.kind === 'road-closure-mymap') return scanMyMap(source, existing)
   if (source.kind === 'road-closure-sugumail') return scanSugumail(source, existing)
+  if (source.kind === 'road-closure-city-table') return scanCityTable(source, existing)
   throw new Error(`未対応の種別です: ${source.kind}`)
 }
 

@@ -128,6 +128,7 @@ describe('取得に失敗したときは何も解除しない', () => {
     ['road-closure-inba', 'https://www.pref.chiba.lg.jp/cs-inba/shinchaku.html', {}],
     ['road-closure-mymap', 'https://www.city.sakura.lg.jp/soshiki/kikikanrika/taihuu25/22665.html', { municipality: '佐倉市', mid: 'x' }],
     ['road-closure-sugumail', 'https://plus.sugumail.com/usr/sakae/doc', { municipality: '栄町' }],
+    ['road-closure-city-table', 'https://www.city.funabashi.lg.jp/machi/douro/002/p123872.html', { municipality: '船橋市' }],
   ]
 
   it.each(kinds)('%s：通信が失敗したら例外で止まる（scan を返さない＝同期に進まない）', async (kind, url, config) => {
