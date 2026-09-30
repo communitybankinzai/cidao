@@ -7,6 +7,10 @@ import { canUserEditEvent } from '@/lib/event-permissions'
 import { EventViewTracker } from '@/components/EventViewTracker'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
+const STATUS_LABEL: Record<string, string> = {
+  cancelled: '中止',
+}
+
 export default async function EventDetailPage({
   params,
   searchParams,
@@ -69,7 +73,7 @@ export default async function EventDetailPage({
             <div className="flex gap-2 text-xs flex-wrap">
               <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(event.category)}</span>
               {event.online_flag && <span className="px-2 py-1 bg-sky-100 dark:bg-sky-900 rounded">オンライン</span>}
-              <span className="px-2 py-1 bg-amber-100 dark:bg-amber-950 rounded">{event.status}</span>
+              <span className="px-2 py-1 bg-amber-100 dark:bg-amber-950 rounded">{STATUS_LABEL[event.status] ?? event.status}</span>
             </div>
             {canEdit && (
               <Link href={`/events/${id}/edit`}>
