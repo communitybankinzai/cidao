@@ -8,30 +8,20 @@
 // { ok: false, reason } を返す（500 を投げない）。
 
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
-import { classifyScanError, type ScanFailReason } from '@/lib/event-scan'
+import { FLYER_ALLOWED_TYPES, extractFromFlyer, type FlyerExtractResult, type FlyerMediaType } from '@/lib/event-flyer-extract'
 
 const MAX_BYTES = 5 * 1024 * 1024
 // Anthropic の画像上限は 5MB。base64 は約1.33倍に膨らむため文字数でも判定する
 const MAX_BASE64_CHARS = 5_200_000
-const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
-
-type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-
-type ScanResult =
-  | { ok: true; data: Record<string, unknown>; usage: unknown }
-  | { ok: false; reason: ScanFailReason }
-
-const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] } as const
-const nullableInteger = { anyOf: [{ type: 'integer' }, { type: 'null' }] } as const
+const SCAN_MODEL = 'claude-opus-4-7'
 
 // 画像を event-flyers バケットに保存（ベストエフォート。失敗しても null を返すだけ）
 async function uploadFlyer(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   buf: Buffer,
-  contentType: MediaType,
+  contentType: FlyerMediaType,
 ): Promise<string | null> {
   const ext = ({
     'image/jpeg': 'jpg',
@@ -51,135 +41,6 @@ async function uploadFlyer(
   return pub.publicUrl
 }
 
-// Claude Vision による構造化抽出。API 例外は throw せず reason に分類して返す
-async function extractFromFlyer(
-  apiKey: string,
-  base64: string,
-  mediaType: MediaType,
-): Promise<ScanResult> {
-  // JST の今日（API ルートなので Date 使用 OK）
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-
-  const client = new Anthropic({ apiKey })
-
-  let response: Anthropic.Message
-  try {
-    response = await client.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 1024,
-      output_config: {
-        format: {
-          type: 'json_schema',
-          schema: {
-            type: 'object',
-            properties: {
-              title: { type: 'string', description: 'イベント名。80字以内に収める。' },
-              description: { type: 'string', description: 'チラシ本文を100〜200字で要約。' },
-              start_at: {
-                ...nullableString,
-                description: '開始日時。YYYY-MM-DDTHH:MM 形式（JST）。読み取れない場合 null。',
-              },
-              end_at: {
-                ...nullableString,
-                description: '終了日時。YYYY-MM-DDTHH:MM 形式（JST）。終了の記載が無い場合は開始の1時間後を入れる。「10/1〜10/18」のような連続した会期の場合は最終日の終了日時を入れる。日付が飛び飛びで occurrences が2件以上ある場合は、1回目の終了日時を入れる。',
-              },
-              location: { ...nullableString, description: '会場・場所。例: 中央公民館 第1会議室' },
-              online_flag: { type: 'boolean', description: 'オンライン開催ならtrue' },
-              organizer_name: { ...nullableString, description: '主催団体名。会場とは別物。判らなければ null。' },
-              capacity: { ...nullableInteger, description: '定員（人数）。記載なしは null。' },
-              fee: { ...nullableInteger, description: '参加費（円）。無料は 0、記載なしは null。' },
-              occurrences: {
-                type: 'array',
-                description:
-                  '同一イベントが複数日程で開催される場合（例: 7/18と8/9の2回開催）、各回の開始・終了日時をここに列挙する。' +
-                  '単発開催の場合は start_at/end_at と同じ内容を1件だけ入れる。' +
-                  '「10/1〜10/18」のような連続した会期は日ごとに分けず、start_at/end_at と同じ1件だけを入れる。',
-                items: {
-                  type: 'object',
-                  properties: {
-                    start_at: { type: 'string', description: 'YYYY-MM-DDTHH:MM（JST）' },
-                    end_at: { type: 'string', description: 'YYYY-MM-DDTHH:MM（JST）' },
-                  },
-                  required: ['start_at', 'end_at'],
-                  additionalProperties: false,
-                },
-              },
-              confidence: { type: 'number', description: '0〜1の抽出自信度' },
-            },
-            required: [
-              'title',
-              'description',
-              'start_at',
-              'end_at',
-              'location',
-              'online_flag',
-              'organizer_name',
-              'capacity',
-              'fee',
-              'occurrences',
-              'confidence',
-            ],
-            additionalProperties: false,
-          },
-        },
-      },
-      system:
-        'イベントチラシ画像から構造化情報を抽出するアシスタント。' +
-        `日時は JST（Asia/Tokyo）。年が省略されている場合は ${today} を起点に最も近い未来の日付を採用する。` +
-        '「2026年6月26日（金）13:30-15:00」のような表記は start_at=2026-06-26T13:30, end_at=2026-06-26T15:00 として分解する。' +
-        '「7/18（土）・8/9（日）」「毎週土曜」のように、日付が飛び飛びの別々の開催日がある場合は、occurrences に各回の日時を列挙し、start_at/end_at には1回目の日時を入れる（単発開催なら occurrences は1件のみ）。' +
-        'ただし「10/1〜10/18」「10月10日（土）〜18日（日）」のように「〜」「から」でつながった連続した会期（展示会・企画展・スタンプラリー・期間限定の催しなど）は日ごとに分けない。start_at に初日の開始時刻（記載がなければ初日の09:00）、end_at に最終日の終了時刻（記載がなければ最終日の17:00）を入れ、occurrences にはその1件だけを入れる。会期中に休館日があっても1件のままにする。' +
-        '「主催」「主催団体」「お問合せ」欄から organizer_name を、「会場」「場所」欄から location を抽出（混同しない）。' +
-        '画像がイベントチラシでない、または読み取り不能な場合は title="（読み取り失敗）", confidence=0 を返す。',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64,
-              },
-            },
-            { type: 'text', text: 'このイベントチラシから情報を抽出してください。' },
-          ],
-        },
-      ],
-    })
-  } catch (err) {
-    return { ok: false, reason: classifyScanError(err, 'events/scan') }
-  }
-
-  if (response.stop_reason === 'refusal') {
-    console.error('[events/scan] AI extraction refused by model')
-    return { ok: false, reason: 'parse' }
-  }
-
-  const textBlock = response.content.find((b) => b.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') {
-    console.error('[events/scan] unexpected response shape (no text block)')
-    return { ok: false, reason: 'parse' }
-  }
-
-  try {
-    const parsed = JSON.parse(textBlock.text) as Record<string, unknown>
-    return { ok: true, data: parsed, usage: response.usage }
-  } catch (err) {
-    console.error(
-      '[events/scan] JSON parse failed:',
-      err instanceof Error ? err.message : String(err),
-    )
-    return { ok: false, reason: 'parse' }
-  }
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -194,10 +55,10 @@ export async function POST(request: Request) {
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ ok: false, reason: 'too_large', flyer_image_url: null })
   }
-  if (!ALLOWED_TYPES.has(file.type)) {
+  if (!FLYER_ALLOWED_TYPES.has(file.type)) {
     return NextResponse.json({ error: `unsupported media type: ${file.type}` }, { status: 415 })
   }
-  const mediaType = file.type as MediaType
+  const mediaType = file.type as FlyerMediaType
 
   const buf = Buffer.from(await file.arrayBuffer())
 
@@ -213,15 +74,15 @@ export async function POST(request: Request) {
 
   const base64 = buf.toString('base64')
 
-  let scan: ScanResult
+  let scan: FlyerExtractResult
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     console.error('[events/scan] ANTHROPIC_API_KEY not configured')
-    scan = { ok: false, reason: 'config' }
+    scan = { ok: false, reason: 'config', usage: null }
   } else if (base64.length > MAX_BASE64_CHARS) {
-    scan = { ok: false, reason: 'too_large' }
+    scan = { ok: false, reason: 'too_large', usage: null }
   } else {
-    scan = await extractFromFlyer(apiKey, base64, mediaType)
+    scan = await extractFromFlyer(apiKey, base64, mediaType, { model: SCAN_MODEL, logTag: 'events/scan' })
   }
 
   const flyer_image_url = await uploadPromise
@@ -234,7 +95,7 @@ export async function POST(request: Request) {
     ok: true,
     ...scan.data,
     flyer_image_url,
-    model: 'claude-opus-4-7',
+    model: SCAN_MODEL,
     usage: scan.usage,
   })
 }

@@ -4,7 +4,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { SyncResult } from '@/lib/inzai-bunka/sync'
 
-export async function recordSyncRun(supabase: SupabaseClient, source: string, startedAt: Date, r: SyncResult): Promise<void> {
+/** extra: 取り込み元ごとの追加情報（Instagram の読み取り済み投稿ID・費用など）。detail に合流させる */
+export async function recordSyncRun(supabase: SupabaseClient, source: string, startedAt: Date, r: SyncResult, extra?: Record<string, unknown>): Promise<void> {
   const { error } = await supabase.from('event_sync_runs').insert({
     source,
     started_at: startedAt.toISOString(),
@@ -18,7 +19,7 @@ export async function recordSyncRun(supabase: SupabaseClient, source: string, st
     duplicates: r.duplicates.length,
     skipped: r.skipped.length,
     errors: r.errors,
-    detail: { inserted: r.inserted, updated: r.updated, duplicates: r.duplicates, skipped: r.skipped },
+    detail: { inserted: r.inserted, updated: r.updated, duplicates: r.duplicates, skipped: r.skipped, ...(extra ?? {}) },
   })
   if (error) console.error(`[event-sync] recordSyncRun(${source}) failed:`, error.message)
 }

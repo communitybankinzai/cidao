@@ -23,6 +23,7 @@ export type CosmosCandidateRow = {
 /** 情報源の表示名（external_source_id の接頭辞で媒体を見分ける） */
 function sourceLabel(r: { external_source: string; external_source_id: string }): string {
   if (r.external_source === 'inzai-city-calendar') return '市サイト'
+  if (r.external_source === 'instagram-hashtag') return 'Instagram #印西'
   if (r.external_source_id.startsWith('chiicomi:')) return 'ちいき新聞'
   if (r.external_source_id.startsWith('goguynet:')) return '号外NET'
   return r.external_source
@@ -78,7 +79,7 @@ export function CosmosCandidates({ candidates }: { candidates: CosmosCandidateRo
                   </p>
                   {r.proxy_source_url && (
                     <a href={r.proxy_source_url} target="_blank" rel="noreferrer noopener" className="text-xs text-blue-700 hover:underline dark:text-blue-300">
-                      記事を開く ↗
+                      {r.external_source === 'instagram-hashtag' ? '投稿を開く ↗' : '記事を開く ↗'}
                     </a>
                   )}
                   <a href={`/events/${r.id}/edit`} className="ml-3 text-xs text-slate-500 hover:underline">内容を直してから公開する</a>

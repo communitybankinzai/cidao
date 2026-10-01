@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/inzai-city-sync",
       "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/cron/instagram-events-sync",
+      "schedule": "35 21 * * *"
     }
   ]
 }
