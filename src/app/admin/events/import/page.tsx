@@ -32,7 +32,7 @@ export default async function AdminEventImportPage() {
   const monthStartJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
   monthStartJst.setDate(1)
   monthStartJst.setHours(0, 0, 0, 0)
-  const [{ data: cosmosRuns }, cosmosCandidates, { data: scanUsage }, { data: cityRuns }, { data: igRuns }, { data: igUsage }, igPause] = await Promise.all([
+  const [{ data: cosmosRuns }, cosmosCandidates, { data: scanUsage }, { data: cityRuns }, { data: igRuns }, { data: igUsage }, igPause, { data: igAccountRuns }] = await Promise.all([
     supabase
       .from('event_sync_runs')
       .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
@@ -55,6 +55,12 @@ export default async function AdminEventImportPage() {
       .limit(14),
     supabase.from('api_usage').select('est_cost_jpy, created_at, model').eq('purpose', 'event_scan_instagram').limit(5000),
     getInstagramSyncPauseState(),
+    supabase
+      .from('event_sync_runs')
+      .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
+      .eq('source', 'instagram-account')
+      .order('started_at', { ascending: false })
+      .limit(14),
   ])
   const scanRows = (scanUsage ?? []) as { est_cost_jpy: number | null; created_at: string; model: string }[]
   const scanCostTotal = scanRows.reduce((s, r) => s + (r.est_cost_jpy ?? 0), 0)
@@ -130,6 +136,11 @@ export default async function AdminEventImportPage() {
             <span className="text-slate-500">毎朝の実行後に結果報告メール（一覧・経費・一時停止ボタン）が届きます</span>
           </div>
           <InzaiBunkaSyncRuns runs={(igRuns ?? []) as SyncRunRow[]} subject="Instagram の投稿" unit="件" />
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 pt-2">Instagram モニタ対象アカウント（毎朝 06:32・団体・企業・行政）</p>
+          <p className="text-xs text-slate-500">
+            <Link href="/admin/sns-monitor" className="underline">SNS モニタ対象</Link>に載ったアカウントの直近の投稿を読み、同じ流れで候補にします。団体は団体編集の SNS 欄に Instagram の URL を入れると自動で対象になります。
+          </p>
+          <InzaiBunkaSyncRuns runs={(igAccountRuns ?? []) as SyncRunRow[]} subject="アカウントの投稿" unit="件" />
           <h3 className="text-sm font-semibold pt-2">確認待ちの候補 {cosmosCandidates.length} 件</h3>
           <CosmosCandidates candidates={cosmosCandidates} />
         </section>

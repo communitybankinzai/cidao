@@ -131,6 +131,15 @@ export default async function AdminHomePage() {
           </li>
           <li>
             <Link
+              href="/admin/sns-monitor"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">SNS モニタ対象</h2>
+              <p className="text-sm text-slate-500">Instagram のイベント告知を毎朝読んで候補にするアカウントの一覧（団体・企業・行政）</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/approvals"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >

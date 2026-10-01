@@ -27,6 +27,8 @@ export type IgMedia = {
   permalink: string
   timestamp: string
   children: IgMediaChild[]
+  /** アカウント経由で集めた投稿だけ持つ（出典の表記と external_source の判定に使う） */
+  account?: { id: string | null; username: string; label: string; kind: '団体' | '企業' | '行政' | 'その他'; orgId: string | null }
 }
 
 type FetchFn = typeof fetch

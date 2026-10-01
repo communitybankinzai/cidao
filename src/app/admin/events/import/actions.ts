@@ -157,7 +157,7 @@ export async function importScannedEvents(items: ImportItem[]): Promise<ImportRe
 // ---------------------------------------------------------------------------
 
 /** 自動取り込みが「下書き候補」として入れる取り込み元（号外NET・ちいき新聞＝goguynet-cosmos、市サイト＝inzai-city-calendar、Instagram #印西＝instagram-hashtag） */
-const CANDIDATE_SOURCES = ['goguynet-cosmos', 'inzai-city-calendar', 'instagram-hashtag'] as const
+const CANDIDATE_SOURCES = ['goguynet-cosmos', 'inzai-city-calendar', 'instagram-hashtag', 'instagram-account'] as const
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''

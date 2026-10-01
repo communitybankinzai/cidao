@@ -29,6 +29,10 @@
       "schedule": "30 21 * * *"
     },
     {
+      "path": "/api/cron/instagram-accounts-sync",
+      "schedule": "32 21 * * *"
+    },
+    {
       "path": "/api/cron/instagram-events-sync",
       "schedule": "35 21 * * *"
     }

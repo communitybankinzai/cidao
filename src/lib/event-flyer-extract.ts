@@ -57,7 +57,7 @@ export async function extractFromFlyer(
   try {
     response = await client.messages.create({
       model: opts.model,
-      max_tokens: 1024,
+      max_tokens: 4096, // 日程の多いチラシ（全4回の講座・月間カレンダー）で JSON が切れないように（2026-10-01 実測で 1024 では失敗）
       output_config: {
         format: {
           type: 'json_schema',
