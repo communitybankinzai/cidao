@@ -72,7 +72,7 @@ export async function extractFromFlyer(
               },
               end_at: {
                 ...nullableString,
-                description: '終了日時。YYYY-MM-DDTHH:MM 形式（JST）。終了の記載が無い場合は開始の1時間後を入れる。',
+                description: '終了日時。YYYY-MM-DDTHH:MM 形式（JST）。終了の記載が無い場合は開始の1時間後を入れる。「10/1〜10/18」のような連続した会期の場合は最終日の終了日時を入れる。日付が飛び飛びで occurrences が2件以上ある場合は、1回目の終了日時を入れる。',
               },
               location: { ...nullableString, description: '会場・場所。例: 中央公民館 第1会議室' },
               online_flag: { type: 'boolean', description: 'オンライン開催ならtrue' },
@@ -83,7 +83,8 @@ export async function extractFromFlyer(
                 type: 'array',
                 description:
                   '同一イベントが複数日程で開催される場合（例: 7/18と8/9の2回開催）、各回の開始・終了日時をここに列挙する。' +
-                  '単発開催の場合は start_at/end_at と同じ内容を1件だけ入れる。',
+                  '単発開催の場合は start_at/end_at と同じ内容を1件だけ入れる。' +
+                  '「10/1〜10/18」のような連続した会期は日ごとに分けず、start_at/end_at と同じ1件だけを入れる。',
                 items: {
                   type: 'object',
                   properties: {
@@ -117,7 +118,8 @@ export async function extractFromFlyer(
         'イベントチラシ画像から構造化情報を抽出するアシスタント。' +
         `日時は JST（Asia/Tokyo）。年が省略されている場合は ${today} を起点に最も近い未来の日付を採用する。` +
         '「2026年6月26日（金）13:30-15:00」のような表記は start_at=2026-06-26T13:30, end_at=2026-06-26T15:00 として分解する。' +
-        '「7/18（土）・8/9（日）」のように同一イベントが複数日程で開催される場合は、occurrences に各回の日時を列挙する（単発開催なら1件のみ）。' +
+        '「7/18（土）・8/9（日）」「毎週土曜」のように、日付が飛び飛びの別々の開催日がある場合は、occurrences に各回の日時を列挙し、start_at/end_at には1回目の日時を入れる（単発開催なら occurrences は1件のみ）。' +
+        'ただし「10/1〜10/18」「10月10日（土）〜18日（日）」のように「〜」「から」でつながった連続した会期（展示会・企画展・スタンプラリー・期間限定の催しなど）は日ごとに分けない。start_at に初日の開始時刻（記載がなければ初日の09:00）、end_at に最終日の終了時刻（記載がなければ最終日の17:00）を入れ、occurrences にはその1件だけを入れる。会期中に休館日があっても1件のままにする。' +
         '「主催」「主催団体」「お問合せ」欄から organizer_name を、「会場」「場所」欄から location を抽出（混同しない）。' +
         '画像がイベントチラシでない、または読み取り不能な場合は title="（読み取り失敗）", confidence=0 を返す。',
       messages: [
