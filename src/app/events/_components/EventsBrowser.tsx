@@ -33,6 +33,15 @@ export type EventRow = {
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
+// 期間イベント（会期が複数日にまたがる）の判定。終了時刻ちょうど0:00の催しを
+// 翌日扱いしてしまわないよう、終了時刻から1分引いてから日付化してから開始日と比べる
+function periodEndYmd(r: EventRow): string {
+  return ymdInJst(new Date(new Date(r.end_at).getTime() - 60_000))
+}
+function isMultiDayEvent(r: EventRow): boolean {
+  return ymdInJst(new Date(r.start_at)) !== periodEndYmd(r)
+}
+
 type Props = {
   events: EventRow[]
   orgInfo: Record<string, OrgInfo>  // organizer_id → org info
@@ -160,6 +169,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const byDate = useMemo(() => {
     const m = new Map<string, EventRow[]>()
     for (const r of filtered) {
+      if (isMultiDayEvent(r)) continue  // 期間イベントは日付のマスに入れず、カレンダー上部の帯に出す
       const endMs = jstDayNoonMs(ymdInJst(new Date(r.end_at)))
       let ms = jstDayNoonMs(ymdInJst(new Date(r.start_at)))
       let guard = 0
@@ -174,6 +184,18 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
     }
     return m
   }, [filtered])
+
+  // 期間イベント（会期が複数日にまたがるもの）のうち、表示中の年月に会期が1日でもかかるもの。開始日の昇順
+  const periodEvents = useMemo(() => {
+    const mm = String(month).padStart(2, '0')
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    const monthStart = `${year}-${mm}-01`
+    const monthEnd = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+    return filtered
+      .filter(isMultiDayEvent)
+      .filter((r) => ymdInJst(new Date(r.start_at)) <= monthEnd && periodEndYmd(r) >= monthStart)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+  }, [filtered, year, month])
 
   return (
     <div className="space-y-5">
@@ -283,6 +305,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             <span aria-hidden>📱</span>
             <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
           </p>
+          <PeriodEventsStrip events={periodEvents} month={month} />
           <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
         </>
       ) : (
@@ -489,6 +512,62 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
     >
       {children}
     </button>
+  )
+}
+
+// 会期「M/D〜M/D」。年をまたぐ場合のみ年も付ける（例: 2026/10/1〜2027/1/31）
+function formatPeriodRange(startYmd: string, endYmd: string): string {
+  const [sy, sm, sd] = startYmd.split('-').map(Number)
+  const [ey, em, ed] = endYmd.split('-').map(Number)
+  if (sy === ey) return `${sm}/${sd}〜${em}/${ed}`
+  return `${sy}/${sm}/${sd}〜${ey}/${em}/${ed}`
+}
+
+// カレンダー上部の「開催中の期間イベント」欄。複数日にまたがる催しは日付マスに入れず、ここにまとめて出す
+function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: number }) {
+  if (events.length === 0) return null
+
+  const VISIBLE = 5
+  const head = events.slice(0, VISIBLE)
+  const rest = events.slice(VISIBLE)
+
+  const renderItem = (e: EventRow) => {
+    const startYmd = ymdInJst(new Date(e.start_at))
+    const endYmd = periodEndYmd(e)
+    return (
+      <li key={e.id}>
+        <Link href={`/events/${e.id}`} className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-2.5 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+          {e.flyer_image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={e.flyer_image_url} alt="" className="w-8 h-9 object-cover rounded border border-slate-200 dark:border-slate-700 shrink-0" />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-slate-900 dark:text-slate-100 truncate">{e.title}</span>
+            <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">
+              {formatPeriodRange(startYmd, endYmd)}
+              {e.location && <> ・📍 {e.location}</>}
+            </span>
+          </span>
+        </Link>
+      </li>
+    )
+  }
+
+  return (
+    <div className="mb-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
+      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+        開催中の期間イベント（{month}月） <span className="text-xs font-normal text-slate-500">{events.length}件</span>
+      </p>
+      <ul className="space-y-1.5">{head.map(renderItem)}</ul>
+      {rest.length > 0 && (
+        <details>
+          <summary className="cursor-pointer select-none text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline">
+            ほか {rest.length} 件を表示
+          </summary>
+          <ul className="space-y-1.5 mt-1.5">{rest.map(renderItem)}</ul>
+        </details>
+      )}
+    </div>
   )
 }
 
