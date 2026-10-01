@@ -5,7 +5,8 @@ import { BulkFlyerImport } from './_components/BulkFlyerImport'
 import { KouhouPdfImport } from './_components/KouhouPdfImport'
 import { InzaiBunkaSyncRuns, type SyncRunRow } from './_components/InzaiBunkaSyncRuns'
 import { CosmosCandidates } from './_components/CosmosCandidates'
-import { listCosmosCandidates } from './actions'
+import { getInstagramSyncPauseState, listCosmosCandidates, setInstagramSyncPaused } from './actions'
+import { describePauseState } from '@/lib/instagram-events/pause'
 
 export default async function AdminEventImportPage() {
   const supabase = await createClient()
@@ -31,7 +32,7 @@ export default async function AdminEventImportPage() {
   const monthStartJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
   monthStartJst.setDate(1)
   monthStartJst.setHours(0, 0, 0, 0)
-  const [{ data: cosmosRuns }, cosmosCandidates, { data: scanUsage }, { data: cityRuns }, { data: igRuns }, { data: igUsage }] = await Promise.all([
+  const [{ data: cosmosRuns }, cosmosCandidates, { data: scanUsage }, { data: cityRuns }, { data: igRuns }, { data: igUsage }, igPause] = await Promise.all([
     supabase
       .from('event_sync_runs')
       .select('id, started_at, finished_at, ok, dry_run, fetched, inserted, updated, unchanged, duplicates, skipped, errors, detail')
@@ -53,6 +54,7 @@ export default async function AdminEventImportPage() {
       .order('started_at', { ascending: false })
       .limit(14),
     supabase.from('api_usage').select('est_cost_jpy, created_at, model').eq('purpose', 'event_scan_instagram').limit(5000),
+    getInstagramSyncPauseState(),
   ])
   const scanRows = (scanUsage ?? []) as { est_cost_jpy: number | null; created_at: string; model: string }[]
   const scanCostTotal = scanRows.reduce((s, r) => s + (r.est_cost_jpy ?? 0), 0)
@@ -116,6 +118,17 @@ export default async function AdminEventImportPage() {
             今月 {igBudgetJpy} 円に達すると自動で止まり、翌月1日に再開します。画像は転載せず、投稿リンクを出典に付けます。
             {igCostMonth >= igBudgetJpy && <span className="ml-1 font-semibold text-amber-700 dark:text-amber-300">⚠ 今月の上限に達したため読み取りを止めています</span>}
           </p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className={igPause.paused ? 'rounded bg-amber-100 px-2 py-1 font-semibold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'rounded bg-emerald-100 px-2 py-1 font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'}>
+              {igPause.paused ? '⏸ ' : '▶ '}{describePauseState(igPause)}
+            </span>
+            <form action={setInstagramSyncPaused.bind(null, !igPause.paused)}>
+              <button type="submit" className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                {igPause.paused ? '再開する' : '一時停止する'}
+              </button>
+            </form>
+            <span className="text-slate-500">毎朝の実行後に結果報告メール（一覧・経費・一時停止ボタン）が届きます</span>
+          </div>
           <InzaiBunkaSyncRuns runs={(igRuns ?? []) as SyncRunRow[]} subject="Instagram の投稿" unit="件" />
           <h3 className="text-sm font-semibold pt-2">確認待ちの候補 {cosmosCandidates.length} 件</h3>
           <CosmosCandidates candidates={cosmosCandidates} />

@@ -13,6 +13,7 @@
 //   同じチラシ・同じ号を再取り込みしても二重登録にならない（GAS が Drive fileId で行っていたのと同じ役割）。
 
 import { revalidatePath } from 'next/cache'
+import { readPauseState, writePauseState, type PauseState } from '@/lib/instagram-events/pause'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
@@ -234,3 +235,20 @@ export async function publishCosmosCandidate(id: string) {
 export async function dismissCosmosCandidate(id: string) {
   return setCosmosCandidateStatus(id, 'cancelled')
 }
+
+// ---------------------------------------------------------------------------
+// Instagram #印西 取り込みの一時停止（メールのボタンと同じ状態を管理画面からも切り替える）
+// ---------------------------------------------------------------------------
+
+export async function getInstagramSyncPauseState(): Promise<PauseState> {
+  await requireAdmin()
+  return readPauseState(serviceClient())
+}
+
+/** form action から呼ぶ（戻り値なし）。paused=true で停止、false で再開 */
+export async function setInstagramSyncPaused(paused: boolean): Promise<void> {
+  await requireAdmin()
+  await writePauseState(serviceClient(), paused, 'admin')
+  revalidatePath('/admin/events/import')
+}
+
