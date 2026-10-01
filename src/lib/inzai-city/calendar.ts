@@ -47,7 +47,7 @@ export type CityDetail = {
 export type CityCandidate = BunkaCalendarEntry & {
   pageId: string
   kind: string
-  /** 連続する長い期間（イルミネーション等）を1件にまとめたときの最終日 */
+  /** 連続する長い期間（イルミネーション等）を会期つきの1件にまとめたときの最終日 */
   periodEnd: string | null
   infoLines: string[]
 }
@@ -176,7 +176,9 @@ const LONG_PERIOD_DAYS = 5
 /**
  * カレンダーの1項目＋詳細から候補を作る。
  * - 日付はカレンダーの日付を正とする（詳細の和暦は時間の抽出にだけ使う）
- * - 連続 LONG_PERIOD_DAYS 日を超える催し（イルミネーション等）は初日の1件にまとめ periodEnd を持つ
+ * - 連続 LONG_PERIOD_DAYS 日を超える催し（イルミネーション等）は初日〜最終日の1件（会期つき）にまとめ periodEnd を持つ。
+ *   カレンダー上部の「開催中の期間イベント」欄に出るよう end を最終日にする。読み込み範囲（当月から3か月）が
+ *   月ごとにずれても同じ行を指すよう、sourceId は日付を含めず `city:<pageId>:period` にする
  */
 export function cityItemToCandidates(item: CityCalendarItem, detail: CityDetail | null): CityCandidate[] {
   if (item.dates.length === 0) return []
@@ -205,7 +207,7 @@ export function cityItemToCandidates(item: CityCalendarItem, detail: CityDetail 
     const tt = detail ? timeTextFor(detail.timeText || detail.dateText, date) : ''
     const t = parseTimeText(normalizeJaTime(tt))
     const venue = detail?.venue.split('\n')[0] ?? ''
-    const title = periodEnd ? `${baseTitle}（〜${Number(periodEnd.slice(5, 7))}/${Number(periodEnd.slice(8, 10))}）` : baseTitle
+    const title = baseTitle
     return {
       pageId: item.pageId,
       kind: item.kind,
@@ -221,10 +223,10 @@ export function cityItemToCandidates(item: CityCalendarItem, detail: CityDetail 
       organizer: detail?.department ? `印西市 ${detail.department}` : '印西市',
       contact: '',
       startAt: `${date}T${t.start}`,
-      endAt: `${date}T${t.end}`,
+      endAt: `${periodEnd ?? date}T${t.end}`,
       timeAssumed: t.assumed,
       fee: parseFeeText(detail?.feeText ?? ''),
-      sourceId: `city:${item.pageId}:${date}`,
+      sourceId: periodEnd ? `city:${item.pageId}:period` : `city:${item.pageId}:${date}`,
       imageUrl: null,
     }
   })
@@ -243,7 +245,7 @@ export function cityKindToCategory(kind: string): string {
 export function toCityDescription(c: CityCandidate): string {
   const lines: string[] = ['印西市公式サイトの「イベント・お知らせ」から自動で拾った候補です。詳しくは市のページをご覧ください。']
   if (c.infoLines.length > 0) lines.push(c.infoLines.map((l) => `■${l}`).join('\n'))
-  if (c.periodEnd) lines.push(`※${c.periodEnd.replace(/-/g, '/')} まで続く催しのため、初日の1件にまとめています。`)
+  if (c.periodEnd) lines.push(`※会期：${c.date.replace(/-/g, '/')}〜${c.periodEnd.replace(/-/g, '/')}`)
   if (c.timeAssumed) lines.push('※時間は市のページから読み取れなかったため仮置きです。')
   lines.push(`出典：印西市ホームページ\n${c.detailUrl}`)
   return lines.join('\n\n')

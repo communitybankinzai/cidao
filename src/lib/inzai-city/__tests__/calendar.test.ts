@@ -10,7 +10,7 @@ import {
   parseWarekiDates,
   toCityDescription,
 } from '../calendar'
-import { cityCandidateToRow, syncInzaiCity } from '../sync'
+import { cityCandidateToRow, isStillUpcoming, syncInzaiCity, widenPeriodRow } from '../sync'
 import type { CosmosExistingRow, CosmosSyncDb } from '@/lib/goguynet/sync'
 import type { EventRow, OtherEventRow } from '@/lib/inzai-bunka/sync'
 
@@ -114,14 +114,27 @@ describe('cityItemToCandidates', () => {
     expect(cs[0].timeAssumed).toBe(true)
     expect(cs[0].title).toBe('クライミング教室の開催について')
   })
-  it('6日以上連続する催しは初日の1件にまとめる', () => {
+  it('6日以上連続する催しは初日〜最終日の1件（会期つき）にまとめる', () => {
     const cs = cityItemToCandidates(
       { pageId: '1', url: 'https://www.city.inzai.lg.jp/1.html', title: 'イルミライ★INZAI', kind: '講座・催し', dates: Array.from({ length: 17 }, (_, i) => `2026-11-${String(14 + i).padStart(2, '0')}`) },
       null,
     )
     expect(cs).toHaveLength(1)
-    expect(cs[0].title).toBe('イルミライ★INZAI（〜11/30）')
+    expect(cs[0].title).toBe('イルミライ★INZAI')
     expect(cs[0].periodEnd).toBe('2026-11-30')
+    expect(cs[0].startAt).toBe('2026-11-14T09:00')
+    expect(cs[0].endAt).toBe('2026-11-30T17:00')
+    expect(cs[0].sourceId).toBe('city:1:period')
+    expect(toCityDescription(cs[0])).toContain('※会期：2026/11/14〜2026/11/30')
+  })
+  it('期間でない日ごとの催しは日付つきの sourceId のまま、終了も同じ日', () => {
+    const it = parseCityCalendarHtml(fixture('calendar-2026-09.html'), 2026, 9).find((i) => i.pageId === '0000020551')!
+    const cs = cityItemToCandidates(it, null)
+    expect(cs.map((c) => c.sourceId)).toEqual(['city:0000020551:2026-09-05', 'city:0000020551:2026-09-12', 'city:0000020551:2026-09-19', 'city:0000020551:2026-09-26'])
+    for (const c of cs) {
+      expect(c.periodEnd).toBeNull()
+      expect(c.endAt.slice(0, 10)).toBe(c.date)
+    }
   })
   it('cityKindToCategory', () => {
     expect(cityKindToCategory('スポーツ')).toBe('bunka')
@@ -179,6 +192,34 @@ describe('syncInzaiCity', () => {
     const r = await syncInzaiCity(db, { botMemberId: BOT, fetchFn: fakeFetch(), now: NOW })
     expect(inserted.map((x) => x.external_source_id)).not.toContain('city:0000015962:2026-10-03')
     expect(r.duplicates.some((d) => d.includes('(k1)'))).toBe(true)
+  })
+  it('期間の催しは、初日が過ぎていても会期中なら候補に残る', () => {
+    const [c] = cityItemToCandidates(
+      { pageId: '2', url: 'https://www.city.inzai.lg.jp/2.html', title: '企画展', kind: '講座・催し', dates: Array.from({ length: 10 }, (_, i) => `2026-09-${String(10 + i).padStart(2, '0')}`) },
+      null,
+    )
+    expect(isStillUpcoming(c, '2026-09-15')).toBe(true)
+    expect(isStillUpcoming(c, '2026-09-20')).toBe(false)
+    const [single] = cityItemToCandidates({ pageId: '3', url: 'https://www.city.inzai.lg.jp/3.html', title: '講座', kind: '講座・催し', dates: ['2026-09-14'] }, null)
+    expect(isStillUpcoming(single, '2026-09-15')).toBe(false)
+  })
+  it('期間の下書きを更新するとき、開始は既存より遅らせず、終了は延びたときだけ伸ばす', () => {
+    // 前の実行では 10/14〜11/30 だった催しが、月が進んで 11/1〜12/31 に見えるようになった場合
+    const [c] = cityItemToCandidates(
+      { pageId: '4', url: 'https://www.city.inzai.lg.jp/4.html', title: 'イルミネーション', kind: '講座・催し', dates: Array.from({ length: 61 }, (_, i) => new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10)) },
+      null,
+    )
+    expect(c.sourceId).toBe('city:4:period')
+    const row = cityCandidateToRow(c, BOT)
+    const ex: CosmosExistingRow = {
+      id: 'e1', external_source_id: 'city:4:period', status: 'draft', title: 'イルミネーション', description: '',
+      start_at: '2026-10-14T00:00:00.000Z', end_at: '2026-11-30T08:00:00.000Z', location: null, fee: null,
+    }
+    const w = widenPeriodRow(ex, row, c)
+    expect(w.start_at).toBe('2026-10-14T00:00:00.000Z')
+    expect(w.end_at).toBe(row.end_at)
+    expect(w.end_at.slice(0, 10)).toBe('2026-12-31')
+    expect(w.description).toContain('※会期：2026/10/14〜2026/12/31')
   })
   it('cityCandidateToRow の必須列', () => {
     const it = parseCityCalendarHtml(fixture('calendar-2026-09.html'), 2026, 9).find((i) => i.pageId === '0000022377')!

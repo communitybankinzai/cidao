@@ -69,6 +69,23 @@ export function cityCandidateToRow(c: CityCandidate, botMemberId: string): Event
   }
 }
 
+/** 今日以降に開かれる候補か。期間の催しは会期の最終日で判断する（初日が過ぎていても会期中なら残す） */
+export function isStillUpcoming(c: CityCandidate, today: string): boolean {
+  return (c.periodEnd ?? c.date) >= today
+}
+
+/**
+ * 期間の催しの下書きを更新するとき、開始は既存より遅らせず、終了は延びたときだけ伸ばす。
+ * 読み込み範囲（当月から3か月）から前の月が外れると、初日が後ろにずれて見えるため
+ */
+export function widenPeriodRow(ex: CosmosExistingRow, row: EventRow, c: CityCandidate): EventRow {
+  const start = Date.parse(ex.start_at) < Date.parse(row.start_at) ? ex.start_at : row.start_at
+  const end = Date.parse(ex.end_at) > Date.parse(row.end_at) ? ex.end_at : row.end_at
+  if (start === row.start_at && end === row.end_at) return row
+  const description = toCityDescription({ ...c, date: todayJst(new Date(start)), periodEnd: todayJst(new Date(end)) })
+  return { ...row, start_at: start, end_at: end, description }
+}
+
 export async function syncInzaiCity(db: CosmosSyncDb, opts: SyncOptions): Promise<SyncResult> {
   const fetchFn = opts.fetchFn ?? fetch
   const log = opts.log ?? (() => {})
@@ -118,7 +135,7 @@ export async function syncInzaiCity(db: CosmosSyncDb, opts: SyncOptions): Promis
   ).flat()
   result.fetched.merged = candidates.length
   const today = todayJst(now)
-  const future = candidates.filter((c) => c.date >= today)
+  const future = candidates.filter((c) => isStillUpcoming(c, today))
   result.fetched.future = future.length
 
   // 3. 既存・他経路
@@ -129,7 +146,7 @@ export async function syncInzaiCity(db: CosmosSyncDb, opts: SyncOptions): Promis
   // 4. insert（下書き）／update（下書きのみ）
   for (const c of future) {
     try {
-      const row = cityCandidateToRow(c, opts.botMemberId)
+      let row = cityCandidateToRow(c, opts.botMemberId)
       const ex = existing.get(c.sourceId)
       if (!ex) {
         // 市主催の催しは会場がばらばらなので、会場は問わず「同じ日に似た題名」で重複とみなす
@@ -146,6 +163,7 @@ export async function syncInzaiCity(db: CosmosSyncDb, opts: SyncOptions): Promis
         result.unchanged++
         continue
       }
+      if (c.periodEnd) row = widenPeriodRow(ex, row, c)
       const patch = diffDraft(ex, row)
       if (Object.keys(patch).length === 0) {
         result.unchanged++
