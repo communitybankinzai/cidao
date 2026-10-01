@@ -133,6 +133,11 @@ export async function fetchHashtagRecentMedia(
         media.push(m)
       }
     }
+    // 24 時間分を取り終えると、next カーソルが付いたまま空のページが 20 ページ以上続く（2026-10-01 実測）。空なら終わり
+    if (data.length === 0) {
+      url = null
+      break
+    }
     const next = str(asObject(payload.paging).next)
     url = next && /^https:\/\/graph\.facebook\.com\//.test(next) ? next : null
   }

@@ -101,6 +101,23 @@ describe('fetchHashtagRecentMedia', () => {
     expect(r2.media.map((m) => m.id)).toEqual(['p1'])
   })
 
+  it('空のページが来たら next があっても終わり（24 時間分の後は空ページが続くため）', async () => {
+    let n = 0
+    const fetchFn = (async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('ig_hashtag_search')) return new Response(JSON.stringify({ data: [{ id: 'H1' }] }), { status: 200 })
+      n++
+      const next = `https://graph.facebook.com/v22.0/H1/recent_media?after=${n}&access_token=t`
+      const data = n === 1 ? [{ id: 'p1', permalink: 'https://www.instagram.com/p/p1/' }] : []
+      return new Response(JSON.stringify({ data, paging: { next } }), { status: 200 })
+    }) as unknown as typeof fetch
+    const r = await fetchHashtagRecentMedia(fetchFn, { userId: 'u', token: 't', hashtag: '印西' })
+    expect(r.media.map((m) => m.id)).toEqual(['p1'])
+    expect(r.pages).toBe(2)
+    expect(r.truncated).toBe(false)
+    expect(n).toBe(2)
+  })
+
   it('1 ページ目が「データ量を減らせ」なら 5 件に絞って再試行する', async () => {
     const calls: string[] = []
     const fetchFn = (async (input: string | URL | Request) => {
