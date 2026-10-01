@@ -31,6 +31,8 @@ export const DEFAULT_SCAN_MODEL = 'claude-sonnet-5'
 export const DEFAULT_BUDGET_JPY = 500
 /** 1回の巡回で読み取る画像の上限。1枚 1〜3 円なので 1 日あたり 20〜40 円以内に収まる */
 export const DEFAULT_MAX_SCANS_PER_RUN = 12
+/** 1回の実行に使える時間（ms）。route.ts の maxDuration より短くし、ページ送りは前半・読み取りは後半で打ち切る */
+export const DEFAULT_TIME_BUDGET_MS = 100_000
 const SCAN_CONCURRENCY = 3
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MIN_CONFIDENCE = 0.5
@@ -63,6 +65,7 @@ export type IgSyncOptions = SyncOptions & {
   maxScansPerRun?: number
   hashtag?: string
   extract?: typeof extractFromFlyer
+  timeBudgetMs?: number
 }
 
 export type IgPrefilterCounts = { noImage: number; noDate: number; noEventWord: number; notEvent: number; already: number; passed: number }
@@ -248,14 +251,19 @@ export async function syncInstagramEvents(db: IgSyncDb, opts: IgSyncOptions): Pr
   const hashtag = opts.hashtag ?? INSTAGRAM_EVENT_HASHTAG
   const today = todayJst(now)
   const result = emptyResult(dryRun, limitJpy)
+  const startedMs = Date.now()
+  const timeBudgetMs = opts.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS
+  const pagingDeadline = startedMs + timeBudgetMs * 0.45
+  const scanDeadline = startedMs + timeBudgetMs * 0.85
 
   const auth = await db.loadDiscoveryAuth()
   if (!auth) throw new Error('Instagram 検索用トークンが未設定です（/admin/sns の「Instagram検索専用」欄で登録）')
 
   // 1. 直近24時間の投稿
-  const { media, pages } = await fetchHashtagRecentMedia(fetchFn, { userId: auth.user_id, token: auth.access_token, hashtag })
+  const { media, pages, truncated } = await fetchHashtagRecentMedia(fetchFn, { userId: auth.user_id, token: auth.access_token, hashtag, deadline: pagingDeadline })
   result.fetched.list = media.length
-  log(`#${hashtag}: ${media.length} 件（${pages} ページ）`)
+  log(`#${hashtag}: ${media.length} 件（${pages} ページ${truncated ? '・時間切れで打ち切り' : ''}）`)
+  if (truncated) result.skipped.push(`投稿が多く ${pages} ページ（${media.length} 件）で打ち切り（取得に時間がかかるため。それ以降の投稿は見ていない）`)
 
   // 2. 一次ふるい（AI 不使用）
   const [existingIds, scannedIds] = await Promise.all([db.listExistingSourceIds(), db.listRecentlyScannedIds()])
@@ -310,6 +318,10 @@ export async function syncInstagramEvents(db: IgSyncDb, opts: IgSyncOptions): Pr
   await mapLimit(toScan, SCAN_CONCURRENCY, async (m) => {
     if (result.budget.exhausted) {
       result.skipped.push(`${m.permalink} 予算上限に達したため未読み取り`)
+      return
+    }
+    if (Date.now() > scanDeadline) {
+      result.skipped.push(`${m.permalink} 時間切れのため未読み取り`)
       return
     }
     const imageUrl = pickImageUrl(m)

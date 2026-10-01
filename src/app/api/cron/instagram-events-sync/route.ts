@@ -22,6 +22,7 @@ import {
   DEFAULT_BUDGET_JPY,
   DEFAULT_MAX_SCANS_PER_RUN,
   DEFAULT_SCAN_MODEL,
+  DEFAULT_TIME_BUDGET_MS,
   INSTAGRAM_SCAN_PURPOSE,
   syncInstagramEvents,
   type IgSyncDb,
@@ -29,7 +30,9 @@ import {
 } from '@/lib/instagram-events/sync'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+// #印西 は投稿が多く Graph API の 1 ページに約 9 秒かかる（2026-10-01 実測）ため、他の cron より長めに取る。
+// 実際の打ち切りは syncInstagramEvents の時間予算（既定 100 秒）で行う
+export const maxDuration = 120
 
 export async function GET(request: Request) {
   return handle(request)
@@ -153,7 +156,7 @@ async function handle(request: Request) {
   let result: IgSyncResult
   try {
     result = await syncInstagramEvents(db, {
-      apiKey, botMemberId, dryRun, model, budgetJpy, maxScansPerRun,
+      apiKey, botMemberId, dryRun, model, budgetJpy, maxScansPerRun, timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
       log: (m) => console.warn('[instagram-events-sync]', m),
     })
   } catch (err) {

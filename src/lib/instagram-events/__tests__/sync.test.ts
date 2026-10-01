@@ -88,8 +88,31 @@ describe('fetchHashtagRecentMedia', () => {
     const r = await fetchHashtagRecentMedia(fetchFn, { userId: 'u', token: 't', hashtag: '印西' })
     expect(r.hashtagId).toBe('H1')
     expect(r.pages).toBe(2)
+    expect(r.truncated).toBe(false)
     expect(r.media.map((m) => m.id)).toEqual(['p1', 'p2'])
     expect(calls[0]).toContain('q=%E5%8D%B0%E8%A5%BF')
+    // children は要求しない（人気タグで 500 になるため）・10 件ずつ
+    expect(calls[1]).toContain('limit=10')
+    expect(calls[1]).not.toContain('children')
+    // 締切を過ぎていれば 2 ページ目以降は取らない
+    const r2 = await fetchHashtagRecentMedia(fetchFn, { userId: 'u', token: 't', hashtag: '印西', deadline: Date.now() - 1 })
+    expect(r2.pages).toBe(1)
+    expect(r2.truncated).toBe(true)
+    expect(r2.media.map((m) => m.id)).toEqual(['p1'])
+  })
+
+  it('1 ページ目が「データ量を減らせ」なら 5 件に絞って再試行する', async () => {
+    const calls: string[] = []
+    const fetchFn = (async (input: string | URL | Request) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.includes('ig_hashtag_search')) return new Response(JSON.stringify({ data: [{ id: 'H1' }] }), { status: 200 })
+      if (url.includes('limit=10')) return new Response(JSON.stringify({ error: { message: "Please reduce the amount of data you're asking for, then retry your request", code: 1 } }), { status: 500 })
+      return new Response(JSON.stringify({ data: [{ id: 'p1', permalink: 'https://www.instagram.com/p/p1/' }] }), { status: 200 })
+    }) as unknown as typeof fetch
+    const r = await fetchHashtagRecentMedia(fetchFn, { userId: 'u', token: 't', hashtag: '印西' })
+    expect(r.media.map((m) => m.id)).toEqual(['p1'])
+    expect(calls.filter((u) => u.includes('recent_media')).map((u) => /limit=(\d+)/.exec(u)?.[1])).toEqual(['10', '5'])
   })
 
   it('投稿が無いタグは 0 件、それ以外のエラーは投げる', async () => {
