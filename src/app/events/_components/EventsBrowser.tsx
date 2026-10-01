@@ -197,6 +197,11 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
   }, [filtered, year, month])
 
+  // 期間イベント（会期が複数日にまたがるもの）全件。月で絞らない。
+  // 日付タップ時のパネル（CalendarView 内）が、表示月の前後にはみ出た前月末・翌月初のマスでも
+  // 正しく期間イベントを拾えるようにするため
+  const allPeriodEvents = useMemo(() => filtered.filter(isMultiDayEvent), [filtered])
+
   return (
     <div className="space-y-5">
       {/* 月送り + ビュー切替 */}
@@ -306,7 +311,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
           </p>
           <PeriodEventsStrip events={periodEvents} month={month} />
-          <CalendarView cells={cells} byDate={byDate} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
+          <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
         </>
       ) : (
         <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} />
@@ -572,10 +577,11 @@ function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: numbe
 }
 
 function CalendarView({
-  cells, byDate, today, year, month, isLoggedIn, orgInfo, organizerLabel,
+  cells, byDate, periodEvents, today, year, month, isLoggedIn, orgInfo, organizerLabel,
 }: {
   cells: string[]
   byDate: Map<string, EventRow[]>
+  periodEvents: EventRow[]
   today: string
   year: number
   month: number
@@ -600,6 +606,13 @@ function CalendarView({
     })
   }
   const selectedItems = byDate.get(selected) ?? []
+  // 選択日の会期中にかかる期間イベント（開始日の昇順）
+  const selectedPeriodItems = useMemo(
+    () => periodEvents
+      .filter((e) => ymdInJst(new Date(e.start_at)) <= selected && periodEndYmd(e) >= selected)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()),
+    [periodEvents, selected],
+  )
   const selectedLabel = (() => {
     const [sy, sm, sd] = selected.split('-').map(Number)
     const dow = ['日', '月', '火', '水', '木', '金', '土'][new Date(sy, sm - 1, sd).getDay()]
@@ -655,9 +668,9 @@ function CalendarView({
       </div>
     </div>
 
-    {selectedItems.length > 0 && (
+    {(selectedItems.length > 0 || selectedPeriodItems.length > 0) && (
       <div key={selected} ref={panelRef} className="cidao-panel-flash scroll-my-4 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{selectedItems.length}件）</p>
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{selectedItems.length + selectedPeriodItems.length}件）</p>
         <ul className="space-y-1.5">
           {selectedItems.map((e) => (
             <li key={e.id}>
@@ -669,6 +682,22 @@ function CalendarView({
                     {e.title}
                   </span>
                   <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{organizerLabel(e)}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+          {selectedPeriodItems.map((e) => (
+            <li key={e.id}>
+              <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
+                <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">期間</span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
+                    {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
+                    {e.title}
+                  </span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {formatPeriodRange(ymdInJst(new Date(e.start_at)), periodEndYmd(e))}・{organizerLabel(e)}
+                  </span>
                 </span>
               </Link>
             </li>
