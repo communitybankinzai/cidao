@@ -722,3 +722,79 @@ export function checkPublishable(
   if (!draft.title.trim()) return { ok: false, reason: 'タイトルが空です' }
   return { ok: true }
 }
+
+// ---------------------------------------------------------------------------
+// 紹介文の下書き（AI）— 事実だけを書く方針
+// ---------------------------------------------------------------------------
+// 方針（2026-10-03 運営決定）: 口コミ・評価は使わない。公開データ（OpenPOI）と、
+// 運営が貼ったお店自身の公式情報に書いてある事実だけで書く。評価や推測の言葉は入れない。
+
+/** 紹介文に入れない評価・推測・誇張の言葉。見つけたら画面で警告し、AIには使わせない */
+export const RISKY_PHRASES = [
+  '人気', '話題', '評判', '口コミ', 'おいしい', '美味しい', '絶品', '名店', '老舗', '隠れ家', '行列', '大好評',
+  'こだわり', '自慢', '最高', '最上', '一番', 'No.1', 'ナンバーワン', 'おすすめ', 'オススメ', '必見', '間違いない',
+  '安い', '格安', '最安', 'お得', 'リーズナブル', '雰囲気がよい', '居心地', '素敵', '素晴らしい', '本格的', '本場',
+  '厳選', '新鮮', 'ふわふわ', 'とろける', 'ジューシー',
+] as const
+
+/** 文中の危うい言葉（重複なし）。大小・全半角の違いは吸収して調べる */
+export function findRiskyPhrases(text: string): string[] {
+  const t = text.normalize('NFKC').toLowerCase()
+  const hit = new Set<string>()
+  for (const w of RISKY_PHRASES) if (t.includes(w.normalize('NFKC').toLowerCase())) hit.add(w)
+  return [...hit]
+}
+
+/** 住所から町名（市区町村の次〜番地の前）を取り出す。「千葉県印西市武西1205-49」→「武西」 */
+export function areaFromAddress(address: string | null | undefined, city: string | null | undefined): string | null {
+  const a = normalizeDisplayText(address ?? '')
+  if (!a) return null
+  const c = (city ?? '').trim()
+  const rest = c && a.includes(c) ? a.slice(a.indexOf(c) + c.length) : a.replace(/^.{2,3}[都道府県]/, '')
+  const m = rest.match(/^([^\d\s０-９]{1,12})/)
+  return m ? m[1] : null
+}
+
+export type IntroFacts = {
+  name: string
+  kind: string            // 「飲食店」「カフェ」など openpoiCategoryLabel の値（不明なら「不明」）
+  prefecture: string | null
+  city: string | null
+  area: string | null     // 町名
+  address: string | null
+}
+
+export const INTRO_MAX = 500
+
+/** AIに渡す指示。口コミ・評価・推測を禁じ、参考テキスト（任意）に書かれた事実だけを使わせる */
+export function buildIntroPrompt(facts: IntroFacts, reference: string): { system: string; user: string } {
+  const system = [
+    'あなたは、地域の掲示板「FreeFree」（印西市）に載せるお店の紹介文を、運営の下書きとして書くアシスタントです。',
+    '次の決まりを必ず守ってください。',
+    '- 書いてよいのは「与えられた事実」と「参考テキストに書かれていること」だけです。それ以外は一切足さない（推測・創作・一般論を書かない）。',
+    '- 口コミ・評判・評価の言葉は書かない。「人気」「おいしい」「こだわり」「おすすめ」「老舗」「雰囲気がよい」など、良し悪しを述べる言葉と、価格が安い・高いという言葉も使わない。',
+    '- 営業時間・定休日・メニュー・価格・創業年・電話番号は、参考テキストに書かれているときだけ、その通りに書く。無いときは触れない。',
+    '- 種別が「不明」のときは、何の店かを断定せず、場所と店名だけを書く。',
+    '- 敬体（です・ます）で、2〜4文、全体で60〜180字にする。店名は繰り返さなくてよい。',
+    '- 最後の文に、お店の方への呼びかけは入れない（別の欄に入る）。',
+    '- 出力は紹介文の本文だけ。前置き・見出し・かっこ書きの説明・引用符は付けない。',
+  ].join('\n')
+  const lines = [
+    '【与えられた事実】',
+    `店名：${facts.name}`,
+    `種別：${facts.kind}`,
+    `所在地：${[facts.prefecture, facts.city].filter(Boolean).join('')}${facts.area ?? ''}${facts.address ? `（住所：${facts.address}）` : ''}`,
+  ]
+  const ref = reference.trim()
+  lines.push('', ref ? `【参考テキスト（お店自身の公式な情報。ここに書かれた事実だけ使う）】\n${ref.slice(0, 4000)}` : '【参考テキスト】なし（事実は上の3つだけ。短く、場所と種別を伝える文にする）')
+  lines.push('', '上の決まりに従って、紹介文を書いてください。')
+  return { system, user: lines.join('\n') }
+}
+
+/** AIの返答を整える（前後の空白・引用符・見出し行・長さ）。空なら null */
+export function sanitizeIntro(raw: string): string | null {
+  let t = raw.trim().replace(/^["「『]+|["」』]+$/g, '').trim()
+  t = t.replace(/^(紹介文|本文)[:：]\s*/, '')
+  t = Array.from(t).slice(0, INTRO_MAX).join('').trim()
+  return t || null
+}

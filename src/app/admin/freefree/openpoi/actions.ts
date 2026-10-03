@@ -10,6 +10,7 @@
 //  ・RLS: 候補・履歴テーブルは is_committee_or_super() のみ。公開は運営本人のセッションで INSERT する
 
 import { revalidatePath } from 'next/cache'
+import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { recordWrite } from '@/lib/audit'
@@ -17,6 +18,12 @@ import { resolveCityBbox, searchBbox } from '@/lib/openpoi'
 import {
   DedupIndex,
   REGIONS,
+  areaFromAddress,
+  buildIntroPrompt,
+  findRiskyPhrases,
+  normalizeDisplayText,
+  openpoiCategoryLabel,
+  sanitizeIntro,
   bboxFromCenter,
   bboxWithinLimit,
   buildPostDraft,
@@ -524,5 +531,62 @@ export async function publishCandidates(input: PublishInput): Promise<ActionResu
       await supabase.from('freefree_import_runs').update({ status: 'failed', error: msg.slice(0, 500), finished_at: new Date().toISOString() }).eq('id', runId)
     }
     return { ok: false, error: msg }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 紹介文の下書き（AI）
+// ---------------------------------------------------------------------------
+// 口コミ・評価は使わない。公開データの事実と、運営が貼ったお店自身の公式情報だけで書く（決まりは buildIntroPrompt）。
+// 下書きは保存せず画面に返すだけ。運営が読んで直し、「修正内容を保存」を押して初めて保存される。
+
+const INTRO_MODEL = 'claude-haiku-4-5'
+const INTRO_INTERVAL_MS = 2_000
+const lastIntro = new Map<string, number>() // best-effort（サーバーレスではインスタンスごと）
+
+export async function draftIntro(
+  candidateId: string,
+  reference: string,
+): Promise<ActionResult<{ text: string; risky: string[] }>> {
+  try {
+    const { supabase, userId } = await requireAdmin()
+    if (Date.now() - (lastIntro.get(userId) ?? 0) < INTRO_INTERVAL_MS) return { ok: false, error: '連続で実行できません。少し待ってからもう一度お試しください' }
+    lastIntro.set(userId, Date.now())
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return { ok: false, error: 'AIの設定（ANTHROPIC_API_KEY）がありません' }
+    if (typeof reference !== 'string' || reference.length > 8000) return { ok: false, error: '参考テキストは8000字までにしてください' }
+
+    const { data: c, error } = await supabase
+      .from('freefree_import_candidates')
+      .select('name, prefecture, city, address, openpoi_category')
+      .eq('id', candidateId)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!c) return { ok: false, error: '候補が見つかりません' }
+
+    const { system, user } = buildIntroPrompt(
+      {
+        name: normalizeDisplayText(c.name),
+        kind: openpoiCategoryLabel(c.openpoi_category),
+        prefecture: c.prefecture,
+        city: c.city,
+        area: areaFromAddress(c.address, c.city),
+        address: c.address ? normalizeDisplayText(c.address) : null,
+      },
+      reference,
+    )
+    const client = new Anthropic({ apiKey })
+    const res = await client.messages.create({
+      model: INTRO_MODEL,
+      max_tokens: 600,
+      system,
+      messages: [{ role: 'user', content: user }],
+    })
+    const raw = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('')
+    const text = sanitizeIntro(raw)
+    if (!text) return { ok: false, error: 'AIが紹介文を作れませんでした。もう一度お試しください' }
+    return { ok: true, data: { text, risky: findRiskyPhrases(text) } }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? `AIの呼び出しに失敗しました: ${e.message}` : 'AIの呼び出しに失敗しました' }
   }
 }
