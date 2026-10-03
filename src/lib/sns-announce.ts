@@ -205,8 +205,10 @@ export async function announceFreefreeToSns(
       post.id,
     )
     if (!target) return { created: 0 }
-    const { data: row } = await supabase.from('freefree_posts').select('images').eq('id', post.id).maybeSingle()
-    const hasImage = Array.isArray(row?.images) && row.images.length > 0
+    const { data: row } = await supabase.from('freefree_posts').select('images, import_source').eq('id', post.id).maybeSingle()
+    const isImport = row?.import_source === 'openpoi' || row?.import_source === 'manual'
+    // 運営が作った掲載は、写真が無くても画像カード（/api/og/freefree/[id]）を使えるので Instagram にも出せる
+    const hasImage = isImport || (Array.isArray(row?.images) && row.images.length > 0)
 
     // 全自動モード（管理画面「FreeFree 告知の配信モード」＝app_settings.sns_freefree_auto_post）なら
     // 承認済みで作ってその場で配信し、管理者には「配信した」ことを知らせる。既定は承認制
@@ -215,10 +217,12 @@ export async function announceFreefreeToSns(
       .select('value')
       .eq('key', 'sns_freefree_auto_post')
       .maybeSingle()
-    const auto = !opts.forceApproval && (setting?.value as { enabled?: boolean } | null)?.enabled === true
+    const auto = !opts.forceApproval && !isImport && (setting?.value as { enabled?: boolean } | null)?.enabled === true
 
     const now = new Date().toISOString()
-    const rows = FREEFREE_MEDIA.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
+    // 運営が作った掲載は常に承認制。媒体は接続済みの Threads・Instagram だけ（Facebook は未接続で、下書きが待機のまま残るため）
+    const media = isImport ? FREEFREE_MEDIA.filter((m) => m !== 'facebook') : FREEFREE_MEDIA
+    const rows = media.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
       target_type: 'freefree',
       target_id: post.id,
       medium,

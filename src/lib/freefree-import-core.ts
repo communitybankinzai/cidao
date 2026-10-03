@@ -841,3 +841,23 @@ export const FOR_SHOPS_PATH = '/freefree/for-shops'
 export function makeManualSourceId(name: string, address: string | null): string {
   return `manual-${hash53(`${baseNormalize(name)}|${addressKey(address) || baseNormalize(address ?? '')}`)}`
 }
+
+// ---------------------------------------------------------------------------
+// SNS 投稿（取込掲載）
+// ---------------------------------------------------------------------------
+
+/** 1日に作るSNS下書きの上限の初期値（運営決定 2026-10-03）。app_settings で変えられる */
+export const SNS_DAILY_CAP_DEFAULT = 3
+
+/** 今日あと何件下書きを作れるか（上限を超えて使っていても 0） */
+export function remainingDailyCap(perDay: number, usedToday: number): number {
+  const cap = Number.isFinite(perDay) && perDay >= 0 ? Math.floor(perDay) : SNS_DAILY_CAP_DEFAULT
+  return Math.max(0, cap - Math.max(0, usedToday))
+}
+
+/** 本文の先頭が紹介文（運営が書いたもの）なら、その段落を返す。定型の行（種別・所在地など）だけなら null */
+export function introOfBody(body: string | null | undefined): string | null {
+  const first = (body ?? '').split(/\n\s*\n/)[0]?.trim() ?? ''
+  if (!first || /^[🏷📍☎🕐🔗※]/u.test(first)) return null
+  return first
+}

@@ -14,6 +14,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { recordWrite } from '@/lib/audit'
+import { announceFreefreeToSns } from '@/lib/sns-announce'
+import { jstToday } from '@/lib/freefree-dates'
 import { resolveCityBbox, searchBbox } from '@/lib/openpoi'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 import {
@@ -29,6 +31,8 @@ import {
   bboxWithinLimit,
   buildPostDraft,
   makeManualSourceId,
+  remainingDailyCap,
+  SNS_DAILY_CAP_DEFAULT,
   checkPublishable,
   collectByBbox,
   inTargetCity,
@@ -694,6 +698,61 @@ export async function addManualCandidate(
     await recordWrite({ actorId: userId, action: 'freefree.import', targetType: 'freefree_import', targetId: data.id, isAdmin: true, detail: { kind: 'manual_add', name } })
     revalidatePath(PATH)
     return { ok: true, data: { id: data.id, duplicate: { status: dup.status, reason: dup.reason }, located: lat !== null, locateNote } }
+  } catch (e) {
+    return { ok: false, error: errMsg(e) }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SNS 投稿の下書き（登録済みの取込掲載）
+// ---------------------------------------------------------------------------
+// 下書きを作るだけ。運営が /admin/sns で文面を確認して承認すると、Threads・Instagram に出る（常に承認制）。
+// 1日に作れる件数の上限（初期値3件）は app_settings の freefree_import_sns_daily_cap（{ "perDay": 数 }）で変える。
+
+export type SnsDraftItem = { name: string; outcome: 'created' | 'skipped'; message?: string }
+
+export async function createSnsDrafts(
+  candidateIds: string[],
+): Promise<ActionResult<{ items: SnsDraftItem[]; usedToday: number; perDay: number }>> {
+  try {
+    const { supabase } = await requireAdmin()
+    const ids = Array.from(new Set(candidateIds ?? []))
+    if (ids.length === 0 || ids.length > 10) return { ok: false, error: '対象は1〜10件で指定してください' }
+
+    // 1日の上限と、今日すでに作った件数（取込掲載のみ・日本時間）
+    const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'freefree_import_sns_daily_cap').maybeSingle()
+    const rawCap = Number((setting?.value as { perDay?: unknown } | null)?.perDay)
+    const perDay = Number.isFinite(rawCap) && rawCap >= 0 ? Math.floor(rawCap) : SNS_DAILY_CAP_DEFAULT
+    const dayStart = new Date(`${jstToday()}T00:00:00+09:00`).toISOString()
+    const { data: todayLogs } = await supabase.from('sns_post_logs').select('target_id').eq('target_type', 'freefree').gte('created_at', dayStart).limit(1000)
+    const todayTargets = Array.from(new Set((todayLogs ?? []).map((l) => l.target_id as string)))
+    let usedToday = 0
+    if (todayTargets.length > 0) {
+      const { data: imported } = await supabase.from('freefree_posts').select('id').in('id', todayTargets).not('import_source', 'is', null)
+      usedToday = imported?.length ?? 0
+    }
+
+    const { data: rows, error } = await supabase.from('freefree_import_candidates').select('id, name, import_status, freefree_post_id').in('id', ids)
+    if (error) throw new Error(error.message)
+    const byId = new Map((rows ?? []).map((r) => [r.id as string, r]))
+    const items: SnsDraftItem[] = []
+
+    for (const id of ids) {
+      const c = byId.get(id)
+      if (!c) { items.push({ name: '(不明)', outcome: 'skipped', message: '候補が見つかりません' }); continue }
+      const name = String(c.name)
+      if (c.import_status !== 'imported' || !c.freefree_post_id) { items.push({ name, outcome: 'skipped', message: 'FreeFreeに登録済みの候補だけ、SNSの下書きを作れます' }); continue }
+      const postId = c.freefree_post_id as string
+      // 同じ掲載に、すでに下書きや投稿があれば作らない（二重の告知を防ぐ）
+      const { data: existing } = await supabase.from('sns_post_logs').select('id').eq('target_type', 'freefree').eq('target_id', postId).limit(1)
+      if (existing && existing.length > 0) { items.push({ name, outcome: 'skipped', message: 'すでに下書きまたは投稿があります' }); continue }
+      if (remainingDailyCap(perDay, usedToday) <= 0) { items.push({ name, outcome: 'skipped', message: `本日の上限（${perDay}件）に達しました。明日、または設定で上限を変えてください` }); continue }
+      const r = await announceFreefreeToSns({ id: postId, title: name }, { forceApproval: true, label: `取込掲載「${name}」` })
+      if (r.created > 0) { usedToday++; items.push({ name, outcome: 'created' }) }
+      else items.push({ name, outcome: 'skipped', message: '下書きを作れませんでした（掲載が公開中でない、など）' })
+    }
+    revalidatePath(PATH)
+    return { ok: true, data: { items, usedToday, perDay } }
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
