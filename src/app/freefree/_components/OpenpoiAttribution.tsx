@@ -1,5 +1,8 @@
 import { OPENPOI_ATTRIBUTION_URL } from '@/lib/freefree-import-core'
 
+// 連絡先は CBI の事務局メール（metaverse の事務局・管理者通知と同じ宛先）。変えるときはここだけ直す
+const CONTACT_EMAIL = 'communitybankinzai@gmail.com'
+
 // OpenPOI 由来の掲載に付ける出典表示（FreeFree詳細・管理画面プレビュー共通）。
 // OpenPOI の利用条件（https://docs.openpoiapi.com/ 「出典・ライセンス」）:
 //   ・画面に出すときは「OpenPOI API」を出典として記載し、出典・ライセンスページへリンクする
@@ -15,6 +18,11 @@ export default function OpenpoiAttribution({ licenses, attributions }: { license
         <a href={OPENPOI_ATTRIBUTION_URL} target="_blank" rel="noopener noreferrer" className="text-sky-700 dark:text-sky-400 hover:underline">OpenPOI API</a>
         <span className="mx-1">·</span>
         公開データを OpenPOI API が加工し、CBI が名称・住所等を整えて掲載しています。
+      </p>
+      <p>
+        店舗の方へ：この掲載の訂正・削除、またはご自身での掲載をご希望の場合は、
+        <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載について')}`} className="text-sky-700 dark:text-sky-400 hover:underline">{CONTACT_EMAIL}</a>
+        （CBI）までご連絡ください。
       </p>
       {(lic.length > 0 || att.length > 0) && (
         <details>
