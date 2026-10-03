@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
-  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, areaFromAddress, buildIntroPrompt, sanitizeIntro,
+  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -217,4 +217,12 @@ test('紹介文: AIの返答を整える', () => {
   expect(sanitizeIntro('紹介文：武西にある店です。')).toBe('武西にある店です。')
   expect(sanitizeIntro('   ')).toBe(null)
   expect(Array.from(sanitizeIntro('あ'.repeat(800))!).length).toBe(500)
+})
+
+test('エリア表記: 所在地から「市＋町名」を取り出す', () => {
+  expect(areaLabelFromLocation('千葉県印西市武西１２０５－４９')).toBe('印西市武西')
+  expect(areaLabelFromLocation('印西市大塚1-3')).toBe('印西市大塚')
+  expect(areaLabelFromLocation('千葉県印西市')).toBe('印西市')
+  expect(areaLabelFromLocation('')).toBe(null)
+  expect(areaLabelFromLocation(null)).toBe(null)
 })

@@ -798,3 +798,10 @@ export function sanitizeIntro(raw: string): string | null {
   t = Array.from(t).slice(0, INTRO_MAX).join('').trim()
   return t || null
 }
+
+/** 画像カード・SNS用のエリア表記。「千葉県印西市武西1205-49」→「印西市武西」。作れなければ null */
+export function areaLabelFromLocation(location: string | null | undefined): string | null {
+  const a = normalizeDisplayText(location ?? '').replace(/^.{2,3}[都道府県]/, '')
+  const m = a.match(/^([^\d\s-]{2,16})/)
+  return m ? m[1] : null
+}
