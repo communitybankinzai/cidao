@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
-  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
+  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, gsiCreditLine, GSI_CARD_CREDIT, GSI_TILE_URL, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -225,4 +225,14 @@ test('エリア表記: 所在地から「市＋町名」を取り出す', () => 
   expect(areaLabelFromLocation('千葉県印西市')).toBe('印西市')
   expect(areaLabelFromLocation('')).toBe(null)
   expect(areaLabelFromLocation(null)).toBe(null)
+})
+
+test('地図の出典: 国土地理院・加工した旨・一覧ページへのリンクが入る', () => {
+  const line = gsiCreditLine()
+  expect(line).toContain('国土地理院')
+  expect(line).toContain('地理院タイル')
+  expect(line).toContain('加工')
+  expect(line).toContain(GSI_TILE_URL)
+  expect(GSI_CARD_CREDIT).toContain('国土地理院')
+  expect(GSI_CARD_CREDIT).toContain('加工')
 })

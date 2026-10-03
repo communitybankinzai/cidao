@@ -101,7 +101,7 @@ export async function renderImportCard(input: CardInput): Promise<Buffer | null>
   const callTitle = 'お店の方へ'
   const call1 = '写真とPR文をご提供ください'
   const call2 = 'CiDAOに登録（無料）して、ご自身で掲載できます'
-  const credit = '地図：国土地理院'
+  const credit = '地図：地理院タイルを加工して作成（国土地理院）'
   const brand = 'CiDAO - 印西の市民DAO'
   const font = await loadFont([heading, callTitle, call1, call2, credit, brand, input.name, input.categoryLabel, input.area ?? ''].join(''))
   if (!font) return null

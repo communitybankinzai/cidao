@@ -67,6 +67,7 @@ export default async function FreefreePage() {
             <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
             <h1 className="text-3xl font-serif font-bold">FreeFree 地域応援掲示板</h1>
             <p className="text-sm text-slate-500 mt-2">印西の小さなお店・個人事業・団体・企業・行政を応援</p>
+            <p className="text-xs mt-1"><Link href="/freefree/for-shops" className="text-sky-700 dark:text-sky-400 hover:underline">お店の方へ（無料で掲載できます）</Link></p>
           </div>
           {user && (
             <Link href="/freefree/new"><Button>掲載する</Button></Link>
