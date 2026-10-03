@@ -5,6 +5,7 @@
 // LINE: メッセージ通常テキスト（リンク自動展開あり）
 
 import { daysBetweenYmd, jstToday } from '@/lib/freefree-dates'
+import { FOR_SHOPS_PATH, areaLabelFromLocation, gsiCreditLine, introOfBody } from '@/lib/freefree-import-core'
 
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 const BOARD_URL = `${SITE_BASE}/freefree`
@@ -29,6 +30,10 @@ export type SnsTarget = {
   // event_start_date＝開催日（初日・任意）、end_date＝掲載終了日（イベントなら開催最終日）
   event_start_date?: string | null
   end_date?: string | null
+  // freefree 用。運営が作った掲載（公開データ由来／手で追加）のとき入る。お店の方への呼びかけの文面になる
+  import_source?: 'openpoi' | 'manual' | null
+  // 画像カードに地図が入るか（入るなら国土地理院の出典を投稿文に添える）
+  has_map?: boolean
 }
 
 export type SnsMedium = 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
@@ -113,7 +118,35 @@ export function freefreeCountdown(target: SnsTarget, today: string): string | nu
 }
 
 // now は「配信する時点」。カウントダウンの基準日になる（テストでは固定値を渡す）
+/**
+ * 運営が作った掲載（公開データ由来・手で追加）の告知文。
+ * お店の方に気づいてもらい、CiDAO に登録して写真とPR文を自分で登録してもらうのが目的。
+ * 「CBIが応援している」とは書かない（お店は頼んでいない）。カウントダウンも付けない。
+ * 口コミ・評価は書かない。店名のタグ付けもしない。地図の画像を使うので国土地理院の出典を添える。
+ */
+export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): string {
+  const link = url(target, medium)
+  const forShops = `${SITE_BASE}${FOR_SHOPS_PATH}`
+  const area = areaLabelFromLocation(target.location)
+  const name = `${truncate(target.title, 40)}${area ? `（${area}）` : ''}`
+  const intro = introOfBody(target.body)
+  const credit = target.has_map ? `\n${gsiCreditLine()}` : ''
+  const prefix = '【印西のお店・施設📍】'
+  const ask = 'お店の方へ：写真とPR文をご提供ください。CiDAOに登録（無料）して、ご自身で掲載できます。'
+  const made = '公開データをもとに、運営が掲載ページを作りました。'
+
+  if (medium === 'x') {
+    return `${prefix}\n${truncate(target.title, 30)}${area ? `（${area}）` : ''}\n${truncate(ask, 40)}\n${link}\n#印西市 #FreeFree`
+  }
+  if (medium === 'instagram') {
+    // Instagram はキャプション内の URL を押せないため、プロフィールのリンクへ誘導する（提案告知と同じ運用）
+    return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。検索なら「CiDAO 印西」で。${credit}\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
+  }
+  return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\n▶ 掲載ページ\n${link}\n▶ お店の方へ\n${forShops}${credit}\n\n#印西市 #FreeFree #印西応援`
+}
+
 export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = Date.now()): string {
+  if (target.target_type === 'freefree' && target.import_source) return generateImportSnsContent(target, medium)
   const link = url(target, medium)
   // FreeFree は冒頭をカウントダウンで強調する（無ければ何も付けない）
   const countdown = target.target_type === 'freefree' ? freefreeCountdown(target, jstToday(now)) : null

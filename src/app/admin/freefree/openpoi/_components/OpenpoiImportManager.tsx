@@ -18,6 +18,7 @@ import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
 import {
   dismissCandidateUpdate,
   addManualCandidate,
+  createSnsDrafts,
   draftIntro,
   publishCandidates,
   runOpenpoiFetch,
@@ -166,6 +167,17 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
     return s ? `?${s}` : '?'
   }
 
+  function snsDraft(id: string) {
+    setError(null); setMessage(null)
+    startTransition(async () => {
+      const r = await createSnsDrafts([id])
+      if (!r.ok) { setError(r.error); return }
+      const it = r.data.items[0]
+      if (it?.outcome === 'created') setMessage(`SNSの下書きを作りました（本日 ${r.data.usedToday}/${r.data.perDay}件）。/admin/sns で文面を確認して承認してください。`)
+      else setError(it?.message ?? '下書きを作れませんでした')
+    })
+  }
+
   function exclude(ids: string[], excluded: boolean) {
     setError(null); setMessage(null)
     startTransition(async () => {
@@ -270,6 +282,7 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                       <td className="p-2"><Badge className={STATUS_CLASS[r.import_status]}>{STATUS_LABEL[r.import_status]}</Badge></td>
                       <td className="p-2 whitespace-nowrap space-x-1">
                         <Button size="sm" variant="outline" onClick={() => setDetail(r)}>詳細</Button>
+                        {r.import_status === 'imported' && <Button size="sm" variant="outline" disabled={pending} onClick={() => snsDraft(r.id)}>SNS下書き</Button>}
                         {r.import_status === 'excluded'
                           ? <Button size="sm" variant="ghost" disabled={pending} onClick={() => exclude([r.id], false)}>戻す</Button>
                           : selectable && <Button size="sm" variant="ghost" disabled={pending} onClick={() => exclude([r.id], true)}>除外</Button>}
@@ -303,6 +316,7 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                   {r.duplicate_status !== 'none' && <DupBadge r={r} />}
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setDetail(r)}>詳細</Button>
+                    {r.import_status === 'imported' && <Button size="sm" variant="outline" disabled={pending} onClick={() => snsDraft(r.id)}>SNS下書き</Button>}
                     {r.import_status === 'excluded'
                       ? <Button size="sm" variant="ghost" disabled={pending} onClick={() => exclude([r.id], false)}>戻す</Button>
                       : selectable && <Button size="sm" variant="ghost" disabled={pending} onClick={() => exclude([r.id], true)}>除外</Button>}

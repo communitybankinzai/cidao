@@ -35,7 +35,7 @@ export async function fetchSnsTarget(
   if (target_type === 'freefree') {
     const { data } = await supabase
       .from('freefree_posts')
-      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name, event_start_date, expires_at')
+      .select('id, title, body, category, location, status, poster_type, poster_id, sns_display_name, event_start_date, expires_at, import_source, lat, lon')
       .eq('id', target_id)
       .maybeSingle()
     if (!data || data.status !== 'active') return null
@@ -66,6 +66,9 @@ export async function fetchSnsTarget(
       // カウントダウン用（開催日は任意。掲載終了日は expires_at＝その日の 23:59:59 日本時間）
       event_start_date: (data.event_start_date as string | null) ?? null,
       end_date: data.expires_at ? jstYmdOf(String(data.expires_at)) : null,
+      // 運営が作った掲載（公開データ由来・手で追加）は、お店の方への呼びかけの文面にする
+      import_source: data.import_source === 'openpoi' || data.import_source === 'manual' ? data.import_source : null,
+      has_map: typeof data.lat === 'number' && typeof data.lon === 'number',
     }
   }
 
