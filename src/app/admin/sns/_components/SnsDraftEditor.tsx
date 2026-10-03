@@ -45,6 +45,11 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const approved = !!log.approved_at
+  // sns-dispatch.ts の imageUrl と同じ対象。配信される画像をそのまま見せる
+  const previewUrl =
+    log.medium === 'instagram' && log.target_id && (log.target_type === 'freefree' || log.target_type === 'proposal')
+      ? `/api/og/${log.target_type}/${log.target_id}`
+      : null
 
   function run(fn: () => Promise<{ ok: boolean; content?: string; error?: string } | void>) {
     setError(null)
@@ -77,6 +82,19 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
           </span>
         )}
       </div>
+
+      {previewUrl && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-slate-500">Instagram に付く画像（配信時にこの画像が使われます）</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt={`${log.title} の投稿画像`}
+            loading="lazy"
+            className="w-full max-w-[16rem] rounded border border-slate-200 dark:border-slate-700"
+          />
+        </div>
+      )}
 
       <textarea
         value={text}
