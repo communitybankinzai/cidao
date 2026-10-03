@@ -15,6 +15,7 @@ import {
   type CandidateEdits,
 } from '@/lib/freefree-import-core'
 import PinPicker from './PinPicker'
+import { formatCandidatesForCopy } from '@/lib/openpoi-copy'
 import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
 import { setCandidatePin, setCandidateInstagram,
   dismissCandidateUpdate,
@@ -158,6 +159,28 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
     })
   }
 
+  // 店のデータを区切り付きテキストにしてクリップボードへ（口コミ収集・告知文づくりに貼る用）
+  async function copyRows(list: CandidateRow[], label: string): Promise<boolean> {
+    setError(null); setMessage(null)
+    if (list.length === 0) { setError('コピーする店がありません'); return false }
+    const text = formatCandidatesForCopy(list)
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (!ok) { setError('コピーに失敗しました（ブラウザがクリップボードを許可していません）'); return false }
+    }
+    setMessage(`${label}${list.length}店をコピーしました`)
+    return true
+  }
+
   function qs(over: Record<string, string | number>) {
     const p = new URLSearchParams()
     const merged: Record<string, string | number> = { ...filters, page, ...over }
@@ -231,6 +254,12 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
           {error ?? message}
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={selected.size === 0} onClick={async () => { if (await copyRows([...selected.values()], '選択した')) setSelected(new Map()) }}>選択した店をコピー（{selected.size}店）</Button>
+        <Button type="button" size="sm" variant="outline" disabled={rows.length === 0} onClick={() => copyRows(rows.slice(0, 10), 'このページの先頭の')}>このページの先頭10店をコピー</Button>
+        <Button type="button" size="sm" variant="outline" disabled={rows.length === 0} onClick={() => copyRows(rows, 'このページの')}>このページ全店をコピー</Button>
+      </div>
 
       <div className="flex items-center justify-between text-xs text-slate-500">
         <span>{totalCount.toLocaleString()}件中 {rows.length === 0 ? 0 : page * pageSize + 1}〜{page * pageSize + rows.length}件を表示</span>
