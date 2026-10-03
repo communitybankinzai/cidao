@@ -21,6 +21,7 @@ export type AuditAction =
   | 'freefree.update'
   | 'freefree.comment'
   | 'freefree.like'
+  | 'freefree.import'
   | 'event.create'
   | 'proposal.create'
   | 'message.send'
