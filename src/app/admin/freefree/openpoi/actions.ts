@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { recordWrite } from '@/lib/audit'
 import { announceFreefreeToSns } from '@/lib/sns-announce'
@@ -753,6 +754,71 @@ export async function createSnsDrafts(
     }
     revalidatePath(PATH)
     return { ok: true, data: { items, usedToday, perDay } }
+  } catch (e) {
+    return { ok: false, error: errMsg(e) }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ピンの置き直し（地図をクリックして位置を直す）
+// ---------------------------------------------------------------------------
+// 住所から求めた座標は街区の代表点なので、実際のお店の位置とずれることがある。
+// 運営が地図で位置を指定する。候補の座標を直し、登録済みなら FreeFree 掲載の座標も直す。
+// ・直した候補は edited=true にして、OpenPOI の再取得で座標が戻らないようにする
+// ・掲載の更新は座標（lat/lon）だけ。取込で作った掲載（import_source あり）に限る
+//   （掲載の投稿者は団体なので、運営のセッションでは RLS で更新できない。管理者確認のあと service role で行う）
+
+export async function setCandidatePin(
+  id: string,
+  lat: number,
+  lon: number,
+): Promise<ActionResult<{ postUpdated: boolean }>> {
+  try {
+    const { supabase, userId } = await requireAdmin()
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { ok: false, error: '位置が正しくありません' }
+    if (!isNearInzai(lat, lon)) return { ok: false, error: '印西市周辺から遠い位置です。地図を確かめてください' }
+    const la = Math.round(lat * 1e6) / 1e6
+    const lo = Math.round(lon * 1e6) / 1e6
+
+    const { data: c, error: ce } = await supabase
+      .from('freefree_import_candidates')
+      .select('id, freefree_post_id, import_status')
+      .eq('id', id)
+      .maybeSingle()
+    if (ce) return { ok: false, error: errMsg(ce) }
+    if (!c) return { ok: false, error: '候補が見つかりません' }
+    if (c.import_status === 'publishing') return { ok: false, error: '登録処理中です。少し待ってからお試しください' }
+
+    let postUpdated = false
+    if (c.freefree_post_id) {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      if (!url || !key) return { ok: false, error: 'サーバーの設定が足りないため、掲載の位置を直せません' }
+      const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+      const { data: upd, error: pe } = await admin
+        .from('freefree_posts')
+        .update({ lat: la, lon: lo })
+        .eq('id', c.freefree_post_id)
+        .not('import_source', 'is', null)
+        .select('id')
+      if (pe) return { ok: false, error: errMsg(pe) }
+      postUpdated = (upd?.length ?? 0) > 0
+      if (!postUpdated) return { ok: false, error: '取込で作った掲載が見つかりませんでした（位置は変更していません）' }
+    }
+
+    const { error: ue } = await supabase
+      .from('freefree_import_candidates')
+      .update({ latitude: la, longitude: lo, edited: true })
+      .eq('id', id)
+    if (ue) return { ok: false, error: errMsg(ue) }
+
+    await recordWrite({
+      actorId: userId, action: 'freefree.import', targetType: 'freefree_import_candidate', targetId: id,
+      detail: { op: 'set_pin', lat: la, lon: lo, post: c.freefree_post_id ?? null }, isAdmin: true,
+    })
+    revalidatePath(PATH)
+    if (c.freefree_post_id) revalidatePath(`/freefree/${c.freefree_post_id}`)
+    return { ok: true, data: { postUpdated } }
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }

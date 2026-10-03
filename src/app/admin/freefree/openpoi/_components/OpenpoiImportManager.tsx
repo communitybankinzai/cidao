@@ -14,8 +14,9 @@ import {
   openpoiCategoryLabel,
   type CandidateEdits,
 } from '@/lib/freefree-import-core'
+import PinPicker from './PinPicker'
 import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
-import {
+import { setCandidatePin,
   dismissCandidateUpdate,
   addManualCandidate,
   createSnsDrafts,
@@ -692,6 +693,8 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
   const [reference, setReference] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [aiNote, setAiNote] = useState<string | null>(null)
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pinNote, setPinNote] = useState<string | null>(null)
   const locked = row.import_status === 'imported' || row.import_status === 'publishing'
 
   const draft = useMemo(() => buildPostDraft(row, edits), [row, edits])
@@ -715,6 +718,15 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
     if (!r.ok) { setError(r.error); return }
     set('description', r.data.text)
     setAiNote(r.data.risky.length > 0 ? `評価・推測にあたる言葉が含まれています（${r.data.risky.join('、')}）。書き直してください。` : 'AIの下書きです。事実と合っているか、必ず確認してから保存してください。')
+  }
+  function savePin(la: number, lo: number) {
+    setError(null); setPinNote(null)
+    startTransition(async () => {
+      const r = await setCandidatePin(row.id, la, lo)
+      if (!r.ok) { setError(r.error); return }
+      setPinNote(r.data.postUpdated ? 'ピンの位置を直しました（FreeFree掲載にも反映済み）。' : 'ピンの位置を直しました。登録するとこの位置が使われます。')
+      onSaved()
+    })
   }
   function dismiss() {
     startTransition(async () => {
@@ -804,6 +816,20 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
               ? <p className="text-xs text-slate-500">登録済みの候補は、ここでは編集できません。{row.freefree_post_id && <Link className="underline" href={`/freefree/${row.freefree_post_id}`} target="_blank">FreeFree掲載を開く ↗</Link>}</p>
               : <Button onClick={save} disabled={pending}>{pending ? '保存中…' : '修正内容を保存'}</Button>}
             <p className="text-[11px] text-slate-500">修正内容は OpenPOI の再取得で上書きされません。</p>
+
+            <div className="border-t pt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">📍 ピンの位置</h4>
+                <button type="button" className="text-xs underline" onClick={() => setPinOpen((v) => !v)}>{pinOpen ? '閉じる' : '地図で置き直す'}</button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {row.latitude != null && row.longitude != null ? `いま：${row.latitude.toFixed(6)}, ${row.longitude.toFixed(6)}` : '位置が未設定です'}
+                （住所から求めた位置は、街区の代表点のため実際の店とずれることがあります）
+              </p>
+              {pinNote && <p className="text-xs text-emerald-700">{pinNote}</p>}
+              {pinOpen && <PinPicker key={`${row.latitude}-${row.longitude}`} lat={row.latitude} lon={row.longitude} busy={pending} onSave={savePin} />}
+              {locked && <p className="text-[11px] text-slate-500">登録済みの掲載は、座標だけが直ります（本文などは変わりません）。</p>}
+            </div>
           </div>
 
           {/* プレビュー */}
