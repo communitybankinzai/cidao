@@ -57,6 +57,7 @@ export type CandidateRow = {
   duplicate_of_post_id: string | null
   duplicate_of_candidate_id: string | null
   freefree_post_id: string | null
+  post_status?: string | null   // 登録済みの掲載の状態（removed＝非公開）
   import_error: string | null
   edits: CandidateEdits | null
   edited: boolean
@@ -280,7 +281,7 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                       </td>
                       <td className="p-2 text-[11px] text-slate-500 whitespace-nowrap">{r.latitude?.toFixed(5)}<br />{r.longitude?.toFixed(5)}</td>
                       <td className="p-2 max-w-[12rem]"><DupBadge r={r} /></td>
-                      <td className="p-2"><Badge className={STATUS_CLASS[r.import_status]}>{STATUS_LABEL[r.import_status]}</Badge></td>
+                      <td className="p-2"><Badge className={STATUS_CLASS[r.import_status]}>{STATUS_LABEL[r.import_status]}</Badge>{r.import_status === 'imported' && r.post_status === 'removed' && <Badge className="bg-amber-100 text-amber-800 ml-1">掲載は非公開</Badge>}</td>
                       <td className="p-2 whitespace-nowrap space-x-1">
                         <Button size="sm" variant="outline" onClick={() => setDetail(r)}>詳細</Button>
                         {r.import_status === 'imported' && <Button size="sm" variant="outline" disabled={pending} onClick={() => snsDraft(r.id)}>SNS下書き</Button>}
@@ -755,6 +756,9 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">{normalizeDisplayText(row.name)}</h2>
+            {row.import_status === 'imported' && row.post_status === 'removed' && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 my-1">この掲載は非公開です。お店が自分で登録したため自動で非公開にしたか、運営が非公開にしました。戻すときは FreeFree の掲載の管理から行ってください。</p>
+            )}
             <p className="text-xs text-slate-500">{STATUS_LABEL[row.import_status]} ／ {row.source === 'manual' ? 'データ元：運営が手で追加' : `OpenPOI データ元：${row.openpoi_source ?? '不明'}`} ／ 最終確認：{new Date(row.last_seen_at).toLocaleString('ja-JP')}</p>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>✕ 閉じる</Button>

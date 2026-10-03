@@ -46,6 +46,14 @@ export default async function OpenpoiImportPage({ searchParams }: { searchParams
     .order('name')
     .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
 
+  // 登録済みの行は、掲載がいま公開されているかも見せる（お店が登録して自動で非公開になったものが分かるように）
+  const postIds = (rows ?? []).map((r) => r.freefree_post_id).filter((v): v is string => !!v)
+  const postStatus = new Map<string, string>()
+  if (postIds.length > 0) {
+    const { data: ps } = await supabase.from('freefree_posts').select('id, status').in('id', postIds)
+    for (const p of ps ?? []) postStatus.set(p.id, p.status)
+  }
+
   const tableMissing = !!error && /relation .*freefree_import|could not find the table|schema cache/i.test(error.message)
 
   // 件数サマリ（全体）
@@ -102,7 +110,7 @@ export default async function OpenpoiImportPage({ searchParams }: { searchParams
           <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-800 dark:text-red-200">読み込みに失敗しました: {error.message}</div>
         ) : (
           <OpenpoiImportManager
-            rows={(rows ?? []) as CandidateRow[]}
+            rows={((rows ?? []) as CandidateRow[]).map((r) => ({ ...r, post_status: r.freefree_post_id ? postStatus.get(r.freefree_post_id) ?? null : null }))}
             totalCount={count ?? 0}
             page={page}
             pageSize={PAGE_SIZE}

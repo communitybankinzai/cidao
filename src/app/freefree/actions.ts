@@ -17,6 +17,7 @@ import { canEditFreefreePost } from '@/lib/freefree-permissions'
 import { notifyAllMembers } from '@/lib/notify'
 import { announceFreefreeToSns, reannounceFreefreeAfterEdit } from '@/lib/sns-announce'
 import { recordWrite } from '@/lib/audit'
+import { hideSupersededImports } from '@/lib/freefree-import-supersede'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 
 type CouponInput = {
@@ -187,6 +188,14 @@ export async function createFreefreePost(input: CreateInput) {
         .join(' / ') || undefined,
       linkUrl: `/freefree/${data.id}`,
     })
+  })
+
+  // 運営が先に作った取込掲載（同じお店）があれば、自動で非公開にする。失敗しても掲載は成立する
+  after(async () => {
+    await hideSupersededImports(
+      { id: data.id, title: input.title, body: input.body, address: pin?.address ?? null, location: input.location ?? null, lat: pin?.lat ?? null, lon: pin?.lon ?? null, links: mergedLinks },
+      user.id,
+    )
   })
 
   // SNS 紹介を許可した掲載は、告知の下書きをすぐ作って運営にベル通知で知らせる（2026-09-15）。

@@ -2,7 +2,7 @@ import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
   mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, makeManualSourceId, IMPORT_NOTICE_MANUAL, gsiCreditLine, GSI_CARD_CREDIT, GSI_TILE_URL, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
-  normalizeInstagramUrl,
+  normalizeInstagramUrl, findSupersededImports,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -277,4 +277,20 @@ test('Instagram: 掲載のリンクに入る（編集に入れたときだけ）
   const d = buildPostDraft(c, { instagram: '@shop_x' })
   expect(d.links.map((l) => l.label)).toEqual(['公式サイト', 'Instagram'])
   expect(d.links[1].url).toBe('https://www.instagram.com/shop_x/')
+})
+
+test('お店が掲載したとき: 名称と住所が一致する取込掲載だけ自動で非公開の対象。位置が近いだけは記録のみ', () => {
+  const imported = [
+    { kind: 'post' as const, id: 'a', name: '木まぐれKopitiam', address: '千葉県印西市武西1205-49', lat: 35.7917, lon: 140.1047, phone: null, website: null },
+    { kind: 'post' as const, id: 'b', name: 'ほかのお店', address: '千葉県印西市中央南1-1', lat: 35.83, lon: 140.14, phone: null, website: null },
+  ]
+  const same = findSupersededImports({ title: '木まぐれKopitiam', location: '千葉県印西市武西1205-49' }, imported)
+  expect(same.hide.map((h) => h.id)).toEqual(['a'])
+  const other = findSupersededImports({ title: '全然ちがう店', location: '印西市大塚1-1' }, imported)
+  expect(other.hide).toEqual([])
+  expect(other.maybe).toEqual([])
+  const near = findSupersededImports({ title: '木まぐれKopitiam', location: '印西市武西', lat: 35.7920, lon: 140.1050 }, imported)
+  expect(near.hide).toEqual([])
+  expect(near.maybe.map((m) => m.id)).toEqual(['a'])
+  expect(findSupersededImports({ title: 'x' }, []).hide).toEqual([])
 })

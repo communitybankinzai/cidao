@@ -496,6 +496,43 @@ function namesOverlap(a: string[], b: string[]): boolean {
 }
 
 /** 既存の FreeFree 投稿（本文から電話番号を拾う）を重複判定の対象にする */
+/**
+ * お店が自分で掲載したとき、運営が先に作った取込掲載（同じお店）を探す。
+ * 「名称と住所が一致」「名称と電話番号が一致」のように、同じお店とほぼ言い切れるものだけを `hide`（自動で非公開）にする。
+ * 「名称＋位置が近い」「名称＋Webサイト」などの可能性は `maybe`（非公開にせず、記録だけ残す）。
+ */
+export type SupersedeInput = {
+  title: string
+  body?: string | null
+  address?: string | null
+  location?: string | null
+  lat?: number | null
+  lon?: number | null
+  links?: { url?: string }[] | null
+}
+export type SupersedeResult = { hide: { id: string; reason: string }[]; maybe: { id: string; reason: string }[] }
+
+export function findSupersededImports(post: SupersedeInput, imported: DedupRecord[]): SupersedeResult {
+  const out: SupersedeResult = { hide: [], maybe: [] }
+  if (imported.length === 0) return out
+  const q = postToDedupRecord({ id: 'new', ...post })
+  const index = new DedupIndex(imported)
+  // judge は最良の1件しか返さないので、1件ずつ外しながら繰り返す（同じお店の掲載が複数あっても全部拾う）
+  const rest = [...imported]
+  for (let i = 0; i < 5 && rest.length > 0; i++) {
+    const r = i === 0
+      ? index.judge({ name: q.name, address: q.address, lat: q.lat, lon: q.lon, phone: q.phone, website: q.website })
+      : new DedupIndex(rest).judge({ name: q.name, address: q.address, lat: q.lat, lon: q.lon, phone: q.phone, website: q.website })
+    if (r.status === 'none' || !r.matchId) break
+    const hit = { id: r.matchId, reason: r.reason ?? '' }
+    ;(r.status === 'duplicate' ? out.hide : out.maybe).push(hit)
+    const at = rest.findIndex((x) => x.id === r.matchId)
+    if (at < 0) break
+    rest.splice(at, 1)
+  }
+  return out
+}
+
 export function postToDedupRecord(p: {
   id: string
   title: string

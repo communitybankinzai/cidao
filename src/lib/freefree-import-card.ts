@@ -129,7 +129,7 @@ export async function renderImportCard(input: CardInput): Promise<Buffer | null>
       : null,
     h('div', { key: 'call', style: { display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: '20px', padding: '26px 34px' } },
       h('div', { style: { fontSize: '30px', color: YELLOW } }, callTitle),
-      h('div', { style: { fontSize: '40px', fontWeight: 700 } }, call1),
+      h('div', { style: { fontSize: '35px', fontWeight: 700 } }, call1),
       h('div', { style: { fontSize: '28px', opacity: 0.95 } }, call2)),
     h('div', { key: 'brand', style: { display: 'flex', fontSize: '26px', opacity: 0.8 } }, brand),
   ].filter(Boolean)
