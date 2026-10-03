@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
-  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, gsiCreditLine, GSI_CARD_CREDIT, GSI_TILE_URL, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
+  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, makeManualSourceId, IMPORT_NOTICE_MANUAL, gsiCreditLine, GSI_CARD_CREDIT, GSI_TILE_URL, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -235,4 +235,22 @@ test('地図の出典: 国土地理院・加工した旨・一覧ページへの
   expect(line).toContain(GSI_TILE_URL)
   expect(GSI_CARD_CREDIT).toContain('国土地理院')
   expect(GSI_CARD_CREDIT).toContain('加工')
+})
+
+test('手入力の候補: source_id は店名+住所で安定。同じ店は同じID', () => {
+  const a = makeManualSourceId('ＡＢＣ食堂', '千葉県印西市大塚１丁目３番')
+  expect(a).toBe(makeManualSourceId('abc食堂', '印西市大塚1-3'))
+  expect(a).not.toBe(makeManualSourceId('XYZ食堂', '印西市大塚1-3'))
+  expect(a.startsWith('manual-')).toBe(true)
+})
+
+test('手入力の候補: 本文は運営作成の定型文で、公開データ（OpenPOI）とは書かない', () => {
+  const c = { source: 'manual', name: 'ABC食堂', prefecture: '千葉県', city: '印西市', address: '印西市大塚1-3', openpoi_category: null, category: 'food', phone: null, website: null, opening_hours: null, description: null }
+  const d = buildPostDraft(c)
+  expect(d.body).toContain(IMPORT_NOTICE_MANUAL)
+  expect(d.body).not.toContain('OpenPOI')
+  expect(d.body).not.toContain('種別')
+  const o = buildPostDraft({ ...c, source: 'openpoi', openpoi_category: 'restaurant' })
+  expect(o.body).toContain('OpenPOI')
+  expect(o.body).toContain('種別')
 })

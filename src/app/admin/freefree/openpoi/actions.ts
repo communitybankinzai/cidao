@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { endOfDayJstIso, isValidEndDate, maxEndDate } from '@/lib/freefree-dates'
 import { recordWrite } from '@/lib/audit'
 import { resolveCityBbox, searchBbox } from '@/lib/openpoi'
+import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 import {
   DedupIndex,
   REGIONS,
@@ -27,6 +28,7 @@ import {
   bboxFromCenter,
   bboxWithinLimit,
   buildPostDraft,
+  makeManualSourceId,
   checkPublishable,
   collectByBbox,
   inTargetCity,
@@ -489,7 +491,7 @@ export async function publishCandidates(input: PublishInput): Promise<ActionResu
         sns_share: false,          // 取込施設を CBI 公式SNSの定期紹介に載せない
         sns_display_name: null,
         links: draft.links,
-        import_source: 'openpoi',
+        import_source: c.source === 'manual' ? 'manual' : 'openpoi',
         import_licenses: c.licenses ?? [],
         import_attributions: c.attributions ?? [],
         // 画像カードの地図に使う（メタバースのお店ピンは metaverse_pin のときだけ。下の pin）
@@ -591,5 +593,108 @@ export async function draftIntro(
     return { ok: true, data: { text, risky: findRiskyPhrases(text) } }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? `AIの呼び出しに失敗しました: ${e.message}` : 'AIの呼び出しに失敗しました' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 候補を手で追加（OpenPOI にないお店）
+// ---------------------------------------------------------------------------
+// 運営が、お店の名前・住所などを入れて候補にする。そのあとは取込と同じ流れ
+// （重複の確認 → 紹介文 → プレビュー → 登録）。住所があれば国土地理院の住所検索で座標にする。
+
+const CATEGORY_KEYS = ['food', 'retail', 'education', 'craft', 'living', 'startup', 'event', 'volunteer']
+const lastManual = new Map<string, number>()
+
+export type ManualCandidateInput = {
+  name: string
+  address?: string
+  category?: string
+  phone?: string
+  website?: string
+  openingHours?: string
+  description?: string
+}
+
+export async function addManualCandidate(
+  input: ManualCandidateInput,
+): Promise<ActionResult<{ id: string; duplicate: { status: string; reason: string | null }; located: boolean; locateNote: string | null }>> {
+  try {
+    const { supabase, userId } = await requireAdmin()
+    if (Date.now() - (lastManual.get(userId) ?? 0) < 1_000) return { ok: false, error: '連続で実行できません。少し待ってからもう一度お試しください' }
+    lastManual.set(userId, Date.now())
+
+    const name = normalizeDisplayText(String(input.name ?? ''))
+    if (name.length < 1 || Array.from(name).length > 60) return { ok: false, error: '店名は1〜60字で入力してください' }
+    const address = normalizeDisplayText(String(input.address ?? '')) || null
+    if (address && Array.from(address).length > 200) return { ok: false, error: '住所は200字までにしてください' }
+    const website = String(input.website ?? '').trim()
+    if (website && !/^https?:\/\//i.test(website)) return { ok: false, error: 'WebサイトのURLは http:// か https:// で始めてください' }
+    const category = String(input.category ?? '')
+    if (category && !CATEGORY_KEYS.includes(category)) return { ok: false, error: 'カテゴリーが正しくありません' }
+    const phone = String(input.phone ?? '').trim().slice(0, 40)
+    const hours = String(input.openingHours ?? '').trim().slice(0, 300)
+    const description = String(input.description ?? '').trim().slice(0, 500)
+    if (findRiskyPhrases(description).length > 0) {
+      return { ok: false, error: `紹介文に評価・推測にあたる言葉があります（${findRiskyPhrases(description).join('、')}）。口コミ・評価は書かない方針です` }
+    }
+
+    // 住所 → 座標（国土地理院の住所検索）。取れなくても候補は作る（運営があとで直せる）
+    let lat: number | null = null
+    let lon: number | null = null
+    let locateNote: string | null = null
+    if (address) {
+      const g = await geocodeAddress(address)
+      if (!g) locateNote = '住所から位置を特定できませんでした（座標なしで追加しました）'
+      else if (!isNearInzai(g.lat, g.lon)) locateNote = `住所が印西市から遠い場所（${g.title || '不明'}）と判定されたため、座標は保存しませんでした`
+      else { lat = g.lat; lon = g.lon }
+    }
+
+    // 重複の確認（FreeFree の掲載と、ほかの候補）
+    const records: DedupRecord[] = []
+    const cands = await loadAll<{ id: string; name: string; address: string | null; latitude: number | null; longitude: number | null; phone: string | null; website: string | null }>(
+      (from, to) => supabase.from('freefree_import_candidates').select('id, name, address, latitude, longitude, phone, website').neq('import_status', 'excluded').order('id').range(from, to),
+    )
+    for (const c of cands) records.push({ kind: 'candidate', id: c.id, name: c.name, address: c.address, lat: c.latitude, lon: c.longitude, phone: c.phone, website: c.website })
+    const posts = await loadAll<{ id: string; title: string; body: string | null; address: string | null; location: string | null; lat: number | null; lon: number | null; links: { url?: string }[] | null }>(
+      (from, to) => supabase.from('freefree_posts').select('id, title, body, address, location, lat, lon, links').neq('status', 'removed').order('id').range(from, to),
+    )
+    for (const p of posts) records.push(postToDedupRecord(p))
+    const dup = new DedupIndex(records).judge({ name, address, lat, lon, phone, website })
+
+    const { data, error } = await supabase
+      .from('freefree_import_candidates')
+      .insert({
+        source: 'manual',
+        source_id: makeManualSourceId(name, address),
+        region_key: 'manual',
+        name,
+        prefecture: '千葉県',
+        city: '印西市',
+        address,
+        latitude: lat,
+        longitude: lon,
+        phone: phone || null,
+        website: website || null,
+        opening_hours: hours || null,
+        description: description || null,
+        licenses: [],
+        attributions: [],
+        raw_data: { manual: true, added_by: userId },
+        category: category || null,
+        category_reason: category ? '運営が指定' : '未分類（運営が手で追加）',
+        import_status: 'candidate',
+        ...dupFields(dup),
+      })
+      .select('id')
+      .single()
+    if (error) {
+      if (/duplicate key|unique/i.test(error.message)) return { ok: false, error: '同じ店名・住所の候補がすでにあります' }
+      throw new Error(error.message)
+    }
+    await recordWrite({ actorId: userId, action: 'freefree.import', targetType: 'freefree_import', targetId: data.id, isAdmin: true, detail: { kind: 'manual_add', name } })
+    revalidatePath(PATH)
+    return { ok: true, data: { id: data.id, duplicate: { status: dup.status, reason: dup.reason }, located: lat !== null, locateNote } }
+  } catch (e) {
+    return { ok: false, error: errMsg(e) }
   }
 }
