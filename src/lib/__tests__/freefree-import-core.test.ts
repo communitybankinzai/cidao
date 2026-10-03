@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
-  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId,
+  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -154,4 +154,22 @@ test('登録可否: 重複・未分類・登録済み・除外は止める', () 
   assert.equal(checkPublishable({ ...ok, duplicate_status: 'possible' }, draft).ok, false)
   assert.equal(checkPublishable({ ...ok, duplicate_status: 'possible' }, draft, { confirmPossible: true }).ok, true)
   assert.equal(checkPublishable(ok, { ...draft, category: null }).ok, false)
+})
+
+test('表示用の正規化: 全角の英数字・ハイフンを半角に。店名の長音は残す', () => {
+  expect(normalizeDisplayText('千葉県印西市武西１２０５－４９')).toBe('千葉県印西市武西1205-49')
+  expect(normalizeDisplayText('印西市大森２５３５ー１')).toBe('印西市大森2535-1')
+  expect(normalizeDisplayText('木まぐれＫｏｐｉｔｉａｍ')).toBe('木まぐれKopitiam')
+  expect(normalizeDisplayText('コーヒー　ショップ')).toBe('コーヒー ショップ')
+  expect(normalizeDisplayText('ﾗｰﾒﾝ太郎')).toBe('ラーメン太郎')
+})
+
+test('投稿内容: OpenPOI由来の全角は半角にそろえ、運営の編集は変えない', () => {
+  const c = { name: 'ＡＢＣ食堂', prefecture: '千葉県', city: '印西市', address: '千葉県印西市武西１２０５－４９', openpoi_category: 'restaurant', category: 'food', phone: null, website: null, opening_hours: null, description: null }
+  const d = buildPostDraft(c)
+  expect(d.title).toBe('ABC食堂')
+  expect(d.address).toBe('千葉県印西市武西1205-49')
+  expect(d.body).toContain('武西1205-49')
+  expect(d.location).toBe('千葉県印西市武西1205-49')
+  expect(buildPostDraft(c, { address: '武西１２０５' }).address).toBe('武西１２０５')
 })
