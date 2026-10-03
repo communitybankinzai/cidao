@@ -51,18 +51,25 @@ export default async function OpenpoiImportPage({ searchParams }: { searchParams
   // 件数サマリ（全体）
   const stats: Stats = { total: 0, candidate: 0, imported: 0, excluded: 0, failed: 0, publishing: 0, duplicate: 0, possible: 0, uncategorized: 0, updates: 0 }
   if (!error) {
-    const { data: all } = await supabase.from('freefree_import_candidates').select('import_status, duplicate_status, category, update_available').limit(20000)
-    for (const r of all ?? []) {
-      stats.total++
-      const st = r.import_status as keyof Stats
-      if (st in stats) (stats[st] as number)++
-      if (r.import_status === 'candidate') {
-        if (r.duplicate_status === 'duplicate') stats.duplicate++
-        if (r.duplicate_status === 'possible') stats.possible++
-        if (!r.category) stats.uncategorized++
-      }
-      if (r.update_available) stats.updates++
+    // PostgREST は1回の取得を1000行までに制限するため、行を取って数えず件数だけを問い合わせる
+    const count = async (apply: (q: ReturnType<typeof base>) => ReturnType<typeof base>) => {
+      const { count: n } = await apply(base())
+      return n ?? 0
     }
+    const base = () => supabase.from('freefree_import_candidates').select('id', { count: 'exact', head: true })
+    const [candidate, imported, excluded, failed, publishing, duplicate, possible, uncategorized, updates] = await Promise.all([
+      count((q) => q.eq('import_status', 'candidate')),
+      count((q) => q.eq('import_status', 'imported')),
+      count((q) => q.eq('import_status', 'excluded')),
+      count((q) => q.eq('import_status', 'failed')),
+      count((q) => q.eq('import_status', 'publishing')),
+      count((q) => q.eq('import_status', 'candidate').eq('duplicate_status', 'duplicate')),
+      count((q) => q.eq('import_status', 'candidate').eq('duplicate_status', 'possible')),
+      count((q) => q.eq('import_status', 'candidate').is('category', null)),
+      count((q) => q.eq('update_available', true)),
+    ])
+    Object.assign(stats, { candidate, imported, excluded, failed, publishing, duplicate, possible, uncategorized, updates })
+    stats.total = candidate + imported + excluded + failed + publishing
   }
 
   const { data: runs } = await supabase
