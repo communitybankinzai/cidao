@@ -173,3 +173,13 @@ test('投稿内容: OpenPOI由来の全角は半角にそろえ、運営の編�
   expect(d.location).toBe('千葉県印西市武西1205-49')
   expect(buildPostDraft(c, { address: '武西１２０５' }).address).toBe('武西１２０５')
 })
+
+test('投稿内容: 紹介文・営業時間を入れると本文に入る（紹介文が先頭）', () => {
+  const c = { name: 'ABC食堂', prefecture: '千葉県', city: '印西市', address: '印西市大塚1-3', openpoi_category: 'restaurant', category: 'food', phone: null, website: null, opening_hours: null, description: null }
+  const d = buildPostDraft(c, { description: 'マレーシア料理のお店です。', opening_hours: '11:00〜20:00（月曜定休）' })
+  expect(d.body.startsWith('マレーシア料理のお店です。')).toBe(true)
+  expect(d.body).toContain('🕐 営業時間：11:00〜20:00（月曜定休）')
+  expect(buildPostDraft(c).body).not.toContain('🕐')
+  expect(buildPostDraft({ ...c, description: 'DB由来の説明' }).body.startsWith('DB由来の説明')).toBe(true)
+  expect(buildPostDraft(c, { description: '', body: '手書き本文' }).body).toBe('手書き本文')
+})
