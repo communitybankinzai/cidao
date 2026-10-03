@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { pathsInBucket } from '@/lib/storage-path'
+import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
 
 const FREEFREE_BUCKET = 'freefree-images'
 const EVIDENCE_BUCKET = 'moderation-evidence'
@@ -134,6 +135,9 @@ export async function hideFreefreePost(postId: string, note: string) {
     })
     .eq('id', postId)
   if (error) throw new Error(`非公開にできませんでした: ${error.message}`)
+
+  // SNS に出た紹介投稿の削除待ちは DB トリガーが作る。運営へ知らせる（失敗しても非公開は成立させる）
+  await notifyPendingSnsTakedowns()
 
   revalidateAll(postId)
 }
@@ -322,6 +326,9 @@ export async function deleteFreefreePost(postId: string) {
 
   const { error } = await supabase.from('freefree_posts').delete().eq('id', postId)
   if (error) throw new Error(`削除できませんでした: ${error.message}`)
+
+  // SNS に出た紹介投稿の削除待ちは DB トリガーが作る。運営へ知らせる（失敗しても削除は成立させる）
+  await notifyPendingSnsTakedowns()
 
   // sns_rotation に行が残るが、pick_next_sns_targets() は freefree_posts を
   // join しているため候補には出てこない。放置で問題ない。

@@ -8,6 +8,7 @@
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { recordWrite } from '@/lib/audit'
+import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
 import { findSupersededImports, postToDedupRecord, type SupersedeInput } from '@/lib/freefree-import-core'
 
 export async function hideSupersededImports(
@@ -38,7 +39,11 @@ export async function hideSupersededImports(
         .in('id', ids)
         .not('import_source', 'is', null)
         .select('id')
-      if (!ue) out.hidden = (done ?? []).map((d) => d.id)
+      if (!ue) {
+        out.hidden = (done ?? []).map((d) => d.id)
+        // 非公開にした取込掲載から SNS に出た投稿があれば、削除待ち（DBトリガー作成）を運営へ知らせる
+        if (out.hidden.length > 0) await notifyPendingSnsTakedowns()
+      }
     }
     out.maybe = r.maybe.map((m) => m.id)
 
