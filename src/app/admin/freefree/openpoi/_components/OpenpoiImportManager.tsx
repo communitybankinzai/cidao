@@ -9,6 +9,7 @@ import { jstToday, maxEndDate } from '@/lib/freefree-dates'
 import {
   buildPostDraft,
   checkPublishable,
+  findRiskyPhrases,
   normalizeDisplayText,
   openpoiCategoryLabel,
   type CandidateEdits,
@@ -16,6 +17,7 @@ import {
 import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
 import {
   dismissCandidateUpdate,
+  draftIntro,
   publishCandidates,
   runOpenpoiFetch,
   saveCandidateEdits,
@@ -610,6 +612,9 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
   const [edits, setEdits] = useState<CandidateEdits>(row.edits ?? {})
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [reference, setReference] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiNote, setAiNote] = useState<string | null>(null)
   const locked = row.import_status === 'imported' || row.import_status === 'publishing'
 
   const draft = useMemo(() => buildPostDraft(row, edits), [row, edits])
@@ -625,6 +630,14 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
       if (!r.ok) { setError(r.error); return }
       onSaved()
     })
+  }
+  async function makeDraft() {
+    setError(null); setAiNote(null); setAiBusy(true)
+    const r = await draftIntro(row.id, reference)
+    setAiBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    set('description', r.data.text)
+    setAiNote(r.data.risky.length > 0 ? `評価・推測にあたる言葉が含まれています（${r.data.risky.join('、')}）。書き直してください。` : 'AIの下書きです。事実と合っているか、必ず確認してから保存してください。')
   }
   function dismiss() {
     startTransition(async () => {
@@ -683,9 +696,26 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
               <label className="block text-xs text-slate-500">電話番号<input className={input} disabled={locked} value={fieldVal('phone')} onChange={(e) => set('phone', e.target.value)} placeholder="OpenPOIには電話情報がありません" /></label>
               <label className="block text-xs text-slate-500">営業時間<input className={input} disabled={locked} value={fieldVal('opening_hours')} onChange={(e) => set('opening_hours', e.target.value)} /></label>
             </div>
-            <label className="block text-xs text-slate-500">紹介文（500字まで・本文の先頭に入ります。確認できた事実だけを書いてください）
-              <textarea className={input} rows={3} maxLength={500} disabled={locked} value={edits.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder="例：マレーシア料理のお店です。" />
-            </label>
+            <div className="space-y-2 rounded border border-slate-200 dark:border-slate-700 p-3">
+              <label className="block text-xs text-slate-500">紹介文（500字まで・本文の先頭に入ります。確認できた事実だけを書いてください）
+                <textarea className={input} rows={4} maxLength={500} disabled={locked} value={edits.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder="例：武西にある飲食店です。" />
+              </label>
+              {findRiskyPhrases(edits.description ?? '').length > 0 && (
+                <p className="text-xs text-red-700">⚠ 評価・推測にあたる言葉があります：{findRiskyPhrases(edits.description ?? '').join('、')}。口コミ・評価は書かない方針です。</p>
+              )}
+              {!locked && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-slate-600">✨ AIで下書きを作る</summary>
+                  <div className="mt-2 space-y-2">
+                    <label className="block text-slate-500">参考テキスト（任意）：お店自身の公式サイト・公式SNSの文章を貼る（口コミサイトの文章は貼らない）
+                      <textarea className={input} rows={4} maxLength={8000} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="貼らなければ、公開データ（店名・種別・所在地）だけの短い紹介文になります" />
+                    </label>
+                    <Button type="button" size="sm" variant="outline" disabled={aiBusy} onClick={makeDraft}>{aiBusy ? '作成中…' : '下書きを作る（上の紹介文を置き換えます）'}</Button>
+                    {aiNote && <p className="text-amber-800">{aiNote}</p>}
+                  </div>
+                </details>
+              )}
+            </div>
             <label className="block text-xs text-slate-500">WebサイトURL<input className={input} disabled={locked} value={fieldVal('website')} onChange={(e) => set('website', e.target.value)} placeholder="https://" /></label>
             <label className="block text-xs text-slate-500">
               本文（1000字まで）{edits.body === undefined && <span className="text-sky-700">　営業時間・紹介文などの入力欄は、自動で本文に入ります</span>}{edits.body !== undefined && <span className="text-amber-700">　本文を直接編集中のため、上の入力欄は本文に反映されません</span>}

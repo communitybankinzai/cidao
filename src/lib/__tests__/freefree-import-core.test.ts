@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
-  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText,
+  mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, areaFromAddress, buildIntroPrompt, sanitizeIntro,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -182,4 +182,39 @@ test('投稿内容: 紹介文・営業時間を入れると本文に入る（紹
   expect(buildPostDraft(c).body).not.toContain('🕐')
   expect(buildPostDraft({ ...c, description: 'DB由来の説明' }).body.startsWith('DB由来の説明')).toBe(true)
   expect(buildPostDraft(c, { description: '', body: '手書き本文' }).body).toBe('手書き本文')
+})
+
+test('紹介文: 評価・推測の言葉を見つける（全角半角・大小は吸収）', () => {
+  expect(findRiskyPhrases('武西にある飲食店です。')).toEqual([])
+  expect(findRiskyPhrases('地元で人気の老舗です。おいしい料理がリーズナブル。').sort()).toEqual(['人気', 'おいしい', 'リーズナブル', '老舗'].sort())
+  expect(findRiskyPhrases('ＮＯ．１の店')).toEqual(['No.1'])
+  expect(findRiskyPhrases('no.1です')).toEqual(['No.1'])
+})
+
+test('紹介文: 住所から町名を取り出す', () => {
+  expect(areaFromAddress('千葉県印西市武西１２０５－４９', '印西市')).toBe('武西')
+  expect(areaFromAddress('印西市大塚1-3', '印西市')).toBe('大塚')
+  expect(areaFromAddress('', '印西市')).toBe(null)
+  expect(areaFromAddress('印西市', '印西市')).toBe(null)
+})
+
+test('紹介文: 指示に事実・禁止事項・参考テキストが入る', () => {
+  const facts = { name: 'ABC食堂', kind: '飲食店', prefecture: '千葉県', city: '印西市', area: '武西', address: '千葉県印西市武西1205-49' }
+  const a = buildIntroPrompt(facts, '')
+  expect(a.system).toContain('口コミ')
+  expect(a.system).toContain('推測')
+  expect(a.user).toContain('店名：ABC食堂')
+  expect(a.user).toContain('千葉県印西市武西')
+  expect(a.user).toContain('参考テキスト】なし')
+  const b = buildIntroPrompt(facts, '11時から20時まで営業しています。')
+  expect(b.user).toContain('11時から20時まで営業しています。')
+  expect(b.user).not.toContain('参考テキスト】なし')
+  expect(buildIntroPrompt(facts, 'あ'.repeat(9000)).user.length).toBeLessThan(5000)
+})
+
+test('紹介文: AIの返答を整える', () => {
+  expect(sanitizeIntro('  「武西にある飲食店です。」\n')).toBe('武西にある飲食店です。')
+  expect(sanitizeIntro('紹介文：武西にある店です。')).toBe('武西にある店です。')
+  expect(sanitizeIntro('   ')).toBe(null)
+  expect(Array.from(sanitizeIntro('あ'.repeat(800))!).length).toBe(500)
 })
