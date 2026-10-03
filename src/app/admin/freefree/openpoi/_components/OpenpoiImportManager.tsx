@@ -9,6 +9,7 @@ import { jstToday, maxEndDate } from '@/lib/freefree-dates'
 import {
   buildPostDraft,
   checkPublishable,
+  normalizeDisplayText,
   openpoiCategoryLabel,
   type CandidateEdits,
 } from '@/lib/freefree-import-core'
@@ -249,8 +250,8 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                     <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800 align-top">
                       <td className="p-2"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r)} disabled={!selectable} aria-label={`${r.name}を選択`} /></td>
                       <td className="p-2 max-w-xs">
-                        <div className="font-medium">{r.edits?.title || r.name}{r.edited && <span className="ml-1 text-[11px] text-sky-700">編集済み</span>}</div>
-                        <div className="text-xs text-slate-500">{r.address || [r.prefecture, r.city].filter(Boolean).join('')}</div>
+                        <div className="font-medium">{r.edits?.title || normalizeDisplayText(r.name)}{r.edited && <span className="ml-1 text-[11px] text-sky-700">編集済み</span>}</div>
+                        <div className="text-xs text-slate-500">{normalizeDisplayText(r.address ?? '') || [r.prefecture, r.city].filter(Boolean).join('')}</div>
                         {r.update_available && <Badge className="bg-sky-100 text-sky-800 mt-1">OpenPOI側に更新あり</Badge>}
                       </td>
                       <td className="p-2"><CategoryCell r={r} /></td>
@@ -284,8 +285,8 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                   <div className="flex items-start gap-2">
                     <input type="checkbox" className="mt-1" checked={selected.has(r.id)} onChange={() => toggle(r)} disabled={!selectable} aria-label={`${r.name}を選択`} />
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium break-words">{r.edits?.title || r.name}</div>
-                      <div className="text-xs text-slate-500 break-words">{r.address || [r.prefecture, r.city].filter(Boolean).join('')}</div>
+                      <div className="font-medium break-words">{r.edits?.title || normalizeDisplayText(r.name)}</div>
+                      <div className="text-xs text-slate-500 break-words">{normalizeDisplayText(r.address ?? '') || [r.prefecture, r.city].filter(Boolean).join('')}</div>
                     </div>
                     <Badge className={STATUS_CLASS[r.import_status]}>{STATUS_LABEL[r.import_status]}</Badge>
                   </div>
@@ -614,7 +615,8 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
   const draft = useMemo(() => buildPostDraft(row, edits), [row, edits])
   const generated = useMemo(() => buildPostDraft(row, { ...edits, body: undefined }).body, [row, edits])
   const set = (k: keyof CandidateEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }))
-  const fieldVal = (k: 'address' | 'phone' | 'website' | 'opening_hours') => edits[k] ?? row[k] ?? ''
+  const fieldVal = (k: 'address' | 'phone' | 'website' | 'opening_hours') =>
+    edits[k] ?? (k === 'address' ? normalizeDisplayText(row.address ?? '') : (row[k] ?? ''))
 
   function save() {
     setError(null)
@@ -637,7 +639,7 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
       <div className="bg-slate-50 dark:bg-slate-950 rounded-xl w-full max-w-5xl p-4 md:p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold">{row.name}</h2>
+            <h2 className="text-lg font-bold">{normalizeDisplayText(row.name)}</h2>
             <p className="text-xs text-slate-500">{STATUS_LABEL[row.import_status]} ／ OpenPOI データ元：{row.openpoi_source ?? '不明'} ／ 最終確認：{new Date(row.last_seen_at).toLocaleString('ja-JP')}</p>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>✕ 閉じる</Button>
@@ -667,7 +669,7 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
           <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-4">
             <h3 className="text-sm font-semibold">掲載内容を修正</h3>
             <label className="block text-xs text-slate-500">タイトル（40字まで）
-              <input className={input} maxLength={40} disabled={locked} value={edits.title ?? ''} placeholder={row.name} onChange={(e) => set('title', e.target.value)} />
+              <input className={input} maxLength={40} disabled={locked} value={edits.title ?? ''} placeholder={normalizeDisplayText(row.name)} onChange={(e) => set('title', e.target.value)} />
             </label>
             <label className="block text-xs text-slate-500">カテゴリー {!draft.category && <span className="text-orange-700">（未分類：選択が必要です）</span>}
               <select className={input} disabled={locked} value={edits.category ?? row.category ?? ''} onChange={(e) => set('category', e.target.value)}>
