@@ -19,10 +19,11 @@ export default function OpenpoiAttribution({ licenses, attributions }: { license
         <span className="mx-1">·</span>
         公開データを OpenPOI API が加工し、CBI が名称・住所等を整えて掲載しています。
       </p>
+      <p>この掲載は、公開データをもとに運営が作成しました。口コミ・評価は掲載していません。</p>
       <p>
-        店舗の方へ：この掲載の訂正・削除、またはご自身での掲載をご希望の場合は、
+        店舗の方へ：掲載写真とPR文をご提供ください。CiDAOに登録（無料）のうえ、ご自身で掲載を登録できます。訂正・削除のご希望は
         <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載について')}`} className="text-sky-700 dark:text-sky-400 hover:underline">{CONTACT_EMAIL}</a>
-        （CBI）までご連絡ください。
+        （CBI）まで。
       </p>
       {(lic.length > 0 || att.length > 0) && (
         <details>

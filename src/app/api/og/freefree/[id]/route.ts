@@ -8,11 +8,20 @@
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
+import { freefreeCategoryLabel } from '@/lib/freefree-categories'
+import { areaLabelFromLocation } from '@/lib/freefree-import-core'
+import { renderImportCard } from '@/lib/freefree-import-card'
 
 export const runtime = 'nodejs'
 
 const W = 1080
 const H = 1350
+
+// カテゴリーの色（取込掲載の画像カードで使う）
+const ACCENT: Record<string, string> = {
+  food: '#e8833a', retail: '#d6567a', education: '#3a7be8', craft: '#8a6d3b',
+  living: '#3a9b7a', startup: '#7a5ad6', event: '#d6a21e', volunteer: '#d65a5a',
+}
 
 export async function GET(
   _request: Request,
@@ -22,10 +31,34 @@ export async function GET(
   const supabase = await createClient()
   const { data: post } = await supabase
     .from('freefree_posts')
-    .select('images, status')
+    .select('images, status, title, category, location, lat, lon, import_source')
     .eq('id', id)
     .maybeSingle()
   const src = post?.status === 'active' ? (post.images as string[] | null)?.[0] : undefined
+
+  // 取込掲載（OpenPOI由来）で写真が無いときは、店名・エリア・地図のカードで代用する。
+  // お店の写真は無断で使わない。お店から写真が届いて images に入れば、上の写真の変換に切り替わる
+  if (!src && post?.status === 'active' && post.import_source === 'openpoi') {
+    try {
+      const cat = String(post.category)
+      const jpeg = await renderImportCard({
+        name: String(post.title),
+        categoryLabel: freefreeCategoryLabel(cat).replace(/^\S+\s/, ''), // 先頭の絵文字を除く
+        accent: ACCENT[cat] ?? '#5b6b8c',
+        area: areaLabelFromLocation(post.location as string | null),
+        lat: typeof post.lat === 'number' ? post.lat : null,
+        lon: typeof post.lon === 'number' ? post.lon : null,
+      })
+      if (!jpeg) return NextResponse.json({ error: 'font fetch failed' }, { status: 503 })
+      return new NextResponse(new Uint8Array(jpeg), {
+        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300, s-maxage=3600' },
+      })
+    } catch (e) {
+      console.error('[og/freefree] import card failed:', e instanceof Error ? e.message : e)
+      return NextResponse.json({ error: 'image generation failed' }, { status: 500 })
+    }
+  }
+
   if (!src) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   // 任意の URL を読ませないよう、自サイトのストレージ（公開バケット）の画像に限る

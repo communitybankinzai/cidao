@@ -492,6 +492,9 @@ export async function publishCandidates(input: PublishInput): Promise<ActionResu
         import_source: 'openpoi',
         import_licenses: c.licenses ?? [],
         import_attributions: c.attributions ?? [],
+        // 画像カードの地図に使う（メタバースのお店ピンは metaverse_pin のときだけ。下の pin）
+        lat: c.latitude ?? null,
+        lon: c.longitude ?? null,
         ...pin,
       }).select('id').single()
 
