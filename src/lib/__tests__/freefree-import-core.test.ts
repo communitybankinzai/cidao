@@ -2,6 +2,7 @@ import { test, expect } from 'vitest'
 import {
   addressKey, nameKeys, normalizePhone, websiteHost, DedupIndex, postToDedupRecord, toCandidateDraft,
   mapCategory, collectByBbox, buildPostDraft, checkPublishable, inTargetCity, makeSourceId, normalizeDisplayText, findRiskyPhrases, makeManualSourceId, IMPORT_NOTICE_MANUAL, gsiCreditLine, GSI_CARD_CREDIT, GSI_TILE_URL, areaLabelFromLocation, areaFromAddress, buildIntroPrompt, sanitizeIntro,
+  normalizeInstagramUrl,
   bboxFromCenter, bboxWithinLimit, isValidBbox, IMPORT_NOTICE, SEARCH_LIMIT,
   type OpenpoiFacility, type Bbox,
 } from '../freefree-import-core'
@@ -253,4 +254,27 @@ test('手入力の候補: 本文は運営作成の定型文で、公開データ
   const o = buildPostDraft({ ...c, source: 'openpoi', openpoi_category: 'restaurant' })
   expect(o.body).toContain('OpenPOI')
   expect(o.body).toContain('種別')
+})
+
+test('Instagram: アカウント名・URLをアカウントのURLにそろえる。投稿URLやおかしな値は null', () => {
+  const want = 'https://www.instagram.com/kimagure_kopitiam/'
+  expect(normalizeInstagramUrl('@kimagure_kopitiam')).toBe(want)
+  expect(normalizeInstagramUrl('kimagure_kopitiam')).toBe(want)
+  expect(normalizeInstagramUrl('＠kimagure_kopitiam')).toBe(want)
+  expect(normalizeInstagramUrl('instagram.com/kimagure_kopitiam')).toBe(want)
+  expect(normalizeInstagramUrl('https://www.instagram.com/kimagure_kopitiam/?igsh=abc')).toBe(want)
+  expect(normalizeInstagramUrl('https://www.instagram.com/p/ABC123/')).toBeNull()
+  expect(normalizeInstagramUrl('https://www.instagram.com/reel/ABC123/')).toBeNull()
+  expect(normalizeInstagramUrl('https://example.com/kimagure')).toBeNull()
+  expect(normalizeInstagramUrl('..bad')).toBeNull()
+  expect(normalizeInstagramUrl('名前')).toBeNull()
+  expect(normalizeInstagramUrl('')).toBeNull()
+})
+
+test('Instagram: 掲載のリンクに入る（編集に入れたときだけ）', () => {
+  const c = { name: 'テスト店', source: 'openpoi', openpoi_category: null, address: '印西市武西1', prefecture: '千葉県', city: '印西市', phone: null, website: 'https://example.com', opening_hours: null, description: null, category: 'food' } as never
+  expect(buildPostDraft(c, {}).links.map((l) => l.label)).toEqual(['公式サイト'])
+  const d = buildPostDraft(c, { instagram: '@shop_x' })
+  expect(d.links.map((l) => l.label)).toEqual(['公式サイト', 'Instagram'])
+  expect(d.links[1].url).toBe('https://www.instagram.com/shop_x/')
 })

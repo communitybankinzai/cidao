@@ -638,6 +638,7 @@ export type CandidateEdits = Partial<{
   website: string
   opening_hours: string
   description: string   // 紹介文（本文の先頭に入る）
+  instagram: string     // お店の Instagram（正規化した URL。掲載のリンクに出る）
 }>
 
 export type PostDraft = {
@@ -674,6 +675,26 @@ export function normalizeDisplayText(raw: string): string {
     .trim()
 }
 
+export const INSTAGRAM_LINK_LABEL = 'Instagram'
+const IG_RESERVED = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct', 'about', 'legal', 'developer', 'web'])
+
+/**
+ * Instagram のアカウントを URL にそろえる。「@name」「name」「instagram.com/name」「https://www.instagram.com/name/?igsh=…」を受ける。
+ * 投稿・リールの URL やアカウント以外のページは null（アカウントのリンクとしては使えない）。
+ */
+export function normalizeInstagramUrl(raw: string): string | null {
+  let t = raw.normalize('NFKC').trim()
+  if (!t) return null
+  t = t.replace(/^https?:\/\//i, '')
+  const onInstagram = /^(www\.|m\.)?instagram\.com\//i.test(t)
+  if (!onInstagram && (t.includes('/') || t !== raw.normalize('NFKC').trim())) return null  // 他のサイトの URL
+  t = t.replace(/^(www\.|m\.)?instagram\.com\//i, '').replace(/^@/, '')
+  t = t.split(/[/?#]/)[0] ?? ''
+  if (!/^[A-Za-z0-9._]{1,30}$/.test(t) || IG_RESERVED.has(t.toLowerCase())) return null
+  if (/^\.|\.$|\.\./.test(t)) return null
+  return `https://www.instagram.com/${t}/`
+}
+
 /** 運営の編集(edits)を最優先に、OpenPOI由来の値から投稿内容を組み立てる */
 export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}): PostDraft {
   // 運営が打った内容はそのまま、OpenPOI由来の値は表示用にそろえる
@@ -707,6 +728,8 @@ export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}):
 
   const links: { label: string; url: string }[] = []
   if (/^https?:\/\//i.test(website)) links.push({ label: '公式サイト', url: website })
+  const ig = edits.instagram ? normalizeInstagramUrl(edits.instagram) : null
+  if (ig) links.push({ label: INSTAGRAM_LINK_LABEL, url: ig })
 
   return { title, body, category, location: place ? clip(place, 80) : null, address, links }
 }

@@ -132,7 +132,7 @@ export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): 
   const intro = introOfBody(target.body)
   const credit = target.has_map ? `\n${gsiCreditLine()}` : ''
   const prefix = '【印西のお店・施設📍】'
-  const ask = 'お店の方へ：写真とPR文をご提供ください。CiDAOに登録（無料）して、ご自身で掲載できます。'
+  const ask = 'お店の方へ：写真・PR文・クーポンを、ご自身で載せられます。CiDAOに登録（無料）してください。'
   const made = '公開データをもとに、運営が掲載ページを作りました。'
 
   if (medium === 'x') {

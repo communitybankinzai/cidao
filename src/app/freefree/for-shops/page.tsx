@@ -19,11 +19,21 @@ const STEPS = [
   { n: '3', title: '公開', body: '掲載終了日（最長3か月先）を選んで公開します。期間を過ぎたら、いつでも再掲載できます。' },
 ]
 
+// 「登録するといいこと」。実在する機能と、いまの掲載との違いだけを書く。集客などの効果は約束しない。
+const BENEFITS = [
+  { title: 'お店の魅力を、ご自身の言葉と写真で伝えられる', body: '運営が作った掲載は、名前・住所・種別などの基本情報だけです。ご自身で登録すると、写真（最大3枚）とPR文で、こだわりや雰囲気を載せられます。' },
+  { title: '見た人を、お店の窓口へつなげられる', body: 'ホームページ・Instagram・予約やオンラインショップへのリンクを、掲載ページに並べられます。' },
+  { title: 'クーポンで、来店のきっかけを作れる', body: '掲載にクーポンを付けられます。使われた回数も見られます。' },
+  { title: '営業時間や臨時休業を、すぐ直せる', body: '変わった情報は、ご自身でいつでも書き換えられます。運営に連絡して待つ必要はありません。' },
+  { title: '3D地図「メタバース印西」にお店のピンが立つ', body: '住所を入れて希望すると、印西の3D地図の上にお店が出ます。' },
+  { title: 'CBI公式SNSで紹介されることがある', body: '紹介を許可した掲載は、運営が内容を確認したうえで、公式SNSで紹介する場合があります。紹介をお約束するものではありません。' },
+]
+
 const FEATURES = [
-  '写真（最大3枚）とPR文を、ご自身の言葉で載せられます',
-  'ホームページ・オンラインショップ・SNSへのリンクを付けられます',
-  'クーポンを付けられます',
-  '住所を入れると、3D地図「メタバース印西」にお店のピンを出せます',
+  '写真（最大3枚）とPR文を載せる',
+  'ホームページ・オンラインショップ・SNSへのリンクを付ける',
+  'クーポンを付ける',
+  '住所を入れて、3D地図「メタバース印西」にお店のピンを出す',
 ]
 
 export default function ForShopsPage() {
@@ -40,6 +50,22 @@ export default function ForShopsPage() {
             <strong>無料で掲載できます。</strong>写真とPR文は、ご自身で登録できます。
           </p>
         </header>
+
+        <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-4">
+          <h2 className="text-lg font-semibold">登録すると、こうなります</h2>
+          <ul className="space-y-3">
+            {BENEFITS.map((b) => (
+              <li key={b.title} className="flex gap-3">
+                <span className="shrink-0 text-emerald-600" aria-hidden="true">✓</span>
+                <div>
+                  <p className="font-medium">{b.title}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{b.body}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm font-medium">登録も掲載も、無料です。</p>
+        </section>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-4">
           <h2 className="text-lg font-semibold">掲載までの3ステップ</h2>
@@ -61,7 +87,7 @@ export default function ForShopsPage() {
         </section>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
-          <h2 className="text-lg font-semibold">できること</h2>
+          <h2 className="text-lg font-semibold">掲載フォームでできること</h2>
           <ul className="list-disc pl-5 space-y-1 text-sm text-slate-700 dark:text-slate-300">
             {FEATURES.map((f) => <li key={f}>{f}</li>)}
           </ul>

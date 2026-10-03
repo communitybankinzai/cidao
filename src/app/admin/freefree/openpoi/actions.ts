@@ -26,6 +26,8 @@ import {
   buildIntroPrompt,
   findRiskyPhrases,
   normalizeDisplayText,
+  normalizeInstagramUrl,
+  INSTAGRAM_LINK_LABEL,
   openpoiCategoryLabel,
   sanitizeIntro,
   bboxFromCenter,
@@ -355,7 +357,7 @@ function dupFields(r: DedupResult) {
 // ---------------------------------------------------------------------------
 
 const EDIT_LIMITS: Record<keyof CandidateEdits, number> = {
-  title: 40, body: 1000, category: 30, address: 200, phone: 40, website: 300, opening_hours: 300, description: 500,
+  title: 40, body: 1000, category: 30, address: 200, phone: 40, website: 300, opening_hours: 300, description: 500, instagram: 200,
 }
 
 export async function saveCandidateEdits(id: string, edits: CandidateEdits): Promise<ActionResult> {
@@ -367,6 +369,11 @@ export async function saveCandidateEdits(id: string, edits: CandidateEdits): Pro
       if (typeof v !== 'string') continue
       if (v.length > EDIT_LIMITS[k]) return { ok: false, error: `${k} が長すぎます` }
       clean[k] = v.trim()
+    }
+    if (clean.instagram) {
+      const ig = normalizeInstagramUrl(clean.instagram)
+      if (!ig) return { ok: false, error: 'Instagram はアカウント名か、アカウントの URL を入れてください（投稿の URL は使えません）' }
+      clean.instagram = ig
     }
     if (clean.website && !/^https?:\/\//i.test(clean.website)) return { ok: false, error: 'WebサイトのURLは http:// か https:// で始めてください' }
     const { data: row, error: readErr } = await supabase.from('freefree_import_candidates').select('import_status').eq('id', id).maybeSingle()
@@ -819,6 +826,71 @@ export async function setCandidatePin(
     revalidatePath(PATH)
     if (c.freefree_post_id) revalidatePath(`/freefree/${c.freefree_post_id}`)
     return { ok: true, data: { postUpdated } }
+  } catch (e) {
+    return { ok: false, error: errMsg(e) }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// お店の Instagram を登録する
+// ---------------------------------------------------------------------------
+// 運営が目で見て確かめたアカウントだけを登録する（OpenPOI からは入らない）。掲載ページに「Instagram」のリンクとして出る。
+// ・候補の edits.instagram に保存（登録前の候補は、登録時に掲載のリンクへ入る）
+// ・登録済みなら掲載の links も直す（Instagram のリンクだけ入れ替え。ほかのリンクは触らない）
+// ・SNS の投稿文には使わない（お店を @タグ付けしない方針）
+// 空文字で登録を外す。
+
+export async function setCandidateInstagram(id: string, input: string): Promise<ActionResult<{ url: string | null; postUpdated: boolean }>> {
+  try {
+    const { supabase, userId } = await requireAdmin()
+    const raw = String(input ?? '').trim()
+    const url = raw ? normalizeInstagramUrl(raw) : null
+    if (raw && !url) return { ok: false, error: 'Instagram はアカウント名か、アカウントの URL を入れてください（投稿の URL は使えません）' }
+
+    const { data: c, error: ce } = await supabase
+      .from('freefree_import_candidates')
+      .select('id, edits, freefree_post_id, import_status')
+      .eq('id', id)
+      .maybeSingle()
+    if (ce) return { ok: false, error: errMsg(ce) }
+    if (!c) return { ok: false, error: '候補が見つかりません' }
+    if (c.import_status === 'publishing') return { ok: false, error: '登録処理中です。少し待ってからお試しください' }
+
+    let postUpdated = false
+    if (c.freefree_post_id) {
+      const sUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      if (!sUrl || !key) return { ok: false, error: 'サーバーの設定が足りないため、掲載のリンクを直せません' }
+      const admin = createServiceClient(sUrl, key, { auth: { persistSession: false, autoRefreshToken: false } })
+      const { data: post, error: pe } = await admin
+        .from('freefree_posts')
+        .select('id, links, import_source')
+        .eq('id', c.freefree_post_id)
+        .maybeSingle()
+      if (pe) return { ok: false, error: errMsg(pe) }
+      if (!post || !post.import_source) return { ok: false, error: '取込で作った掲載が見つかりませんでした（変更していません）' }
+      const kept = (Array.isArray(post.links) ? post.links : []).filter((l: { label?: string }) => l?.label !== INSTAGRAM_LINK_LABEL)
+      const links = url ? [...kept, { label: INSTAGRAM_LINK_LABEL, url }] : kept
+      if (links.length > 5) return { ok: false, error: 'リンクは5件までです。ほかのリンクを減らしてからお試しください' }
+      const { error: ue } = await admin.from('freefree_posts').update({ links }).eq('id', post.id)
+      if (ue) return { ok: false, error: errMsg(ue) }
+      postUpdated = true
+    }
+
+    const edits = { ...((c.edits ?? {}) as Record<string, string>) }
+    if (url) edits.instagram = url
+    else delete edits.instagram
+    const edited = Object.values(edits).some((v) => v !== '')
+    const { error: ue2 } = await supabase.from('freefree_import_candidates').update({ edits, edited }).eq('id', id)
+    if (ue2) return { ok: false, error: errMsg(ue2) }
+
+    await recordWrite({
+      actorId: userId, action: 'freefree.import', targetType: 'freefree_import_candidate', targetId: id,
+      detail: { op: 'set_instagram', url, post: c.freefree_post_id ?? null }, isAdmin: true,
+    })
+    revalidatePath(PATH)
+    if (c.freefree_post_id) revalidatePath(`/freefree/${c.freefree_post_id}`)
+    return { ok: true, data: { url, postUpdated } }
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }

@@ -99,8 +99,8 @@ export async function buildMapPng(lat: number, lon: number): Promise<Buffer | nu
 export async function renderImportCard(input: CardInput): Promise<Buffer | null> {
   const heading = 'CiDAOに載りました'
   const callTitle = 'お店の方へ'
-  const call1 = '写真とPR文をご提供ください'
-  const call2 = 'CiDAOに登録（無料）して、ご自身で掲載できます'
+  const call1 = '写真・PR文・クーポンを、ご自身で載せられます'
+  const call2 = 'CiDAOに登録（無料）してください'
   const credit = '地図：地理院タイルを加工して作成（国土地理院）'
   const brand = 'CiDAO - 印西の市民DAO'
   const font = await loadFont([heading, callTitle, call1, call2, credit, brand, input.name, input.categoryLabel, input.area ?? ''].join(''))

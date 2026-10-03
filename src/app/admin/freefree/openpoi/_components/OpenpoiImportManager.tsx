@@ -16,7 +16,7 @@ import {
 } from '@/lib/freefree-import-core'
 import PinPicker from './PinPicker'
 import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
-import { setCandidatePin,
+import { setCandidatePin, setCandidateInstagram,
   dismissCandidateUpdate,
   addManualCandidate,
   createSnsDrafts,
@@ -695,6 +695,8 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
   const [aiNote, setAiNote] = useState<string | null>(null)
   const [pinOpen, setPinOpen] = useState(false)
   const [pinNote, setPinNote] = useState<string | null>(null)
+  const [igInput, setIgInput] = useState(row.edits?.instagram ?? '')
+  const [igNote, setIgNote] = useState<string | null>(null)
   const locked = row.import_status === 'imported' || row.import_status === 'publishing'
 
   const draft = useMemo(() => buildPostDraft(row, edits), [row, edits])
@@ -725,6 +727,17 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
       const r = await setCandidatePin(row.id, la, lo)
       if (!r.ok) { setError(r.error); return }
       setPinNote(r.data.postUpdated ? 'ピンの位置を直しました（FreeFree掲載にも反映済み）。' : 'ピンの位置を直しました。登録するとこの位置が使われます。')
+      onSaved()
+    })
+  }
+  function saveInstagram() {
+    setError(null); setIgNote(null)
+    startTransition(async () => {
+      const r = await setCandidateInstagram(row.id, igInput)
+      if (!r.ok) { setError(r.error); return }
+      setIgInput(r.data.url ?? '')
+      setEdits((e) => { const n = { ...e }; if (r.data.url) n.instagram = r.data.url; else delete n.instagram; return n })
+      setIgNote(r.data.url ? (r.data.postUpdated ? 'Instagram のリンクを登録しました（掲載にも反映済み）。' : 'Instagram を登録しました。掲載を登録すると、リンクとして出ます。') : 'Instagram の登録を外しました。')
       onSaved()
     })
   }
@@ -829,6 +842,28 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
               {pinNote && <p className="text-xs text-emerald-700">{pinNote}</p>}
               {pinOpen && <PinPicker key={`${row.latitude}-${row.longitude}`} lat={row.latitude} lon={row.longitude} busy={pending} onSave={savePin} />}
               {locked && <p className="text-[11px] text-slate-500">登録済みの掲載は、座標だけが直ります（本文などは変わりません）。</p>}
+            </div>
+
+            <div className="border-t pt-3 space-y-2">
+              <h4 className="text-sm font-semibold">📷 お店の Instagram</h4>
+              <p className="text-[11px] text-slate-500">
+                運営が目で見て、お店のアカウントだと確かめたものだけを入れてください。掲載ページに「Instagram」のリンクとして出ます（SNS の投稿文では、お店を @タグ付けしません）。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  value={igInput}
+                  onChange={(e) => setIgInput(e.target.value)}
+                  placeholder="例: @kimagure_kopitiam または https://www.instagram.com/…/"
+                  maxLength={200}
+                  className="flex-1 min-w-[12rem] rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                />
+                <Button size="sm" variant="outline" disabled={pending || igInput.trim() === (row.edits?.instagram ?? '')} onClick={saveInstagram}>{pending ? '保存中…' : '保存'}</Button>
+              </div>
+              {igInput.trim() && /^https:\/\/www\.instagram\.com\//.test(igInput.trim()) && (
+                <a className="text-xs underline" href={igInput.trim()} target="_blank" rel="noopener noreferrer nofollow">このアカウントを開いて確かめる ↗</a>
+              )}
+              {igNote && <p className="text-xs text-emerald-700">{igNote}</p>}
+              <p className="text-[11px] text-slate-500">空にして保存すると、登録を外します。</p>
             </div>
           </div>
 

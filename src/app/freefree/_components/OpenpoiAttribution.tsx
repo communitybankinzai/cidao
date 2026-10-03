@@ -37,7 +37,7 @@ export default function OpenpoiAttribution({
         </>
       )}
       <p>
-        店舗の方へ：掲載写真とPR文をご提供ください。CiDAOに登録（無料）のうえ、ご自身で掲載を登録できます（<a href={FOR_SHOPS_PATH} className="text-sky-700 dark:text-sky-400 hover:underline">くわしくはこちら</a>）。訂正・削除のご希望は
+        店舗の方へ：ご自身で登録すると、写真・PR文・クーポン・リンクを載せられ、営業時間などもすぐ直せます。CiDAOに登録（無料）してください（<a href={FOR_SHOPS_PATH} className="text-sky-700 dark:text-sky-400 hover:underline">くわしくはこちら</a>）。訂正・削除のご希望は
         <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載について')}`} className="text-sky-700 dark:text-sky-400 hover:underline">{CONTACT_EMAIL}</a>
         （CBI）まで。
       </p>
