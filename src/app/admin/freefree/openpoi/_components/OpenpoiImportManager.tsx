@@ -17,6 +17,7 @@ import {
 import OpenpoiAttribution from '@/app/freefree/_components/OpenpoiAttribution'
 import {
   dismissCandidateUpdate,
+  addManualCandidate,
   draftIntro,
   publishCandidates,
   runOpenpoiFetch,
@@ -29,6 +30,7 @@ import {
 
 export type CandidateRow = {
   id: string
+  source: 'openpoi' | 'manual'
   name: string
   name_kana: string | null
   prefecture: string | null
@@ -179,6 +181,7 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
     <div className="space-y-6">
       <StatsBar stats={stats} filters={filters} qs={qs} />
       <FetchPanel defaultRegion={defaultRegion} onDone={() => router.refresh()} />
+      <ManualAddPanel onDone={() => router.refresh()} />
 
       {/* フィルタ（GET フォーム。URL で状態を持つので戻る・共有ができる） */}
       <form method="get" className="bg-white dark:bg-slate-900 border rounded-lg p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -252,7 +255,7 @@ export default function OpenpoiImportManager({ rows, totalCount, page, pageSize,
                     <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800 align-top">
                       <td className="p-2"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r)} disabled={!selectable} aria-label={`${r.name}を選択`} /></td>
                       <td className="p-2 max-w-xs">
-                        <div className="font-medium">{r.edits?.title || normalizeDisplayText(r.name)}{r.edited && <span className="ml-1 text-[11px] text-sky-700">編集済み</span>}</div>
+                        <div className="font-medium">{r.edits?.title || normalizeDisplayText(r.name)}{r.source === 'manual' && <span className="ml-1 text-[11px] text-violet-700">手入力</span>}{r.edited && <span className="ml-1 text-[11px] text-sky-700">編集済み</span>}</div>
                         <div className="text-xs text-slate-500">{normalizeDisplayText(r.address ?? '') || [r.prefecture, r.city].filter(Boolean).join('')}</div>
                         {r.update_available && <Badge className="bg-sky-100 text-sky-800 mt-1">OpenPOI側に更新あり</Badge>}
                       </td>
@@ -444,6 +447,66 @@ function FetchPanel({ defaultRegion, onDone }: { defaultRegion: { prefecture: st
 
           {error && <p className="rounded border border-red-300 bg-red-50 text-red-800 p-2 text-sm">{error}</p>}
           {result && <FetchResult s={result} />}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ManualAddPanel({ onDone }: { onDone: () => void }) {
+  const empty = { name: '', address: '', category: '', phone: '', website: '', openingHours: '', description: '' }
+  const [open, setOpen] = useState(false)
+  const [f, setF] = useState(empty)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const set = (k: keyof typeof empty, v: string) => setF((x) => ({ ...x, [k]: v }))
+  const risky = findRiskyPhrases(f.description)
+
+  function submit() {
+    setError(null); setDone(null)
+    startTransition(async () => {
+      const r = await addManualCandidate(f)
+      if (!r.ok) { setError(r.error); return }
+      const parts = ['候補に追加しました（公開はされません）。一覧で「詳細」から確認・登録してください。']
+      if (r.data.duplicate.status !== 'none') parts.push(`⚠ ${r.data.duplicate.status === 'duplicate' ? '重複' : '重複の可能性'}：${r.data.duplicate.reason}`)
+      if (r.data.locateNote) parts.push(`📍 ${r.data.locateNote}`)
+      else if (r.data.located) parts.push('📍 住所から位置を設定しました')
+      setDone(parts.join('\n'))
+      setF(empty)
+      onDone()
+    })
+  }
+
+  return (
+    <section className="bg-white dark:bg-slate-900 border rounded-lg">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4 text-left">
+        <span className="font-semibold">＋ 候補を手で追加（OpenPOIにないお店）</span>
+        <span className="text-xs text-slate-500">{open ? '閉じる' : '開く'}</span>
+      </button>
+      {open && (
+        <div className="p-4 pt-0 space-y-3">
+          <p className="text-xs text-slate-500">お店のリクエストを受けたときなど、OpenPOIにないお店を候補にします。追加したあとは、取り込んだ候補と同じ流れ（重複の確認、紹介文、プレビュー、登録）で公開します。</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs text-slate-500">店名（必須）<input className={input} maxLength={60} value={f.name} onChange={(e) => set('name', e.target.value)} /></label>
+            <label className="block text-xs text-slate-500">カテゴリー（あとで選んでも可）
+              <select className={input} value={f.category} onChange={(e) => set('category', e.target.value)}>
+                <option value="">未分類</option>
+                {FREEFREE_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </label>
+            <label className="block text-xs text-slate-500 sm:col-span-2">住所（番地まで入れると、地図の位置も設定されます）<input className={input} maxLength={200} value={f.address} onChange={(e) => set('address', e.target.value)} placeholder="例：千葉県印西市大塚1-1" /></label>
+            <label className="block text-xs text-slate-500">電話番号<input className={input} maxLength={40} value={f.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+            <label className="block text-xs text-slate-500">営業時間<input className={input} maxLength={300} value={f.openingHours} onChange={(e) => set('openingHours', e.target.value)} /></label>
+            <label className="block text-xs text-slate-500 sm:col-span-2">WebサイトURL<input className={input} value={f.website} onChange={(e) => set('website', e.target.value)} placeholder="https://" /></label>
+            <label className="block text-xs text-slate-500 sm:col-span-2">紹介文（任意・500字まで。確認できた事実だけ。口コミ・評価は書かない）
+              <textarea className={input} rows={3} maxLength={500} value={f.description} onChange={(e) => set('description', e.target.value)} />
+            </label>
+          </div>
+          {risky.length > 0 && <p className="text-xs text-red-700">⚠ 評価・推測にあたる言葉があります：{risky.join('、')}</p>}
+          <Button type="button" disabled={pending || !f.name.trim()} onClick={submit}>{pending ? '追加中…' : '候補に追加'}</Button>
+          {error && <p className="rounded border border-red-300 bg-red-50 text-red-800 p-2 text-sm">{error}</p>}
+          {done && <p className="rounded border border-emerald-300 bg-emerald-50 text-emerald-800 p-2 text-sm whitespace-pre-line">{done}</p>}
         </div>
       )}
     </section>
@@ -653,7 +716,7 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">{normalizeDisplayText(row.name)}</h2>
-            <p className="text-xs text-slate-500">{STATUS_LABEL[row.import_status]} ／ OpenPOI データ元：{row.openpoi_source ?? '不明'} ／ 最終確認：{new Date(row.last_seen_at).toLocaleString('ja-JP')}</p>
+            <p className="text-xs text-slate-500">{STATUS_LABEL[row.import_status]} ／ {row.source === 'manual' ? 'データ元：運営が手で追加' : `OpenPOI データ元：${row.openpoi_source ?? '不明'}`} ／ 最終確認：{new Date(row.last_seen_at).toLocaleString('ja-JP')}</p>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>✕ 閉じる</Button>
         </div>
@@ -736,6 +799,7 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
               <header className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="bg-slate-100 text-slate-700">👤 個人（運営登録）</Badge>
+                  <Badge className="bg-sky-100 text-sky-800">{row.source === 'manual' ? '📝 運営が作成' : '📥 公開データ由来'}</Badge>
                   <span className="text-xs text-slate-500">{draft.category ? freefreeCategoryLabel(draft.category) : '未分類'}</span>
                 </div>
                 <h4 className="text-2xl font-serif font-bold">{draft.title}</h4>
@@ -748,7 +812,7 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
                   {draft.links.map((l) => <p key={l.url} className="text-sky-700 break-all">{l.label} ↗ {l.url}</p>)}
                 </div>
               )}
-              <OpenpoiAttribution licenses={row.licenses} attributions={row.attributions} />
+              <OpenpoiAttribution source={row.source} licenses={row.licenses} attributions={row.attributions} />
             </article>
           </div>
         </div>

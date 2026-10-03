@@ -32,7 +32,7 @@ export default async function OpenpoiImportPage({ searchParams }: { searchParams
   let query = supabase
     .from('freefree_import_candidates')
     .select(
-      'id, name, name_kana, prefecture, city, address, latitude, longitude, openpoi_category, business_type, openpoi_source, phone, website, opening_hours, description, licenses, attributions, category, category_reason, import_status, duplicate_status, duplicate_reason, duplicate_of_post_id, duplicate_of_candidate_id, freefree_post_id, import_error, edits, edited, update_available, update_diff, last_seen_at, raw_data',
+      'id, source, name, name_kana, prefecture, city, address, latitude, longitude, openpoi_category, business_type, openpoi_source, phone, website, opening_hours, description, licenses, attributions, category, category_reason, import_status, duplicate_status, duplicate_reason, duplicate_of_post_id, duplicate_of_candidate_id, freefree_post_id, import_error, edits, edited, update_available, update_diff, last_seen_at, raw_data',
       { count: 'exact' },
     )
   if (status !== 'all') query = query.eq('import_status', status)
