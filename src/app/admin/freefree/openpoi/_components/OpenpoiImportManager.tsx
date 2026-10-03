@@ -683,9 +683,12 @@ function DetailModal({ row, onClose, onSaved }: { row: CandidateRow; onClose: ()
               <label className="block text-xs text-slate-500">電話番号<input className={input} disabled={locked} value={fieldVal('phone')} onChange={(e) => set('phone', e.target.value)} placeholder="OpenPOIには電話情報がありません" /></label>
               <label className="block text-xs text-slate-500">営業時間<input className={input} disabled={locked} value={fieldVal('opening_hours')} onChange={(e) => set('opening_hours', e.target.value)} /></label>
             </div>
+            <label className="block text-xs text-slate-500">紹介文（500字まで・本文の先頭に入ります。確認できた事実だけを書いてください）
+              <textarea className={input} rows={3} maxLength={500} disabled={locked} value={edits.description ?? ''} onChange={(e) => set('description', e.target.value)} placeholder="例：マレーシア料理のお店です。" />
+            </label>
             <label className="block text-xs text-slate-500">WebサイトURL<input className={input} disabled={locked} value={fieldVal('website')} onChange={(e) => set('website', e.target.value)} placeholder="https://" /></label>
             <label className="block text-xs text-slate-500">
-              本文（1000字まで）
+              本文（1000字まで）{edits.body === undefined && <span className="text-sky-700">　営業時間・紹介文などの入力欄は、自動で本文に入ります</span>}{edits.body !== undefined && <span className="text-amber-700">　本文を直接編集中のため、上の入力欄は本文に反映されません</span>}
               <textarea className={input} rows={9} disabled={locked} value={edits.body ?? generated} onChange={(e) => set('body', e.target.value)} />
               {edits.body !== undefined && <button type="button" className="underline text-[11px]" onClick={() => setEdits((e) => { const n = { ...e }; delete n.body; return n })}>自動生成の本文に戻す</button>}
             </label>

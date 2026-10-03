@@ -635,6 +635,7 @@ export type CandidateEdits = Partial<{
   phone: string
   website: string
   opening_hours: string
+  description: string   // 紹介文（本文の先頭に入る）
 }>
 
 export type PostDraft = {
@@ -675,6 +676,7 @@ export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}):
   const phone = (edits.phone ?? c.phone ?? '').trim()
   const website = (edits.website ?? c.website ?? '').trim()
   const hours = (edits.opening_hours ?? c.opening_hours ?? '').trim()
+  const description = (edits.description ?? c.description ?? '').trim()
   const category = (edits.category ?? c.category) || null
   const place = address ?? ([c.prefecture, c.city].filter(Boolean).join('') || null)
 
@@ -686,7 +688,7 @@ export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}):
     body = edits.body.trim()
   } else {
     const lines: string[] = []
-    if (c.description?.trim()) lines.push(c.description.trim(), '')
+    if (description) lines.push(description, '')
     lines.push(`🏷 種別：${openpoiCategoryLabel(c.openpoi_category)}`)
     if (place) lines.push(`📍 所在地：${place}`)
     if (phone) lines.push(`☎ 電話：${phone}`)

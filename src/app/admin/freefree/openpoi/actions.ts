@@ -341,7 +341,7 @@ function dupFields(r: DedupResult) {
 // ---------------------------------------------------------------------------
 
 const EDIT_LIMITS: Record<keyof CandidateEdits, number> = {
-  title: 40, body: 1000, category: 30, address: 200, phone: 40, website: 300, opening_hours: 300,
+  title: 40, body: 1000, category: 30, address: 200, phone: 40, website: 300, opening_hours: 300, description: 500,
 }
 
 export async function saveCandidateEdits(id: string, edits: CandidateEdits): Promise<ActionResult> {
