@@ -86,8 +86,10 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${posterMeta.badgeClass}`}>{posterMeta.badge}</span>
             <span className="text-xs text-slate-500">{freefreeCategoryLabel(post.category)}</span>
-            {post.import_source === 'openpoi' && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">📥 公開データ由来</span>
+            {(post.import_source === 'openpoi' || post.import_source === 'manual') && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
+                {post.import_source === 'openpoi' ? '📥 公開データ由来' : '📝 運営が作成'}
+              </span>
             )}
           </div>
           <h1 className="text-3xl font-serif font-bold">{post.title}</h1>
@@ -125,8 +127,8 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
           <p className="whitespace-pre-wrap">{post.body}</p>
         </div>
 
-        {post.import_source === 'openpoi' && (
-          <OpenpoiAttribution licenses={post.import_licenses} attributions={post.import_attributions} />
+        {(post.import_source === 'openpoi' || post.import_source === 'manual') && (
+          <OpenpoiAttribution source={post.import_source} licenses={post.import_licenses} attributions={post.import_attributions} />
         )}
 
         {Array.isArray(post.links) && post.links.length > 0 && (

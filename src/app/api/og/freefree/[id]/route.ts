@@ -38,7 +38,7 @@ export async function GET(
 
   // 取込掲載（OpenPOI由来）で写真が無いときは、店名・エリア・地図のカードで代用する。
   // お店の写真は無断で使わない。お店から写真が届いて images に入れば、上の写真の変換に切り替わる
-  if (!src && post?.status === 'active' && post.import_source === 'openpoi') {
+  if (!src && post?.status === 'active' && (post.import_source === 'openpoi' || post.import_source === 'manual')) {
     try {
       const cat = String(post.category)
       const jpeg = await renderImportCard({

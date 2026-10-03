@@ -615,6 +615,8 @@ export const TITLE_MAX = 40
 export const BODY_MAX = 1000
 
 export type CandidateForPost = {
+  /** 'openpoi'（公開データ）／'manual'（運営が手で追加）。省略は openpoi 扱い */
+  source?: string | null
   name: string
   prefecture: string | null
   city: string | null
@@ -651,6 +653,9 @@ export function clip(s: string, max: number): string {
   const a = Array.from(s)
   return a.length <= max ? s : a.slice(0, max - 1).join('') + '…'
 }
+
+export const IMPORT_NOTICE_MANUAL =
+  '※この掲載は、運営が登録した店舗情報です。掲載者本人による投稿ではありません。営業時間・定休日・内容は変わることがあるため、お出かけ前に店舗の公式情報でご確認ください。'
 
 export const IMPORT_NOTICE =
   '※この掲載は、公開データ（OpenPOI API）をもとに運営が登録した施設情報です。掲載者本人による投稿ではありません。営業時間・定休日・内容は変わることがあるため、お出かけ前に店舗の公式情報でご確認ください。'
@@ -689,12 +694,13 @@ export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}):
   } else {
     const lines: string[] = []
     if (description) lines.push(description, '')
-    lines.push(`🏷 種別：${openpoiCategoryLabel(c.openpoi_category)}`)
+    const manual = c.source === 'manual'
+    if (!manual) lines.push(`🏷 種別：${openpoiCategoryLabel(c.openpoi_category)}`)
     if (place) lines.push(`📍 所在地：${place}`)
     if (phone) lines.push(`☎ 電話：${phone}`)
     if (hours) lines.push(`🕐 営業時間：${hours}`)
     if (website) lines.push(`🔗 Web：${website}`)
-    lines.push('', IMPORT_NOTICE)
+    lines.push('', manual ? IMPORT_NOTICE_MANUAL : IMPORT_NOTICE)
     body = lines.join('\n')
   }
   body = clip(body, BODY_MAX)
@@ -804,4 +810,34 @@ export function areaLabelFromLocation(location: string | null | undefined): stri
   const a = normalizeDisplayText(location ?? '').replace(/^.{2,3}[都道府県]/, '')
   const m = a.match(/^([^\d\s-]{2,16})/)
   return m ? m[1] : null
+}
+
+// ---------------------------------------------------------------------------
+// 地図・位置情報の出典表記（2026-10-03 規約確認）
+// ---------------------------------------------------------------------------
+// ・地理院タイル: 国土地理院コンテンツ利用規約。出典として「国土地理院」または「地理院タイル」を書き、
+//   地理院タイル一覧ページへのリンクを付ける。加工したときは加工した旨も書く（申請は不要）
+// ・国土地理院の住所検索（msearch.gsi.go.jp）: 国土地理院自身の規約は無い。中身は東京大学CSISの
+//   シンプルジオコーディング実験で、地図等に使うときは
+//   「CSISシンプルジオコーディング実験（街区レベル位置参照情報）による」の表記が求められる
+
+export const GSI_TILE_URL = 'https://maps.gsi.go.jp/development/ichiran.html'
+
+/** 画像カード（地図の隅）に入れる短い出典 */
+export const GSI_CARD_CREDIT = '地図：地理院タイルを加工して作成（国土地理院）'
+
+/** SNS の投稿文に添える出典の1行（画像にはリンクを付けられないので、投稿文に書く） */
+export function gsiCreditLine(): string {
+  return `地図：国土地理院 地理院タイルを加工して作成 ${GSI_TILE_URL}`
+}
+
+/** 住所から位置を求めたときの出典（CSIS の参加規約 第4条） */
+export const GEOCODE_CREDIT = 'CSISシンプルジオコーディング実験（街区レベル位置参照情報）による'
+
+/** お店向けの案内ページ（取込掲載の注意書き・SNS・チラシのリンク先） */
+export const FOR_SHOPS_PATH = '/freefree/for-shops'
+
+/** 手で追加する候補の source_id。同じ店名＋住所なら同じID（二重追加を防ぐ） */
+export function makeManualSourceId(name: string, address: string | null): string {
+  return `manual-${hash53(`${baseNormalize(name)}|${addressKey(address) || baseNormalize(address ?? '')}`)}`
 }
