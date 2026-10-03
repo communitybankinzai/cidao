@@ -654,16 +654,32 @@ export function clip(s: string, max: number): string {
 export const IMPORT_NOTICE =
   '※この掲載は、公開データ（OpenPOI API）をもとに運営が登録した施設情報です。掲載者本人による投稿ではありません。営業時間・定休日・内容は変わることがあるため、お出かけ前に店舗の公式情報でご確認ください。'
 
+/**
+ * 掲載に出す文字をそろえる。OpenPOI（食品営業許可・届出データ由来）は全角の英数字・ハイフンが多いので、
+ * NFKC で半角にし、数字にはさまれた長音「ー」・各種ダッシュはハイフンにする。
+ * 「ー」は店名で使うので、数字にはさまれたときだけ直す。
+ */
+export function normalizeDisplayText(raw: string): string {
+  return raw
+    .normalize('NFKC')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/(?<=\d)ー(?=\d)/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** 運営の編集(edits)を最優先に、OpenPOI由来の値から投稿内容を組み立てる */
 export function buildPostDraft(c: CandidateForPost, edits: CandidateEdits = {}): PostDraft {
-  const address = (edits.address ?? c.address ?? '').trim() || null
+  // 運営が打った内容はそのまま、OpenPOI由来の値は表示用にそろえる
+  const address = (edits.address ?? normalizeDisplayText(c.address ?? '')).trim() || null
   const phone = (edits.phone ?? c.phone ?? '').trim()
   const website = (edits.website ?? c.website ?? '').trim()
   const hours = (edits.opening_hours ?? c.opening_hours ?? '').trim()
   const category = (edits.category ?? c.category) || null
   const place = address ?? ([c.prefecture, c.city].filter(Boolean).join('') || null)
 
-  const title = clip((edits.title ?? c.name).trim() || c.name, TITLE_MAX)
+  const baseName = normalizeDisplayText(c.name)
+  const title = clip((edits.title ?? baseName).trim() || baseName, TITLE_MAX)
 
   let body: string
   if (edits.body !== undefined && edits.body.trim()) {
