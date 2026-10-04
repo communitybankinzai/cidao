@@ -182,7 +182,8 @@ export async function announceFreefreeToSns(
     title: string
   },
   // forceApproval: 全自動モードでも承認制で作る（編集後の作り直しに使う）。label: 管理者への通知で使う呼び名
-  opts: { forceApproval?: boolean; label?: string } = {},
+  // skipMedia: すでに配信済みの媒体。ここには下書きを作らない（同じ掲載がSNSに2回出るのを防ぐ）
+  opts: { forceApproval?: boolean; label?: string; skipMedia?: SnsMedium[] } = {},
 ): Promise<{ created: number }> {
   const supabase = adminClient()
   if (!supabase) return { created: 0 }
@@ -222,7 +223,10 @@ export async function announceFreefreeToSns(
     const now = new Date().toISOString()
     // 運営が作った掲載は常に承認制。媒体は接続済みの Threads・Instagram だけ（Facebook は未接続で、下書きが待機のまま残るため）
     const media = isImport ? FREEFREE_MEDIA.filter((m) => m !== 'facebook') : FREEFREE_MEDIA
-    const rows = media.filter((m) => m !== 'instagram' || hasImage).map((medium) => ({
+    const skip = new Set(opts.skipMedia ?? [])
+    const targets = media.filter((m) => !skip.has(m) && (m !== 'instagram' || hasImage))
+    if (targets.length === 0) return { created: 0 }
+    const rows = targets.map((medium) => ({
       target_type: 'freefree',
       target_id: post.id,
       medium,
@@ -268,7 +272,14 @@ export async function announceFreefreeToSns(
 // SNS紹介を許可していれば新しい中身で作り直して、運営の承認待ちに戻す。
 // 全自動モードでも編集後は承認制にする（編集のたびに勝手に配信されないように）。
 // 未送信の下書きがある間は定期紹介（run_sns_rotation_cycle）もこの掲載を候補から外すので、承認されるまで配信は止まる。
+// 2026-10-04 修正：
+//  - すでに配信済みの媒体には作り直さない（旧版がSNSに出ているのに、承認待ちの下書きが編集のたびに増え、
+//    承認すると同じ掲載が2回出ていた）。SNSの文面は古いままだが、掲載ページは常に最新。以後の定期紹介は配信時に最新の中身で本文を作る
+//  - 承認から IN_FLIGHT_MINUTES 分以内の行は消さない（配信の最中に消すと、投稿は出るのに記録だけ消える）。
+//    消さなかった行が残るので、announceFreefreeToSns の「未配信の下書きが残っていれば作らない」で作り直しも止まる
 // freefree/actions.ts の updateFreefreePost の after() から呼ばれる best-effort
+export const IN_FLIGHT_MINUTES = 10
+
 export async function reannounceFreefreeAfterEdit(post: {
   id: string
   title: string
@@ -277,20 +288,35 @@ export async function reannounceFreefreeAfterEdit(post: {
   const supabase = adminClient()
   if (!supabase) return
   try {
+    const inFlightSince = new Date(Date.now() - IN_FLIGHT_MINUTES * 60_000).toISOString()
     const { error } = await supabase
       .from('sns_post_logs')
       .delete()
       .eq('target_type', 'freefree')
       .eq('target_id', post.id)
       .eq('status', 'pending')
+      .or(`approved_at.is.null,approved_at.lt.${inFlightSince}`)
     if (error) {
       console.error('[sns-announce] freefree edit: old drafts delete failed:', error.message)
       return
     }
     if (!post.snsShare) return
+
+    // すでに配信済みの媒体は、編集しても再告知しない
+    const { data: delivered, error: delErr } = await supabase
+      .from('sns_post_logs')
+      .select('medium')
+      .eq('target_type', 'freefree')
+      .eq('target_id', post.id)
+      .eq('status', 'success')
+    if (delErr) {
+      console.error('[sns-announce] freefree edit: delivered lookup failed:', delErr.message)
+      return
+    }
+    const skipMedia = Array.from(new Set((delivered ?? []).map((r) => r.medium as SnsMedium)))
     await announceFreefreeToSns(
       { id: post.id, title: post.title },
-      { forceApproval: true, label: `FreeFree「${post.title}」（編集後）` },
+      { forceApproval: true, label: `FreeFree「${post.title}」（編集後）`, skipMedia },
     )
   } catch (e) {
     console.error('[sns-announce] freefree edit failed:', e instanceof Error ? e.message : e)
