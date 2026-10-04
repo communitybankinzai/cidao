@@ -3,6 +3,7 @@ export const FREEFREE_CATEGORIES = [
   { key: 'food',      label: '🍰 食' },
   { key: 'retail',    label: '🛍 物販' },
   { key: 'education', label: '🎓 教育' },
+  { key: 'lessons',   label: '🩰 習い事' },
   { key: 'craft',     label: '🛠 手仕事' },
   { key: 'living',    label: '🏠 暮らし' },
   { key: 'startup',   label: '💼 起業' },

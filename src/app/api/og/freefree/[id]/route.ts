@@ -20,7 +20,7 @@ const H = 1350
 // カテゴリーの色（取込掲載の画像カードで使う）
 const ACCENT: Record<string, string> = {
   food: '#e8833a', retail: '#d6567a', education: '#3a7be8', craft: '#8a6d3b',
-  living: '#3a9b7a', startup: '#7a5ad6', event: '#d6a21e', volunteer: '#d65a5a',
+  lessons: '#c75aa8', living: '#3a9b7a', startup: '#7a5ad6', event: '#d6a21e', volunteer: '#d65a5a',
 }
 
 export async function GET(

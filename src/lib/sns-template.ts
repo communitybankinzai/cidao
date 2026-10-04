@@ -73,6 +73,7 @@ function freefreePrefix(category?: string | null): string {
     case 'food':      return '【印西応援🍰】'
     case 'retail':    return '【印西応援🛍】'
     case 'education': return '【印西応援🎓】'
+    case 'lessons':   return '【印西応援🩰】'
     case 'craft':     return '【印西応援🛠】'
     case 'living':    return '【印西応援🏠】'
     case 'startup':   return '【印西応援💼】'
