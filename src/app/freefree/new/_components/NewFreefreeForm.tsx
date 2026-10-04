@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useMemo, useTransition, useEffect, useRef, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from './FreefreeImagesUpload'
+import FreefreeVideoInput from './FreefreeVideoInput'
 import FreefreeFlyerScan from './FreefreeFlyerScan'
 import FreefreeUrlScan, { type ScannedLink } from './FreefreeUrlScan'
 import { clampScannedEndDate, defaultEndDate, isValidEndDate, jstToday, maxEndDate } from '@/lib/freefree-dates'
@@ -387,6 +388,8 @@ export default function NewFreefreeForm({
         )}
 
         <FreefreeImagesUpload userId={userId} />
+
+        <FreefreeVideoInput userId={userId} />
 
         {links.length > 0 && (
           <div className="space-y-2">

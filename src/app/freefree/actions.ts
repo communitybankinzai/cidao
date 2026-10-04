@@ -19,11 +19,20 @@ import { announceFreefreeToSns, reannounceFreefreeAfterEdit } from '@/lib/sns-an
 import { recordWrite } from '@/lib/audit'
 import { hideSupersededImports } from '@/lib/freefree-import-supersede'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
+import { normalizeVideoUrl } from '@/lib/freefree-video'
 
 type CouponInput = {
   content: string
   conditions?: string
   usage_limit?: number              // null/undefined = 無制限
+}
+
+// 入力された動画を保存する値にそろえる。空なら null（動画なし）。自前バケットの URL でも YouTube でもなければ断る
+function parseVideoInput(raw: string | undefined): string | null {
+  if (!raw || !raw.trim()) return null
+  const v = normalizeVideoUrl(raw, process.env.NEXT_PUBLIC_SUPABASE_URL)
+  if (!v) throw new Error('動画のリンクが正しくありません（YouTube のリンクか、アップロードした動画だけ使えます）')
+  return v
 }
 
 type CreateInput = {
@@ -36,6 +45,7 @@ type CreateInput = {
   end_date: string                  // 掲載終了日 YYYY-MM-DD（日本時間）。今日〜3ヶ月先まで
   event_start_date?: string         // 開催日（初日）YYYY-MM-DD。イベントのみ・任意。SNS告知のカウントダウンに使う
   images?: string[]                 // public URL 最大3つ（client がアップロード済み）
+  video?: string                    // 動画1本（自前バケットの公開URL か YouTube のリンク）。lib/freefree-video.ts で検査する
   coupon?: CouponInput              // 任意のクーポン同時作成
   sns_share?: boolean               // CBI公式SNSでの紹介を許可（既定true）
   sns_display_name?: string         // SNSで名指しに使う表示名（本人が出すと決めたときだけ）
@@ -137,6 +147,7 @@ export async function createFreefreePost(input: CreateInput) {
     throw new Error('開催日は、掲載終了日（開催最終日）と同じ日か、それより前の日付を選んでください')
   }
   const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
+  const video = parseVideoInput(input.video)
   const { data, error } = await supabase
     .from('freefree_posts')
     .insert({
@@ -158,6 +169,8 @@ export async function createFreefreePost(input: CreateInput) {
         dbPosterType === 'org' ? null : (input.sns_display_name?.trim().slice(0, 40) || null),
       links: mergedLinks,
       ...(pin ?? {}),
+      // 動画を付けた掲載だけこの列に触れる（migration 未適用でも通常の掲載が止まらないようにするため）
+      ...(video ? { video_url: video } : {}),
     })
     .select('id')
     .single()
@@ -227,6 +240,7 @@ type UpdateInput = {
   end_date: string                  // 掲載終了日 YYYY-MM-DD（日本時間）。今日〜掲載した日から3ヶ月まで
   event_start_date?: string
   images?: string[]                 // 残す既存画像＋新しく追加した画像（最大3つ）
+  video?: string                    // 動画1本。空なら動画を外す
   links?: { label: string; url: string }[]
   sns_share?: boolean
   sns_display_name?: string
@@ -247,7 +261,7 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
 
   const { data: post } = await supabase
     .from('freefree_posts')
-    .select('id, poster_type, poster_id, created_at, title, body, category, location, images, links, expires_at, event_start_date, sns_share, sns_display_name')
+    .select('id, poster_type, poster_id, created_at, title, body, category, location, images, video_url, links, expires_at, event_start_date, sns_share, sns_display_name')
     .eq('id', postId)
     .maybeSingle()
   if (!post) throw new Error('掲載が見つかりません')
@@ -262,6 +276,7 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
     throw new Error('開催日は、掲載終了日（開催最終日）と同じ日か、それより前の日付を選んでください')
   }
   const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
+  const video = parseVideoInput(input.video)
   const seenUrls = new Set<string>()
   const links = (input.links ?? [])
     .filter((l) => l && l.label && /^https?:\/\//i.test(l.url))
@@ -277,6 +292,7 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
     expires_at: endOfDayJstIso(input.end_date),
     event_start_date: startDate || null,
     images: images.length > 0 ? images : null,
+    video_url: video,
     links,
     sns_share: input.sns_share !== false,
     // 団体掲載では organizations.name を使うため保存しない
@@ -312,10 +328,13 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
     await supabase.from('coupons').update({ expires_at: patch.expires_at }).eq('post_id', postId)
   }
 
-  // SNS 紹介の下書きを新しい中身で作り直し、運営の承認待ちに戻す。失敗しても編集は成立する
-  after(async () => {
-    await reannounceFreefreeAfterEdit({ id: postId, title: patch.title, snsShare: patch.sns_share })
-  })
+  // SNS 紹介の下書きを新しい中身で作り直し、運営の承認待ちに戻す。失敗しても編集は成立する。
+  // 動画だけを変えたときは作り直さない（動画は SNS の文面にも画像カードにも出ないため、同じ中身の下書きが増えるだけ）
+  if (changed.some((k) => k !== 'video_url')) {
+    after(async () => {
+      await reannounceFreefreeAfterEdit({ id: postId, title: patch.title, snsShare: patch.sns_share })
+    })
+  }
 
   // redirect() は例外を投げるので、記録はその前に済ませる
   await recordWrite({

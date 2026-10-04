@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { freefreeCategoryLabel, freefreePosterKindMeta, resolveFreefreePosterKind } from '@/lib/freefree-categories'
 import { canEditFreefreePost } from '@/lib/freefree-permissions'
+import { normalizeVideoUrl, youtubeEmbedUrl } from '@/lib/freefree-video'
 import OpenpoiAttribution from '../_components/OpenpoiAttribution'
 import { likeFreefree, commentFreefree, useCoupon } from '../actions'
 
@@ -29,6 +30,9 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
   const posterMeta = freefreePosterKindMeta(posterKind)
   // 編集できる人（掲載者本人・団体のメンバー・運営者）にだけ「編集する」を出す（2026-09-16）
   const canEdit = user ? await canEditFreefreePost(supabase, user.id, post) : false
+  // 動画は、保存時に通した形（自前バケットの動画か YouTube）のものだけ再生する
+  const videoUrl = normalizeVideoUrl(post.video_url, process.env.NEXT_PUBLIC_SUPABASE_URL)
+  const youtubeEmbed = videoUrl ? youtubeEmbedUrl(videoUrl) : null
   const updatedLabel = post.content_updated_at
     ? new Date(post.content_updated_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric' })
     : null
@@ -121,6 +125,22 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
               </a>
             ))}
           </div>
+        )}
+
+        {videoUrl && (
+          youtubeEmbed ? (
+            <iframe
+              src={youtubeEmbed}
+              title={`${post.title}の動画`}
+              className="w-full aspect-video rounded-lg border border-slate-200 dark:border-slate-700"
+              loading="lazy"
+              allow="encrypted-media; picture-in-picture"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          ) : (
+            <video src={videoUrl} controls playsInline preload="metadata" className="w-full max-h-96 rounded-lg border border-slate-200 dark:border-slate-700 bg-black" />
+          )
         )}
 
         <div className="bg-white dark:bg-slate-900 border rounded-lg p-6">

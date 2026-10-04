@@ -99,6 +99,7 @@ export default async function NewFreefreePage() {
       end_date: String(formData.get('end_date') ?? ''),
       event_start_date: String(formData.get('event_start_date') ?? '') || undefined,
       images,
+      video: String(formData.get('video') ?? '').trim() || undefined,
       coupon,
     }).catch((e: unknown) => {
       // 掲載後に詳細ページへ移る処理（redirect）も例外として届くので、それはそのまま投げ直す

@@ -16,7 +16,7 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
 
   const { data: post } = await supabase
     .from('freefree_posts')
-    .select('id, poster_type, poster_id, created_at, title, body, category, location, images, links, expires_at, event_start_date, sns_share, sns_display_name')
+    .select('id, poster_type, poster_id, created_at, title, body, category, location, images, video_url, links, expires_at, event_start_date, sns_share, sns_display_name')
     .eq('id', id)
     .maybeSingle()
   if (!post) notFound()
@@ -45,6 +45,7 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
       end_date: String(formData.get('end_date') ?? ''),
       event_start_date: String(formData.get('event_start_date') ?? '') || undefined,
       images: (formData.getAll('images') as string[]).filter((u) => u.length > 0).slice(0, 3),
+      video: String(formData.get('video') ?? '').trim() || undefined,
       links: (formData.getAll('links') as string[])
         .map((s) => {
           try {
@@ -90,6 +91,7 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
             endDate: post.expires_at ? jstYmdOf(post.expires_at) : maxEnd,
             startDate: post.event_start_date ?? '',
             images: (post.images as string[] | null) ?? [],
+            video: (post.video_url as string | null) ?? null,
             links,
             snsShare: post.sns_share !== false,
             snsDisplayName: post.sns_display_name ?? '',

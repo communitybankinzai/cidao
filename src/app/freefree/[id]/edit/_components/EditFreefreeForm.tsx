@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useState, useTransition, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import FreefreeImagesUpload from '@/app/freefree/new/_components/FreefreeImagesUpload'
+import FreefreeVideoInput from '@/app/freefree/new/_components/FreefreeVideoInput'
 import { jstToday } from '@/lib/freefree-dates'
 
 const MAX_IMAGES = 3
@@ -22,6 +23,7 @@ export type EditInitial = {
   endDate: string
   startDate: string
   images: string[]
+  video: string | null
   links: LinkRow[]
   snsShare: boolean
   snsDisplayName: string
@@ -155,6 +157,8 @@ export default function EditFreefreeForm({
         {keptImages.length < MAX_IMAGES && (
           <FreefreeImagesUpload userId={userId} maxImages={MAX_IMAGES - keptImages.length} />
         )}
+
+        <FreefreeVideoInput userId={userId} initial={initial.video} />
 
         <div className="space-y-2">
           <label className="text-sm font-medium">参考リンク（最大{MAX_LINKS}件）</label>
