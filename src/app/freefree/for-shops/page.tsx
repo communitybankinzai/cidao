@@ -83,6 +83,7 @@ export default function ForShopsPage() {
           <div className="flex flex-wrap gap-2 pt-2">
             <Link href="/login?next=/freefree/new"><Button>CiDAOに登録して掲載する</Button></Link>
             <Link href="/freefree"><Button variant="outline">掲載の例を見る</Button></Link>
+            <Link href="/freefree/guide"><Button variant="outline">くわしい手順（ご利用ガイド）</Button></Link>
           </div>
         </section>
 

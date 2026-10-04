@@ -236,6 +236,27 @@ export async function dismissDraft(logId: string): Promise<DraftResult> {
   }
 }
 
+// 削除待ち（FreeFree の取り下げで生じた SNS 紹介投稿）を「削除済み」にする。
+// 運営が各 SNS で投稿を消したあとに押す。SNS 側は自動では消えないので、ここは記録だけ
+export async function markTakedownRemoved(takedownId: string): Promise<DraftResult> {
+  try {
+    const { supabase, user } = await requireAdmin()
+    const { data, error } = await supabase
+      .from('sns_takedowns')
+      .update({ removed_at: new Date().toISOString(), removed_by: user.id })
+      .eq('id', takedownId)
+      .is('removed_at', null)
+      .select('id')
+    if (error) return { ok: false, error: `記録に失敗しました: ${error.message}` }
+    if (!data?.length) return { ok: false, error: '対象が見つかりません（既に削除済みの可能性）' }
+
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // Threads の接続情報を検証して保存する。
 // トークンは Vercel の環境変数ではなく DB（app_settings）に保管する。
 // 運営が管理画面だけで更新でき、cron の自動リフレッシュも書き戻せるようにするため。

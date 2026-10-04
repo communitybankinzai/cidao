@@ -9,6 +9,8 @@ import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettin
 import RotationScheduleCard from './_components/RotationScheduleCard'
 import RetryButton from './_components/RetryButton'
 import DisasterSnsMonitorRules, { type DisasterMonitorRule } from './_components/DisasterSnsMonitorRules'
+import TakedownList, { type TakedownItem } from './_components/TakedownList'
+import { postUrlOf } from '@/lib/sns-takedown'
 import type { RotationPreset } from './actions'
 
 type NextTarget = {
@@ -122,6 +124,28 @@ export default async function AdminSnsPage() {
 
   // 未送信のものが承認待ちの対象。ここで本文を確認・修正・承認する
   const awaiting = (logs ?? []).filter((l) => l.status === 'pending')
+
+  // FreeFree の取り下げで生じた SNS 紹介投稿の削除待ち（未削除は全件、削除済みは直近30日）
+  const { data: takedownRows } = await supabase
+    .from('sns_takedowns')
+    .select('id, post_title, medium, posted_id, withdrawn_at, reason, removed_at')
+    .or(`removed_at.is.null,removed_at.gte.${since}`)
+    .order('withdrawn_at', { ascending: false })
+    .limit(200)
+  const takedownItems: TakedownItem[] = (takedownRows ?? [])
+    .map((t) => ({
+      id: t.id as string,
+      postTitle: t.post_title as string,
+      mediumLabel: MEDIUM_LABEL[t.medium as string] ?? (t.medium as string),
+      postedId: (t.posted_id as string | null) ?? null,
+      postUrl: postUrlOf(t.medium as string, (t.posted_id as string | null) ?? null),
+      withdrawnAt: t.withdrawn_at as string,
+      reason: t.reason as 'hidden' | 'deleted',
+      removedAt: (t.removed_at as string | null) ?? null,
+    }))
+    // 未削除を先に
+    .sort((a, b) => Number(a.removedAt !== null) - Number(b.removedAt !== null))
+  const openTakedowns = takedownItems.filter((t) => t.removedAt === null).length
 
   const total = logs?.length ?? 0
   const success = logs?.filter((l) => l.status === 'success').length ?? 0
@@ -275,6 +299,20 @@ export default async function AdminSnsPage() {
             />
           ) : (
             <p className="text-sm text-slate-400 text-center py-4">承認待ちの投稿はありません</p>
+          )}
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">🗑 SNS削除待ち（{openTakedowns} 件）</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            FreeFree の掲載を取り下げる（非公開・削除する）と、その掲載から配信済みのSNS投稿がここに並びます。
+            SNSの投稿は自動では消えないので、<strong className="font-medium">各SNSで削除してから「削除済みにする」を押してください。</strong>
+            削除済みは直近30日ぶんだけ薄く表示します。
+          </p>
+          {takedownItems.length > 0 ? (
+            <TakedownList items={takedownItems} />
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-4">削除待ちの投稿はありません</p>
           )}
         </section>
 
