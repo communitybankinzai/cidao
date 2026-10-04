@@ -15,7 +15,7 @@ import { fetchSnsTarget } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
 import { normalizeMailFrom } from '@/lib/mail'
-import { canRepostNow, isSameSnsContent } from '@/lib/sns-edit-compare'
+import { canRepostNow, HELD_WITHIN_24H_NOTE, isSameSnsContent } from '@/lib/sns-edit-compare'
 import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
 
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
@@ -281,7 +281,7 @@ export async function announceFreefreeToSns(
 //    消さなかった行が残るので、announceFreefreeToSns の「未配信の下書きが残っていれば作らない」で作り直しも止まる
 // 2026-10-05 変更（事業主指示）：配信済みの媒体は「編集しても出さない」をやめ、紹介文が前回から変わっていれば
 //   新しい版を自動で出す（repostChangedFreefree）。古い版は SNS 削除待ち（superseded）に載せ、運営がいつでも消せる。
-//   中身が同じ・24時間以内に出したばかり・全自動モードがオフ・運営が作った掲載、のときは出さない
+//   中身が同じ・全自動モードがオフ・運営が作った掲載、のときは出さない。前回の配信から24時間以内は、承認待ちの下書きにする
 // freefree/actions.ts の updateFreefreePost の after() から呼ばれる best-effort
 export const IN_FLIGHT_MINUTES = 10
 
@@ -348,7 +348,7 @@ type DeliveredLog = {
 
 // 編集後、配信済みの媒体の紹介文が前回から変わっていれば、新しい版を自動で配信する（2026-10-05・事業主指示）。
 //  - 比べるのは「前回配信した本文」と「いま作った本文」。カウントダウンの日数・改行の違いは同じとみなす（sns-edit-compare.ts）
-//  - 同じ掲載・同じ媒体は、前回の配信から24時間あける。あけた分は次の定期紹介が最新の中身で出す
+//  - 同じ掲載・同じ媒体は、前回の配信から24時間あける。24時間以内に変わった分は、承認待ちの下書き（理由つき）にして運営が判断する
 //  - 全自動モードがオフ、または運営が作った掲載のときは出さない（承認が要るのに、承認なしで出さないため）
 //  - 配信できたら、古い版を sns_takedowns に reason='superseded' で載せて運営へ知らせる。SNS 上の古い投稿は自動では消さない
 async function repostChangedFreefree(
@@ -371,11 +371,35 @@ async function repostChangedFreefree(
 
   const nowMs = Date.now()
   const changed: Array<{ medium: SnsMedium; old: DeliveredLog; content: string }> = []
+  const held: Array<{ medium: SnsMedium; old: DeliveredLog; content: string }> = []
   for (const [medium, old] of latest) {
     const content = generateSnsContent(target, medium, nowMs)
     if (isSameSnsContent(old.content, content)) continue
-    if (!canRepostNow(old.posted_at ?? old.created_at, nowMs)) continue
-    changed.push({ medium, old, content })
+    const item = { medium, old, content }
+    if (canRepostNow(old.posted_at ?? old.created_at, nowMs)) changed.push(item)
+    else held.push(item)
+  }
+
+  // 変わっているが前回の配信から24時間以内の媒体は、自動では出さず、承認待ちの下書きにして理由を残す。
+  // 運営が承認して配信できたら、古い版は DB のトリガー（supersedes_log_id）が削除待ちに載せる
+  if (held.length > 0) {
+    const { data: heldRows, error: heldErr } = await supabase
+      .from('sns_post_logs')
+      .insert(
+        held.map((h) => ({
+          target_type: 'freefree',
+          target_id: post.id,
+          medium: h.medium,
+          status: 'pending',
+          content: h.content,
+          approved_at: null,
+          supersedes_log_id: h.old.id,
+          error_message: HELD_WITHIN_24H_NOTE,
+        })),
+      )
+      .select('id')
+    if (heldErr) console.error('[sns-announce] freefree edit: held draft insert failed:', heldErr.message)
+    else await notifyAdminsOfPendingDrafts(supabase, `FreeFree「${post.title}」（編集後・前回の配信から24時間以内）`, heldRows?.length ?? held.length)
   }
   if (changed.length === 0) return
 

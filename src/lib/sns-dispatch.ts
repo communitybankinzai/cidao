@@ -268,5 +268,17 @@ export async function dispatchLogs(
       results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: msg })
     }
   }
+
+  // 編集後の新しい版（supersedes_log_id つき）が配信できると、DB のトリガーが古い版を SNS削除待ちに載せる。
+  // 承認・即時配信・日次 cron のどの経路でも運営へ知らせるため、FreeFree の配信が成功したらここで通知する
+  // （未通知の削除待ちが無ければ何もしない。失敗しても配信結果は変えない）
+  if (results.some((r) => r.outcome === 'success') && logs.some((l) => l.target_type === 'freefree')) {
+    try {
+      const { notifyPendingSnsTakedowns } = await import('@/lib/sns-takedown')
+      await notifyPendingSnsTakedowns()
+    } catch (e) {
+      console.warn('[sns-dispatch] takedown notify failed:', e instanceof Error ? e.message : e)
+    }
+  }
   return results
 }

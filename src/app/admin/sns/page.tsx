@@ -11,6 +11,7 @@ import RetryButton from './_components/RetryButton'
 import DisasterSnsMonitorRules, { type DisasterMonitorRule } from './_components/DisasterSnsMonitorRules'
 import TakedownList, { type TakedownItem } from './_components/TakedownList'
 import { postUrlOf } from '@/lib/sns-takedown'
+import { HELD_WITHIN_24H_NOTE } from '@/lib/sns-edit-compare'
 import type { RotationPreset } from './actions'
 
 type NextTarget = {
@@ -295,6 +296,7 @@ export default async function AdminSnsPage() {
                 title: titleOf(l.target_type, l.target_id),
                 mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
                 targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
+                heldWithin24h: typeof l.error_message === 'string' && l.error_message.startsWith(HELD_WITHIN_24H_NOTE),
               }))}
             />
           ) : (

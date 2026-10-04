@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
+import { HELD_WITHIN_24H_NOTE } from '@/lib/sns-edit-compare'
 import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft, approveAndDispatchDraft } from '../actions'
 
 export type DraftLog = {
@@ -15,6 +16,8 @@ export type DraftLog = {
   title: string
   mediumLabel: string
   targetLabel: string
+  // 編集後に紹介文が変わったが、前回の配信から24時間以内のため自動では出さず承認待ちにした下書き
+  heldWithin24h?: boolean
 }
 
 type BusyKey = 'regen' | 'save' | 'approve' | 'dispatch' | 'unapprove' | 'dismiss'
@@ -107,6 +110,13 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
           </span>
         )}
       </div>
+
+      {log.heldWithin24h && (
+        <p className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+          ⏱ 編集で紹介文が変わりましたが、{HELD_WITHIN_24H_NOTE}。
+          承認して配信すると、いま SNS に出ている古い版が「SNS削除待ち」に載ります（自動では消えません）
+        </p>
+      )}
 
       {previewUrl && (
         <div className="space-y-1">

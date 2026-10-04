@@ -7,6 +7,10 @@
 
 export const REPOST_MIN_INTERVAL_HOURS = 24
 
+// 「前回の配信から24時間以内」のため自動では出さず、承認待ちにした下書きの印（sns_post_logs.error_message の先頭）。
+// 管理画面の承認待ちカードがこの文言で見分けて、運営に理由を表示する
+export const HELD_WITHIN_24H_NOTE = `前回の配信から${REPOST_MIN_INTERVAL_HOURS}時間以内のため、自動では出さず承認待ちにしています`
+
 export function comparableSnsContent(text: string | null | undefined): string {
   return (text ?? '')
     .replace(/\r\n?/g, '\n')

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 type Log = {
   id: string; target_type: string; target_id: string; medium: string
   status: string; approved_at: string | null; content?: string | null; error_message?: string | null
-  posted_id?: string | null; posted_at?: string | null; created_at?: string
+  posted_id?: string | null; posted_at?: string | null; created_at?: string; supersedes_log_id?: string | null
 }
 
 const db: {
@@ -88,6 +88,7 @@ vi.mock('@/lib/notify', () => ({ insertNotification: async () => {} }))
 vi.mock('@/lib/mail', () => ({ normalizeMailFrom: (s: string) => s }))
 
 import { reannounceFreefreeAfterEdit } from '../sns-announce'
+import { HELD_WITHIN_24H_NOTE } from '../sns-edit-compare'
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
@@ -179,11 +180,29 @@ describe('編集後の自動の出し直し（紹介文が変わったときだ�
     expect(db.takedowns).toHaveLength(0)
   })
 
-  it('前回の配信から24時間以内なら、変わっていても出し直さない（連投を防ぐ）', async () => {
+  it('前回の配信から24時間以内なら、自動では出さず、理由つきの承認待ちの下書きにする（連投を防ぐ）', async () => {
     db.logs = [delivered('threads', OLD('threads'), 3)]
     await edit()
-    expect(db.dispatched).toHaveLength(0)
-    expect(db.takedowns).toHaveLength(0)
+    expect(db.dispatched).toHaveLength(0) // 配信しない
+    expect(db.takedowns).toHaveLength(0) // 古い版はまだ削除待ちに載せない（承認・配信後にDBのトリガーが載せる）
+    const held = db.logs.filter((r) => r.id.startsWith('new-') && r.medium === 'threads')
+    expect(held).toHaveLength(1)
+    expect(held[0].approved_at).toBeNull()
+    expect(held[0].content).toBe('本文-threads')
+    expect(held[0].error_message).toBe(HELD_WITHIN_24H_NOTE)
+    expect(held[0].supersedes_log_id).toMatch(/^old-threads-success/) // 置き換える古い版を覚えておく
+  })
+
+  it('一部の媒体だけ24時間以内なら、あけた媒体は自動で出し、24時間以内の媒体は承認待ちにする', async () => {
+    db.logs = [delivered('threads', OLD('threads'), 48), delivered('instagram', OLD('instagram'), 3)]
+    await edit()
+    const fresh = db.logs.filter((r) => r.id.startsWith('new-'))
+    const threads = fresh.find((r) => r.medium === 'threads')!
+    const instagram = fresh.find((r) => r.medium === 'instagram')!
+    expect(threads.approved_at).not.toBeNull() // 自動配信
+    expect(instagram.approved_at).toBeNull() // 承認待ち
+    expect(db.dispatched).toEqual([threads.id])
+    expect(db.takedowns.map((t) => t.medium)).toEqual(['threads'])
   })
 
   it('全自動モードがオフなら、承認なしでは出さない', async () => {
