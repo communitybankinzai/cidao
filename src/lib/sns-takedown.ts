@@ -17,6 +17,8 @@ export type TakedownRow = {
   medium: string
   posted_id: string | null
   withdrawn_at: string
+  // hidden=非公開／deleted=完全削除／superseded=編集して新しい版を出したため古い版の削除待ち
+  reason?: string
 }
 
 const MEDIUM_LABEL: Record<string, string> = {
@@ -78,7 +80,7 @@ export async function notifyPendingSnsTakedowns(): Promise<number> {
       .from('sns_takedowns')
       .update({ notified_at: new Date().toISOString() })
       .is('notified_at', null)
-      .select('id, post_title, medium, posted_id, withdrawn_at')
+      .select('id, post_title, medium, posted_id, withdrawn_at, reason')
     if (error || !claimed?.length) return 0
     const rows = claimed as TakedownRow[]
     const groups = groupByPost(rows)
@@ -92,11 +94,16 @@ export async function notifyPendingSnsTakedowns(): Promise<number> {
         .is('deleted_at', null)
       for (const [title, list] of groups) {
         for (const a of admins ?? []) {
+          const old = list[0].reason === 'superseded'
           await insertNotification({
             recipientId: a.id as string,
             kind: 'system',
-            title: `SNSの紹介投稿の削除をお願いします（${list.length} 件）`,
-            body: `FreeFree「${title}」が取り下げられました（${jst(list[0].withdrawn_at)}）。`
+            title: old
+              ? `SNSの古い紹介投稿の削除をお願いします（${list.length} 件）`
+              : `SNSの紹介投稿の削除をお願いします（${list.length} 件）`,
+            body: (old
+              ? `FreeFree「${title}」を編集し、新しい版を投稿しました（${jst(list[0].withdrawn_at)}）。古い版：`
+              : `FreeFree「${title}」が取り下げられました（${jst(list[0].withdrawn_at)}）。`)
               + list.map(describeTakedown).join(' / ')
               + ' 各SNSで削除し、管理画面で「削除済み」にしてください',
             linkUrl: '/admin/sns',
@@ -117,7 +124,9 @@ export async function notifyPendingSnsTakedowns(): Promise<number> {
         const resend = new Resend(apiKey)
         const lines: string[] = []
         for (const [title, list] of groups) {
-          lines.push(`■ ${title}（取り下げ ${jst(list[0].withdrawn_at)}）`)
+          lines.push(list[0].reason === 'superseded'
+            ? `■ ${title}（編集して新しい版を投稿 ${jst(list[0].withdrawn_at)}・古い版）`
+            : `■ ${title}（取り下げ ${jst(list[0].withdrawn_at)}）`)
           for (const r of list) lines.push(`  ・${describeTakedown(r)}`)
           lines.push('')
         }
@@ -126,7 +135,7 @@ export async function notifyPendingSnsTakedowns(): Promise<number> {
           to,
           subject: `【CiDAO】SNSの紹介投稿の削除待ち：${[...groups.keys()].join('、')}`,
           text: [
-            'FreeFree の掲載が取り下げられました。SNS に出た紹介投稿を、各SNSで削除してください。',
+            'FreeFree の掲載の取り下げ、または編集で、SNS に出ている古い紹介投稿が残っています。各SNSで削除してください。',
             '削除したら、管理画面で「削除済み」にします。',
             '',
             ...lines,

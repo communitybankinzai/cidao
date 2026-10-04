@@ -140,7 +140,7 @@ export default async function AdminSnsPage() {
       postedId: (t.posted_id as string | null) ?? null,
       postUrl: postUrlOf(t.medium as string, (t.posted_id as string | null) ?? null),
       withdrawnAt: t.withdrawn_at as string,
-      reason: t.reason as 'hidden' | 'deleted',
+      reason: t.reason as 'hidden' | 'deleted' | 'superseded',
       removedAt: (t.removed_at as string | null) ?? null,
     }))
     // 未削除を先に

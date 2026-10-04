@@ -15,6 +15,8 @@ import { fetchSnsTarget } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
 import { normalizeMailFrom } from '@/lib/mail'
+import { canRepostNow, isSameSnsContent } from '@/lib/sns-edit-compare'
+import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
 
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 
@@ -277,6 +279,9 @@ export async function announceFreefreeToSns(
 //    承認すると同じ掲載が2回出ていた）。SNSの文面は古いままだが、掲載ページは常に最新。以後の定期紹介は配信時に最新の中身で本文を作る
 //  - 承認から IN_FLIGHT_MINUTES 分以内の行は消さない（配信の最中に消すと、投稿は出るのに記録だけ消える）。
 //    消さなかった行が残るので、announceFreefreeToSns の「未配信の下書きが残っていれば作らない」で作り直しも止まる
+// 2026-10-05 変更（事業主指示）：配信済みの媒体は「編集しても出さない」をやめ、紹介文が前回から変わっていれば
+//   新しい版を自動で出す（repostChangedFreefree）。古い版は SNS 削除待ち（superseded）に載せ、運営がいつでも消せる。
+//   中身が同じ・24時間以内に出したばかり・全自動モードがオフ・運営が作った掲載、のときは出さない
 // freefree/actions.ts の updateFreefreePost の after() から呼ばれる best-effort
 export const IN_FLIGHT_MINUTES = 10
 
@@ -302,10 +307,10 @@ export async function reannounceFreefreeAfterEdit(post: {
     }
     if (!post.snsShare) return
 
-    // すでに配信済みの媒体は、編集しても再告知しない
+    // 配信済みの記録（媒体ごとに一番新しい1件）。紹介文の比較と、古い版の削除待ちに使う
     const { data: delivered, error: delErr } = await supabase
       .from('sns_post_logs')
-      .select('medium')
+      .select('id, medium, content, posted_id, posted_at, created_at')
       .eq('target_type', 'freefree')
       .eq('target_id', post.id)
       .eq('status', 'success')
@@ -313,14 +318,119 @@ export async function reannounceFreefreeAfterEdit(post: {
       console.error('[sns-announce] freefree edit: delivered lookup failed:', delErr.message)
       return
     }
-    const skipMedia = Array.from(new Set((delivered ?? []).map((r) => r.medium as SnsMedium)))
+    const latest = new Map<SnsMedium, DeliveredLog>()
+    for (const r of (delivered ?? []) as DeliveredLog[]) {
+      const cur = latest.get(r.medium)
+      if (!cur || (r.posted_at ?? r.created_at) > (cur.posted_at ?? cur.created_at)) latest.set(r.medium, r)
+    }
+
+    // 1. まだ配信していない媒体は、これまでどおり承認待ちの下書きを作る
     await announceFreefreeToSns(
       { id: post.id, title: post.title },
-      { forceApproval: true, label: `FreeFree「${post.title}」（編集後）`, skipMedia },
+      { forceApproval: true, label: `FreeFree「${post.title}」（編集後）`, skipMedia: Array.from(latest.keys()) },
     )
+
+    // 2. 配信済みの媒体は、紹介文が前回から変わっていれば新しい版を自動で出す（古い版は削除待ちに載せる）
+    if (latest.size > 0) await repostChangedFreefree(supabase, post, latest)
   } catch (e) {
     console.error('[sns-announce] freefree edit failed:', e instanceof Error ? e.message : e)
   }
+}
+
+type DeliveredLog = {
+  id: string
+  medium: SnsMedium
+  content: string | null
+  posted_id: string | null
+  posted_at: string | null
+  created_at: string
+}
+
+// 編集後、配信済みの媒体の紹介文が前回から変わっていれば、新しい版を自動で配信する（2026-10-05・事業主指示）。
+//  - 比べるのは「前回配信した本文」と「いま作った本文」。カウントダウンの日数・改行の違いは同じとみなす（sns-edit-compare.ts）
+//  - 同じ掲載・同じ媒体は、前回の配信から24時間あける。あけた分は次の定期紹介が最新の中身で出す
+//  - 全自動モードがオフ、または運営が作った掲載のときは出さない（承認が要るのに、承認なしで出さないため）
+//  - 配信できたら、古い版を sns_takedowns に reason='superseded' で載せて運営へ知らせる。SNS 上の古い投稿は自動では消さない
+async function repostChangedFreefree(
+  supabase: SupabaseClient,
+  post: { id: string; title: string },
+  latest: Map<SnsMedium, DeliveredLog>,
+) {
+  const { data: setting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'sns_freefree_auto_post')
+    .maybeSingle()
+  const { data: row } = await supabase.from('freefree_posts').select('import_source').eq('id', post.id).maybeSingle()
+  const isImport = row?.import_source === 'openpoi' || row?.import_source === 'manual'
+  const auto = !isImport && (setting?.value as { enabled?: boolean } | null)?.enabled === true
+  if (!auto) return
+
+  const target = await fetchSnsTarget(supabase as unknown as Parameters<typeof fetchSnsTarget>[0], 'freefree', post.id)
+  if (!target) return
+
+  const nowMs = Date.now()
+  const changed: Array<{ medium: SnsMedium; old: DeliveredLog; content: string }> = []
+  for (const [medium, old] of latest) {
+    const content = generateSnsContent(target, medium, nowMs)
+    if (isSameSnsContent(old.content, content)) continue
+    if (!canRepostNow(old.posted_at ?? old.created_at, nowMs)) continue
+    changed.push({ medium, old, content })
+  }
+  if (changed.length === 0) return
+
+  const now = new Date(nowMs).toISOString()
+  const { data: inserted, error } = await supabase
+    .from('sns_post_logs')
+    .insert(
+      changed.map((c) => ({
+        target_type: 'freefree',
+        target_id: post.id,
+        medium: c.medium,
+        status: 'pending',
+        content: c.content,
+        approved_at: now, // 全自動モードのシステム承認（approved_by は人ではないので null のまま）
+        error_message: 'freefree edit auto post: dispatching',
+      })),
+    )
+    .select('id, medium, content')
+  if (error || !inserted) {
+    console.error('[sns-announce] freefree edit repost insert failed:', error?.message)
+    return
+  }
+
+  const results = await dispatchLogs(
+    supabase,
+    inserted.map((r) => ({
+      id: r.id as string,
+      medium: r.medium as SnsMedium,
+      content: r.content as string | null,
+      target_type: 'freefree',
+      target_id: post.id,
+    })),
+  )
+
+  // 新しい版が出せた媒体だけ、古い版を削除待ちに載せる（出せなかった媒体は古い版が最新のまま）
+  const okMedia = new Set(results.filter((r) => r.outcome === 'success').map((r) => r.medium))
+  const supersededRows = changed
+    .filter((c) => okMedia.has(c.medium))
+    .map((c) => ({
+      log_id: c.old.id,
+      target_id: post.id,
+      post_title: post.title,
+      medium: c.medium,
+      posted_id: c.old.posted_id,
+      posted_at: c.old.posted_at,
+      reason: 'superseded',
+    }))
+  if (supersededRows.length > 0) {
+    const { error: tdErr } = await supabase
+      .from('sns_takedowns')
+      .upsert(supersededRows, { onConflict: 'log_id', ignoreDuplicates: true })
+    if (tdErr) console.error('[sns-announce] freefree edit: takedown insert failed:', tdErr.message)
+    else await notifyPendingSnsTakedowns()
+  }
+  await notifyAdminsOfAutoPosted(supabase, `FreeFree「${post.title}」（編集後の新しい版）`, okMedia.size, results.length)
 }
 
 // 全自動モードで配信したことを管理者全員に知らせる（ベル＋Webプッシュ）。

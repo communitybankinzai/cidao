@@ -12,8 +12,14 @@ export type TakedownItem = {
   postedId: string | null
   postUrl: string | null
   withdrawnAt: string
-  reason: 'hidden' | 'deleted'
+  reason: 'hidden' | 'deleted' | 'superseded'
   removedAt: string | null
+}
+
+const REASON_LABEL: Record<TakedownItem['reason'], string> = {
+  hidden: '非公開',
+  deleted: '完全削除',
+  superseded: '編集前の古い版',
 }
 
 function fmt(iso: string) {
@@ -40,7 +46,7 @@ function Row({ item }: { item: TakedownItem }) {
       <span className="flex-1 min-w-[10rem]">
         <span className="font-medium">{item.postTitle}</span>
         <span className="block text-[11px] text-slate-500">
-          {item.reason === 'deleted' ? '完全削除' : '非公開'} {fmt(item.withdrawnAt)}
+          {REASON_LABEL[item.reason]} {fmt(item.withdrawnAt)}
           {' ・ '}
           {item.postUrl
             ? <a href={item.postUrl} target="_blank" rel="noopener noreferrer" className="underline">{item.postUrl}</a>
