@@ -33,6 +33,18 @@ function disasterMonitorAdminClient() {
   return createSupabaseAdmin(url, key, { auth: { persistSession: false } })
 }
 
+// 承認の書き込みが0行だったときの説明。すでに承認・配信が始まっている（二重に押された）のか、対象が無いのかを分ける
+async function alreadyHandledMessage(supabase: Awaited<ReturnType<typeof createClient>>, logId: string): Promise<string> {
+  const { data: row } = await supabase
+    .from('sns_post_logs')
+    .select('status, approved_at')
+    .eq('id', logId)
+    .maybeSingle()
+  if (!row) return '対象が見つかりません（却下・削除された可能性）'
+  const state = row.status === 'success' ? '配信済み' : row.status === 'failed' ? '配信に失敗' : row.approved_at ? '承認済み（配信中または配信待ち）' : '処理中'
+  return `すでに処理済みです（${state}）。二重に押されたため、2回目は何もしませんでした。`
+}
+
 // Server Action の throw は本番ビルドでメッセージがマスクされ
 // 「An error occurred in the Server Components render」としか表示されない。
 // 運営が原因を読めるよう、下書き系のエラーはすべて戻り値で返す。
@@ -99,13 +111,17 @@ export async function approveDraft(logId: string, content: string): Promise<Draf
     const text = content.trim()
     if (!text) return { ok: false, error: '本文が空のままでは承認できません' }
 
+    // 「まだ承認されていない行」だけを書き換える。2回目以降の呼び出し（連打・再送）は0行に一致し、
+    // 配信まで進まない（Instagram が二重に投稿された 2026-10-04 の再発防止）
     const { data: log, error } = await supabase
       .from('sns_post_logs')
       .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
       .eq('id', logId)
+      .is('approved_at', null)
       .select('id, medium, content, target_type, target_id, status')
       .maybeSingle()
     if (error) return { ok: false, error: `承認に失敗しました: ${error.message}` }
+    if (!log) return { ok: false, error: await alreadyHandledMessage(supabase, logId) }
 
     // FreeFree は承認したらその場で配信する（2026-09-15。掲載と同時にまず告知するため、18時台を待たない）。
     // 配信できなかった場合も承認は残るので、18時台の自動配信か投稿ログの再試行で送り直せる
@@ -159,10 +175,11 @@ export async function approveAndDispatchDraft(logId: string, content: string): P
       .update({ content: text, approved_at: new Date().toISOString(), approved_by: user.id })
       .eq('id', logId)
       .eq('status', 'pending')
+      .is('approved_at', null) // 2回目以降の呼び出しは0行に一致し、二重に配信しない
       .select('id, medium, content, target_type, target_id')
       .maybeSingle()
     if (upErr) return { ok: false, error: `承認に失敗しました: ${upErr.message}` }
-    if (!log) return { ok: false, error: '対象が見つかりません（配信済みの可能性）' }
+    if (!log) return { ok: false, error: await alreadyHandledMessage(supabase, logId) }
 
     const results = await dispatchLogs(supabase, [{
       id: log.id,

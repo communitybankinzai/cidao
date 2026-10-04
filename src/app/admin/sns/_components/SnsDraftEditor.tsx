@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft, approveAndDispatchDraft } from '../actions'
 
@@ -15,6 +15,16 @@ export type DraftLog = {
   title: string
   mediumLabel: string
   targetLabel: string
+}
+
+type BusyKey = 'regen' | 'save' | 'approve' | 'dispatch' | 'unapprove' | 'dismiss'
+const BUSY_LABEL: Record<BusyKey, string> = {
+  regen: '⏳ 作成中…',
+  save: '⏳ 保存中…',
+  approve: '⏳ 配信中…',
+  dispatch: '⏳ 配信中…',
+  unapprove: '⏳ 取り消し中…',
+  dismiss: '⏳ 却下中…',
 }
 
 // 自動配信は毎日 JST 18時台（Vercel Cron: 09:00 UTC）。vercel.json と揃えること。
@@ -51,17 +61,32 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
       ? `/api/og/${log.target_type}/${log.target_id}`
       : null
 
-  function run(fn: () => Promise<{ ok: boolean; content?: string; error?: string } | void>) {
+  // 実行中の操作。押したボタンを「⏳ …中」に変えるのに使う
+  const [busy, setBusy] = useState<BusyKey | null>(null)
+  // 再描画を待たずに二重実行を弾く鍵（連打で同じ配信が2回走るのを防ぐ）
+  const inFlight = useRef(false)
+
+  function run(key: BusyKey, fn: () => Promise<{ ok: boolean; content?: string; error?: string } | void>) {
+    if (inFlight.current) return
+    inFlight.current = true
     setError(null)
+    setBusy(key)
     startTransition(async () => {
       try {
         const r = await fn()
         if (r && !r.ok) setError(r.error ?? '失敗しました')
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        inFlight.current = false
+        setBusy(null)
       }
     })
   }
+
+  // 実行中のボタンは文言を変える。それ以外の操作は、実行中は同じ欄のすべてのボタンを押せなくする
+  const label = (key: BusyKey, idle: string) => (busy === key ? BUSY_LABEL[key] : idle)
+  const locked = pending || busy !== null
 
   const weight = xWeight(text)
   const overLimit = log.medium === 'x' && weight > 280
@@ -112,8 +137,8 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
         <Button
           type="button"
           variant="outline"
-          disabled={pending}
-          onClick={() => run(async () => {
+          disabled={locked}
+          onClick={() => run('regen', async () => {
             // 生成結果をそのまま画面へ入れる。
             // 再描画では useState の初期値が読み直されないため、戻り値で反映する
             const r = await regenerateDraft(log.id)
@@ -121,65 +146,65 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
             return r
           })}
         >
-          {log.content ? '下書きを作り直す' : '下書きを作る'}
+          {label('regen', log.content ? '下書きを作り直す' : '下書きを作る')}
         </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={pending || !text.trim()}
-          onClick={() => run(() => saveDraft(log.id, text))}
+          disabled={locked || !text.trim()}
+          onClick={() => run('save', () => saveDraft(log.id, text))}
         >
-          保存
+          {label('save', '保存')}
         </Button>
         {approved ? (
-          <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => unapproveDraft(log.id))}>
-            承認を取り消す
+          <Button type="button" variant="outline" disabled={locked} onClick={() => run('unapprove', () => unapproveDraft(log.id))}>
+            {label('unapprove', '承認を取り消す')}
           </Button>
         ) : (
           <>
             <Button
               type="button"
               variant="outline"
-              disabled={pending}
+              disabled={locked}
               className="text-red-600 hover:text-red-700"
               onClick={() => {
                 if (!window.confirm(`「${log.title}」（${log.mediumLabel}）の下書きを却下してリストから消します。よろしいですか？`)) return
-                run(() => dismissDraft(log.id))
+                run('dismiss', () => dismissDraft(log.id))
               }}
             >
-              却下
+              {label('dismiss', '却下')}
             </Button>
             {log.target_type === 'freefree' ? (
               // FreeFree は承認＝その場で配信（2026-09-15・admin/sns/actions.ts の approveDraft）
               <Button
                 type="button"
-                disabled={pending || !text.trim() || overLimit}
+                disabled={locked || !text.trim() || overLimit}
                 onClick={() => {
                   if (!window.confirm(`「${log.title}」（${log.mediumLabel}）を承認し、この内容でただちに投稿します。よろしいですか？`)) return
-                  run(() => approveDraft(log.id, text))
+                  run('approve', () => approveDraft(log.id, text))
                 }}
               >
-                承認して配信
+                {label('approve', '承認して配信')}
               </Button>
             ) : (
               <>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={pending || !text.trim() || overLimit}
-                  onClick={() => run(() => approveDraft(log.id, text))}
+                  disabled={locked || !text.trim() || overLimit}
+                  onClick={() => run('approve', () => approveDraft(log.id, text))}
                 >
-                  承認する（{nextDispatchLabel()}に配信）
+                  {busy === 'approve' ? '⏳ 承認中…' : `承認する（${nextDispatchLabel()}に配信）`}
                 </Button>
                 <Button
                   type="button"
-                  disabled={pending || !text.trim() || overLimit}
+                  disabled={locked || !text.trim() || overLimit}
                   onClick={() => {
                     if (!window.confirm(`「${log.title}」（${log.mediumLabel}）をこの内容でただちに投稿します。よろしいですか？`)) return
-                    run(() => approveAndDispatchDraft(log.id, text))
+                    run('dispatch', () => approveAndDispatchDraft(log.id, text))
                   }}
                 >
-                  ⚡ 今すぐ投稿
+                  {label('dispatch', '⚡ 今すぐ投稿')}
                 </Button>
               </>
             )}
@@ -188,7 +213,16 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
-      {pending && <p className="text-xs text-slate-500">処理中…</p>}
+      {locked && (
+        <p
+          role="status"
+          className="text-xs rounded border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 px-2 py-1.5"
+        >
+          {busy === 'approve' || busy === 'dispatch'
+            ? `⏳ ${log.mediumLabel} へ配信しています。${log.medium === 'instagram' ? '10秒ほどかかります。' : '数秒かかります。'}終わるまでボタンを押さずにお待ちください（二重に投稿されるのを防ぐため、この間は押せません）。`
+            : '⏳ 処理しています。終わるまでお待ちください。'}
+        </p>
+      )}
     </li>
   )
 }
