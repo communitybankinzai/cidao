@@ -10,7 +10,7 @@ import sharp from 'sharp'
 import { createClient } from '@/lib/supabase/server'
 import { freefreeCategoryLabel } from '@/lib/freefree-categories'
 import { areaLabelFromLocation } from '@/lib/freefree-import-core'
-import { renderImportCard } from '@/lib/freefree-import-card'
+import { renderImportCard, renderHeadlineBand, HEADLINE_BAND_H } from '@/lib/freefree-import-card'
 
 export const runtime = 'nodejs'
 
@@ -70,12 +70,23 @@ export async function GET(
   try {
     const res = await fetch(src)
     if (!res.ok) return NextResponse.json({ error: 'image fetch failed' }, { status: 502 })
-    const jpeg = await sharp(Buffer.from(await res.arrayBuffer()))
+    const original = Buffer.from(await res.arrayBuffer())
+    // 一覧で何の投稿か分かるよう、上に見出しの帯を付ける（フォントが取れなければ帯なしで続ける）
+    const band = await renderHeadlineBand(String(post?.title ?? '')).catch(() => null)
+    const photoH = band ? H - HEADLINE_BAND_H : H
+    const photo = sharp(original)
       .rotate() // 写真の向き情報に合わせる
-      .resize(W, H, { fit: 'contain', background: '#ffffff' })
+      .resize(W, photoH, { fit: 'contain', background: '#ffffff' })
       .flatten({ background: '#ffffff' }) // 透過部分を白に（JPEG は透過を持てない）
-      .jpeg({ quality: 85 })
-      .toBuffer()
+    const jpeg = band
+      ? await sharp({ create: { width: W, height: H, channels: 3, background: '#ffffff' } })
+          .composite([
+            { input: band, top: 0, left: 0 },
+            { input: await photo.png().toBuffer(), top: HEADLINE_BAND_H, left: 0 },
+          ])
+          .jpeg({ quality: 85 })
+          .toBuffer()
+      : await photo.jpeg({ quality: 85 }).toBuffer()
     return new NextResponse(new Uint8Array(jpeg), {
       headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },
     })

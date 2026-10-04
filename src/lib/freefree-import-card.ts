@@ -140,3 +140,26 @@ export async function renderImportCard(input: CardInput): Promise<Buffer | null>
   )
   return await sharp(Buffer.from(svg)).flatten({ background: NAVY }).jpeg({ quality: 88 }).toBuffer()
 }
+
+// 写真つき掲載の Instagram 画像の上に付ける見出しの帯。プロフィールの一覧で何の投稿か分かるようにする
+export const HEADLINE_BAND_H = 300
+const HEADLINE_LABEL = 'FreeFree 地域応援掲示板'
+const HEADLINE_MAX_CHARS = 44
+
+/** 見出しの帯（PNG・1080x300）。フォントが取れなければ null（呼び出し側は帯なしで続ける） */
+export async function renderHeadlineBand(title: string): Promise<Buffer | null> {
+  const chars = Array.from(title.trim())
+  const text = chars.length > HEADLINE_MAX_CHARS ? `${chars.slice(0, HEADLINE_MAX_CHARS - 1).join('')}…` : chars.join('')
+  const font = await loadFont(HEADLINE_LABEL + text)
+  if (!font) return null
+  const size = chars.length <= 14 ? 84 : chars.length <= 24 ? 68 : 56
+  const satori = (await import('satori')).default
+  const sharp = (await import('sharp')).default
+  const svg = await satori(
+    h('div', { style: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '14px', backgroundColor: NAVY, color: '#ffffff', padding: '0px 48px', fontFamily: 'NotoSansJP' } },
+      h('div', { key: 'label', style: { display: 'flex', fontSize: '30px', color: YELLOW } }, HEADLINE_LABEL),
+      h('div', { key: 'title', style: { display: 'flex', fontSize: `${size}px`, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-all' } }, text)),
+    { width: CARD_W, height: HEADLINE_BAND_H, fonts: [{ name: 'NotoSansJP', data: font, weight: 700, style: 'normal' }] },
+  )
+  return await sharp(Buffer.from(svg)).flatten({ background: NAVY }).png().toBuffer()
+}
