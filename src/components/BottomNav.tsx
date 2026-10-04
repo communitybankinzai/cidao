@@ -18,7 +18,7 @@ const TABS = [
   { href: '/', icon: '🏠', label: 'ホーム' },
   { href: '/orgs', icon: '🏛', label: '団体' },
   { href: '/events', icon: '📅', label: '予定' },
-  { href: '/freefree', icon: '🎁', label: 'ゆずる' },
+  { href: '/freefree', icon: '📣', label: '掲示板' },
 ] as const
 
 /** 「メニュー」を開くと出る導線。下タブに入らないものをここへ集約する */
