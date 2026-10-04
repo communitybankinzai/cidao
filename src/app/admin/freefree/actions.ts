@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { pathsInBucket } from '@/lib/storage-path'
+import { FREEFREE_VIDEO_BUCKET, videoStoragePath } from '@/lib/freefree-video'
 import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
 
 const FREEFREE_BUCKET = 'freefree-images'
@@ -34,7 +35,7 @@ async function preserveEvidence(
 ) {
   const { data: post, error: readErr } = await supabase
     .from('freefree_posts')
-    .select('id, title, body, category, location, images, created_at, poster_type, poster_id, sns_display_name, status')
+    .select('id, title, body, category, location, images, video_url, created_at, poster_type, poster_id, sns_display_name, status')
     .eq('id', postId)
     .maybeSingle()
   if (readErr) throw new Error(`証拠保全のための読み込みに失敗しました: ${readErr.message}`)
@@ -73,6 +74,18 @@ async function preserveEvidence(
       }
       evidencePaths.push(dest)
     }
+    // 自前のバケットにアップロードされた動画も複製する（YouTube のリンクは snapshot.video_url に残る）
+    const videoPath = post.video_url ? videoStoragePath(post.video_url as string) : null
+    if (videoPath) {
+      const dest = `${postId}/video-${videoPath.split('/').pop()}`
+      const { error: cpErr } = await supabase.storage.from(FREEFREE_VIDEO_BUCKET).copy(videoPath, dest, {
+        destinationBucket: EVIDENCE_BUCKET,
+      })
+      if (cpErr && !/exist/i.test(cpErr.message)) {
+        throw new Error(`証拠動画の退避に失敗したため中断しました: ${cpErr.message}`)
+      }
+      evidencePaths.push(dest)
+    }
   }
 
   const { error: insErr } = await supabase.from('moderation_records').insert({
@@ -86,6 +99,7 @@ async function preserveEvidence(
       category: post.category,
       location: post.location,
       images: post.images,
+      video_url: post.video_url ?? null,
       status_before: post.status,
       posted_at: post.created_at,
       sns_display_name: post.sns_display_name ?? null,
@@ -315,13 +329,19 @@ export async function deleteFreefreePost(postId: string) {
   // 画像の削除に失敗しても掲載本体は消せるようにする（残骸より露出の停止を優先）。
   const { data: post } = await supabase
     .from('freefree_posts')
-    .select('images')
+    .select('images, video_url')
     .eq('id', postId)
     .maybeSingle()
   const paths = pathsInBucket((post?.images as string[] | null) ?? [], FREEFREE_BUCKET)
   if (paths.length > 0) {
     const { error: rmErr } = await supabase.storage.from(FREEFREE_BUCKET).remove(paths)
     if (rmErr) console.warn('[admin/freefree] image cleanup failed:', rmErr.message)
+  }
+  // アップロードされた動画も消す（証拠用バケットへの複製は preserveEvidence で済んでいる）。YouTube のリンクは消すものが無い
+  const videoPath = post?.video_url ? videoStoragePath(post.video_url as string) : null
+  if (videoPath) {
+    const { error: rmErr } = await supabase.storage.from(FREEFREE_VIDEO_BUCKET).remove([videoPath])
+    if (rmErr) console.warn('[admin/freefree] video cleanup failed:', rmErr.message)
   }
 
   const { error } = await supabase.from('freefree_posts').delete().eq('id', postId)
