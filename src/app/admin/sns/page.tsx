@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import SnsActions from './_components/SnsActions'
 import AwaitingList from './_components/AwaitingList'
 import AutoPostToggle from './_components/AutoPostToggle'
+import ApprovalRules from './_components/ApprovalRules'
 import SnsAuthSettings, { type SnsAuthStatus } from './_components/SnsAuthSettings'
 import RotationScheduleCard from './_components/RotationScheduleCard'
 import RetryButton from './_components/RetryButton'
@@ -283,6 +284,7 @@ export default async function AdminSnsPage() {
             （実行タイミングに最大1時間の幅があるため18:00ちょうどではありません）。
             すぐ流したいときは上の「pending を実投稿」を押してください。
           </p>
+          <ApprovalRules freefreeAuto={freefreeAutoPostEnabled} proposalAuto={autoPostEnabled} />
           {awaiting.length > 0 ? (
             <AwaitingList
               logs={awaiting.map((l) => ({
