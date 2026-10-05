@@ -28,6 +28,11 @@ describe('承認のルールの表示', () => {
     expect(h).toContain('常に承認待ち')
     expect(h).toContain('自動では消えません')
   })
+  it('最初は閉じている（見出しを押すと開く）', () => {
+    const h = html(true, true)
+    expect(h).toMatch(/<details(?![^>]*\bopen\b)[^>]*>/)
+    expect(h).toContain('📋 承認のルール')
+  })
   it('提案の全自動モードの状態も表に出る', () => {
     expect(html(true, true)).toContain('提案の全自動モード：オン')
     expect(html(true, false)).toContain('提案の全自動モード：オフ')

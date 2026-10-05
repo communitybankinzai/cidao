@@ -52,7 +52,7 @@ export default function ApprovalRules({ freefreeAuto, proposalAuto }: { freefree
   ]
 
   return (
-    <details open className="mb-4 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20 p-3">
+    <details className="mb-4 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20 p-3">
       <summary className="cursor-pointer text-sm font-semibold text-sky-900 dark:text-sky-200">
         📋 承認のルール（どんなときに自動で出て、どんなときに承認待ちになるか）
       </summary>
