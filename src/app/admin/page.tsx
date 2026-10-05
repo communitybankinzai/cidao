@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { PhoneViewButton } from './_components/PhoneViewButton'
 
 export default async function AdminHomePage() {
   const supabase = await createClient()
@@ -175,7 +174,17 @@ export default async function AdminHomePage() {
               <p className="text-sm text-slate-500">イベントごとの参加者・出欠状況を横断的に確認</p>
             </Link>
           </li>
-          <li><PhoneViewButton /></li>
+          <li>
+            <a
+              href="/admin/phone"
+              target="_blank"
+              rel="noopener"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">📱 展示用：iPhone 表示で開く</h2>
+              <p className="text-sm text-slate-500">iPhone の枠の中に、本物の CiDAO を映す（新しいタブ）。会場のスクリーンで操作説明するときに使う。ログインはこのブラウザのまま。右上の薄いボタンでPC表示に切り替え</p>
+            </a>
+          </li>
         </ul>
       </div>
     </div>
