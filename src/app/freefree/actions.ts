@@ -15,6 +15,7 @@ import {
 } from '@/lib/freefree-dates'
 import { canEditFreefreePost } from '@/lib/freefree-permissions'
 import { notifyAllMembers } from '@/lib/notify'
+import { notifyFreefreeComment } from '@/lib/freefree-comment-notify'
 import { announceFreefreeToSns, reannounceFreefreeAfterEdit } from '@/lib/sns-announce'
 import { recordWrite } from '@/lib/audit'
 import { hideSupersededImports } from '@/lib/freefree-import-supersede'
@@ -393,6 +394,10 @@ export async function commentFreefree(postId: string, body: string) {
     targetType: 'freefree',
     targetId: postId,
     detail: { body: body.trim().slice(0, 200) },
+  })
+  // 掲載者へ通知（ベル＋Webプッシュ）。レスポンス後に回し、失敗しても応援メッセージは成立させる
+  after(async () => {
+    await notifyFreefreeComment({ postId, commenterId: user.id, body: body.trim() })
   })
   revalidatePath(`/freefree/${postId}`)
 }
