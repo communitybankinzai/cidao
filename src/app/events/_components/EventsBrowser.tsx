@@ -646,7 +646,7 @@ function CalendarView({
               <div className="flex items-center justify-between">
                 <span className={`text-xs tabular-nums ${isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : !inMonth ? 'text-slate-300 dark:text-slate-700' : dow === 0 ? 'text-rose-600 dark:text-rose-400' : dow === 6 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}`}>{cd}</span>
                 {isLoggedIn && inMonth && (
-                  <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} onClick={(ev) => ev.stopPropagation()} className="opacity-0 hover:opacity-100 focus:opacity-100 text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
+                  <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} onClick={(ev) => ev.stopPropagation()} className="opacity-0 hover:opacity-100 focus:opacity-100 [@media(hover:none)]:pointer-events-none text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
                 )}
               </div>
               <ul className="flex flex-col gap-0.5 overflow-hidden">
