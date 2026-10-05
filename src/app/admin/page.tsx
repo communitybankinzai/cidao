@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { PhoneViewButton } from './_components/PhoneViewButton'
 
 export default async function AdminHomePage() {
   const supabase = await createClient()
@@ -174,6 +175,7 @@ export default async function AdminHomePage() {
               <p className="text-sm text-slate-500">イベントごとの参加者・出欠状況を横断的に確認</p>
             </Link>
           </li>
+          <li><PhoneViewButton /></li>
         </ul>
       </div>
     </div>
