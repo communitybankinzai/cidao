@@ -111,7 +111,19 @@ export async function postToMedium(
     // 「リンクがつながらない」状態になるため（2026-09-14 提案告知で発生）。
     // 添付するとタップ可能なリンクカードが投稿に付く。本文（承認済み文面）は変えない
     const firstUrl = content.match(/https?:\/\/[^\s）」]+/)
-    if (firstUrl) createParams.link_attachment = firstUrl[0]
+    // 画像つき投稿（イベント紹介のチラシ）。画像が取れないとき（チラシなし等）はテキスト投稿に落とす。
+    // 画像投稿では link_attachment が使えないので付けない（URLは本文に残る）
+    let withImage = false
+    if (opts?.imageUrl) {
+      const probe = await fetch(opts.imageUrl).catch(() => null)
+      withImage = !!probe?.ok && (probe.headers.get('content-type') ?? '').startsWith('image/')
+    }
+    if (withImage && opts?.imageUrl) {
+      createParams.media_type = 'IMAGE'
+      createParams.image_url = opts.imageUrl
+    } else if (firstUrl) {
+      createParams.link_attachment = firstUrl[0]
+    }
     const create = await fetch(`https://graph.threads.net/v1.0/${userId}/threads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -241,8 +253,9 @@ export async function dispatchLogs(
     try {
       // Instagram 投稿には画像（公開URL・JPEG）を添える。
       // 提案は告知カード画像、FreeFree は1枚目の掲載画像を JPEG・4:5 に直したもの（2026-09-15）
+      // イベント紹介は Threads にもチラシ画像を付ける（2026-10-06）
       const imageUrl =
-        log.medium !== 'instagram' || !log.target_id
+        !log.target_id || (log.medium !== 'instagram' && !(log.medium === 'threads' && log.target_type === 'event'))
           ? undefined
           : log.target_type === 'proposal'
             ? `${SITE_BASE}/api/og/proposal/${log.target_id}`
