@@ -596,11 +596,13 @@ export function parseInzaiTrunkList(html: string) {
     .replace(/&nbsp;/g, ' ')
     .normalize('NFKC')
   // 時刻は「8：00現在」と「17時45分現在」の両方がある（2026-09-27 に後者へ変わり、一覧を丸ごと読み落とした）。
-  // 念のため「(日)」の曜日、「午前／午後5時45分」「17時現在」も読む。読めなければ scanInzai が警告を出す
-  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(?:\([^)]*\)\s*)?(午前|午後)?\s*(\d+)\s*(?:[:：]\s*(\d+)|時\s*(?:(\d+)\s*分)?)\s*現在\s*】/)
+  // 念のため「(日)」の曜日、「午前／午後5時45分」「17時現在」も読む。読めなければ scanInzai が警告を出す。
+  // 2026-10-05 からは「【令和8年10月5日 現在】」と時刻なしになった（10-06 に吉田・岩戸線の解除を読み落とした）。
+  // 時刻が無いときはその日の0時として扱う
+  const head = text.match(/【\s*令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日\s*(?:\([^)]*\)\s*)?(?:(午前|午後)?\s*(\d+)\s*(?:[:：]\s*(\d+)|時\s*(?:(\d+)\s*分)?)\s*)?現在\s*】/)
   if (!head) return null
   const [y, mo, d] = head.slice(1, 4).map(Number)
-  let h = Number(head[5])
+  let h = head[5] === undefined ? 0 : Number(head[5])
   if (head[4] === '午後' && h < 12) h += 12
   if (head[4] === '午前' && h === 12) h = 0
   const mi = Number(head[6] ?? head[7] ?? 0)

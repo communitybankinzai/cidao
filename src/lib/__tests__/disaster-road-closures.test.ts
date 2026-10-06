@@ -272,6 +272,17 @@ describe('印西市', () => {
     expect(parseInzaiTrunkList(trunkPage.replace('9月26日　8：00現在', '9月26日（土）17:45現在'))?.asOf).toBe('2026-09-26T08:45:00.000Z')
   })
 
+  // 2026-10-06 に市のページ（0000022584）で実際に見た形。見出しが時刻なしになり、吉田・岩戸線の解除を読み落とした
+  it('日付だけの見出し「【令和8年10月5日 現在】」でも一覧を読む（時刻なしはその日の0時）', () => {
+    const page = trunkPage
+      .replace('【令和8年9月26日　8：00現在】', '【令和8年10月5日 現在】')
+      .replace('市道師戸・江川線　　別添位置図参照', '市道師戸・江川線　　別添位置図参照<br>市道吉田・岩戸線　　別添位置図参照　　　　　⇒　通行止め解除')
+    const list = parseInzaiTrunkList(page)
+    expect(list?.asOf).toBe('2026-10-04T15:00:00.000Z')
+    expect(list?.items.find((i) => i.road === '市道吉田・岩戸線')).toEqual({ road: '市道吉田・岩戸線', place: '別添位置図参照', cleared: true, note: '通行止め解除' })
+    expect(list?.items.find((i) => i.road === '市道師戸・江川線')?.cleared).toBe(false)
+  })
+
   it('一覧のページが読めないときは空の行を作らず、一覧から出していた行を残して警告する', async () => {
     mockSite({
       [TOP]: topPage([['./0000022578.html', '道路の通行止めの状況']]),
