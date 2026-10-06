@@ -168,8 +168,9 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
       prefix = '【印西イベント📅】'
       // サーバーはUTCで動くため timeZone 指定必須（指定なしだと「8/15 01:00」のようにUTC時刻が出る）
       const when = target.start_at ? new Date(target.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
-      const loc = target.location ? ` @ ${target.location}` : ''
-      body = `${target.title}${loc}\n${when}${target.organizer_name ? ` / ${target.organizer_name}` : ''}\n${truncate(target.body ?? '', 80)}`
+      // タイトル・場所・主催者名は自由入力。長いと Threads の500字で末尾の登録導線が切れるため上限をかける
+      const loc = target.location ? ` @ ${truncate(target.location, 40)}` : ''
+      body = `${truncate(target.title, 80)}${loc}\n${when}${target.organizer_name ? ` / ${truncate(target.organizer_name, 40)}` : ''}\n${truncate(target.body ?? '', 80)}`
       hashtags = EVENT_HASHTAGS
       break
     }
@@ -226,12 +227,15 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
     return `${prefix}\n${body}\n\n▶ 提案の全文と議論はこちら\n${link}\n\n意見・投票への参加には CiDAO（印西の市民DAO）への登録が必要です。登録は無料です。\n${tagLine}`
   }
   if (target.target_type === 'event') {
+    // 冒頭の定型句：通常のイベント告知は毎朝7時に「その日開催」の分をまとめて行っており（cbi-admin-gas/ThreadsDailyPost.gs・Threads）、
+    // これは主催者の依頼を受けた単独での告知であることを示す（2026-10-06・事業主指示。当日朝であることはコードで確認済み）
+    const lead = 'イベント告知は、毎朝、その日開催の分をまとめて行っています。主催者から依頼があった場合は、当日以外にも単独でのイベント告知に協力しています。\n\n'
     // イベント紹介の末尾に、CBIに協力してほしい団体・企業へ CiDAO 登録を促す導線を置く（2026-10-06・事業主指示）。
     // Instagram はキャプション内のURLが押せないため、プロフィールのリンクへ誘導する
     if (medium === 'instagram') {
-      return `${prefix}\n${body}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、プロフィールのリンクからCiDAOへご登録ください（無料）。\n\n#印西市 #イベント情報 #CiDAO #印西`
+      return `${lead}${prefix}\n${body}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、プロフィールのリンクからCiDAOへご登録ください（無料）。\n\n#印西市 #イベント情報 #CiDAO #印西`
     }
-    return `${prefix}\n${body}\n\n▶ ${link}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、CiDAOへご登録ください（無料）\n${SITE_BASE}/login\n${tagLine}`
+    return `${lead}${prefix}\n${body}\n\n▶ ${link}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、CiDAOへご登録ください（無料）\n${SITE_BASE}/login\n${tagLine}`
   }
   return `${prefix}\n${body}\n\n▶ ${link}\n${tagLine}`
 }
