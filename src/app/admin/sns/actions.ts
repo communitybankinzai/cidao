@@ -197,6 +197,21 @@ export async function approveAndDispatchDraft(logId: string, content: string): P
   }
 }
 
+// イベント詳細ページの「SNSで告知」ボタンから、承認待ちの告知下書きを作る（運営のみ）。
+// 配信はしない。運営が /admin/sns で本文・画像を確認して承認したものだけが出る
+export async function createEventAnnounceDraft(eventId: string): Promise<DraftResult> {
+  try {
+    await requireAdmin()
+    const { announceEventToSns } = await import('@/lib/sns-announce')
+    const r = await announceEventToSns(eventId)
+    if (!r.ok) return { ok: false, error: r.error }
+    revalidatePath('/admin/sns')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // 失敗した配信をその場で再試行する（投稿ログの「✗失敗」行から）。
 // 承認済みの本文をそのまま使い、pending に戻してから即配信する
 export async function retryFailedLog(logId: string): Promise<DraftResult> {

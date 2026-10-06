@@ -225,5 +225,13 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
     }
     return `${prefix}\n${body}\n\n▶ 提案の全文と議論はこちら\n${link}\n\n意見・投票への参加には CiDAO（印西の市民DAO）への登録が必要です。登録は無料です。\n${tagLine}`
   }
+  if (target.target_type === 'event') {
+    // イベント紹介の末尾に、CBIに協力してほしい団体・企業へ CiDAO 登録を促す導線を置く（2026-10-06・事業主指示）。
+    // Instagram はキャプション内のURLが押せないため、プロフィールのリンクへ誘導する
+    if (medium === 'instagram') {
+      return `${prefix}\n${body}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、プロフィールのリンクからCiDAOへご登録ください（無料）。\n\n#印西市 #イベント情報 #CiDAO #印西`
+    }
+    return `${prefix}\n${body}\n\n▶ ${link}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、CiDAOへご登録ください（無料）\n${SITE_BASE}/login\n${tagLine}`
+  }
   return `${prefix}\n${body}\n\n▶ ${link}\n${tagLine}`
 }

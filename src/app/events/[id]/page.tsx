@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
 import { EventViewTracker } from '@/components/EventViewTracker'
+import { AnnounceEventButton } from './_components/AnnounceEventButton'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -33,6 +34,8 @@ export default async function EventDetailPage({
   const canEdit = user
     ? await canUserEditEvent(supabase, event, user.id, user.email ?? null)
     : false
+
+  const isAdmin = user ? ((await supabase.rpc('is_admin')).data === true) : false
 
   const { data: participants } = await supabase
     .from('event_participants')
@@ -81,6 +84,9 @@ export default async function EventDetailPage({
               </Link>
             )}
           </div>
+          {isAdmin && event.status === 'open' && (
+            <AnnounceEventButton eventId={id} hasFlyer={!!event.flyer_image_url} />
+          )}
           <h1 className="text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">
             {new Date(event.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} 〜 {new Date(event.end_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}

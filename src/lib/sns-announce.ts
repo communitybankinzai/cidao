@@ -457,6 +457,55 @@ async function repostChangedFreefree(
   await notifyAdminsOfAutoPosted(supabase, `FreeFree「${post.title}」（編集後の新しい版）`, okMedia.size, results.length)
 }
 
+// 運営が任意のイベントを「イベント紹介」としてSNSへ告知する（イベント詳細ページのボタンから）。
+// 常に承認制：下書き（承認待ち）を作るだけで、運営が /admin/sns で本文・画像を確認して承認すると配信される。
+// Instagram は画像が必須なので、チラシ画像のあるイベントだけ作る（画像は /api/og/event/[id] が JPEG にして渡す）
+const EVENT_MEDIA: SnsMedium[] = ['threads', 'instagram']
+
+export async function announceEventToSns(eventId: string): Promise<
+  { ok: true; created: number; media: SnsMedium[] } | { ok: false; error: string }
+> {
+  const supabase = adminClient()
+  if (!supabase) return { ok: false, error: 'サーバー設定が不足しています' }
+  try {
+    const { data: pending } = await supabase
+      .from('sns_post_logs')
+      .select('id')
+      .eq('target_type', 'event')
+      .eq('target_id', eventId)
+      .eq('status', 'pending')
+      .limit(1)
+    if (pending && pending.length > 0) {
+      return { ok: false, error: 'このイベントの告知下書きがすでに承認待ちです。管理画面（SNS）で確認してください' }
+    }
+
+    const target = await fetchSnsTarget(supabase as unknown as Parameters<typeof fetchSnsTarget>[0], 'event', eventId)
+    if (!target) return { ok: false, error: '告知できるのは公開中（open）のイベントだけです' }
+    const { data: ev } = await supabase.from('events').select('flyer_image_url').eq('id', eventId).maybeSingle()
+    const hasImage = typeof ev?.flyer_image_url === 'string' && ev.flyer_image_url.length > 0
+
+    const media = EVENT_MEDIA.filter((m) => m !== 'instagram' || hasImage)
+    const { data: inserted, error } = await supabase
+      .from('sns_post_logs')
+      .insert(
+        media.map((medium) => ({
+          target_type: 'event',
+          target_id: eventId,
+          medium,
+          status: 'pending',
+          content: generateSnsContent(target, medium),
+          approved_at: null,
+          error_message: 'event announce: awaiting approval',
+        })),
+      )
+      .select('id')
+    if (error || !inserted) return { ok: false, error: `下書きの作成に失敗しました: ${error?.message ?? ''}` }
+    return { ok: true, created: inserted.length, media }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 // 全自動モードで配信したことを管理者全員に知らせる（ベル＋Webプッシュ）。
 // 確認なしで公式SNSに出たものを、運営があとから見て必要なら削除できるようにするため
 async function notifyAdminsOfAutoPosted(

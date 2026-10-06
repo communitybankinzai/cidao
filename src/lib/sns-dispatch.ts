@@ -248,7 +248,9 @@ export async function dispatchLogs(
             ? `${SITE_BASE}/api/og/proposal/${log.target_id}`
             : log.target_type === 'freefree'
               ? `${SITE_BASE}/api/og/freefree/${log.target_id}`
-              : undefined
+              : log.target_type === 'event'
+                ? `${SITE_BASE}/api/og/event/${log.target_id}`
+                : undefined
       const out = await postToMedium(log.medium, content, creds, { imageUrl })
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
       // 「紹介済み」は実際に配信できたときだけ刻む。下書きを作った時点では刻まない
