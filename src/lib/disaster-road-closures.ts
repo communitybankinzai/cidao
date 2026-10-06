@@ -673,6 +673,11 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
   const active: ClosureDraft[] = []
   const cleared: Record<string, ClearReason> = {}
   const trunkLists: Array<{ url: string; asOf: string; items: Array<{ road: string; place: string; cleared: boolean; note: string }>; mapUrl: string | null }> = []
+  // 一覧で解除済みになった記事（題名はまだ「通行止め」のまま）。読めた一覧にその路線がまだ通行止めとして
+  // 載っているときだけ通行止めに戻す。一覧が読めない・載っていないときは解除のまま残す
+  // （2026-10-06 山田・平賀線：一覧が読めない回に「解除済みなら通行止めに戻す」で復活していた）
+  const listCleared = new Set<string>()
+  const stillListed = new Set<string>()
   let fetched = 0
   for (const [url, listTitle] of candidates) {
     const prev = known.get(url)
@@ -725,6 +730,8 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
     const nameSource = onStatus?.title || listTitle || title
     const { road, place } = inzaiRoadOf(nameSource)
     const fallback = inzaiRoadOf(title)
+    // 題名に「解除」が無いのに解除済み（announced）なら、一覧の「⇒ 通行止め解除」で解除した記事
+    if (prev?.cleared_at && prev.clear_reason === 'announced') listCleared.add(url)
     active.push({
       key: url,
       road: road || fallback.road,
@@ -754,7 +761,10 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
         if (known.has(key)) cleared[key] = 'announced'
         continue
       }
-      if (sameRoad.length) continue
+      if (sameRoad.length) {
+        for (const a of sameRoad) stillListed.add(a.key)
+        continue
+      }
       active.push({
         key,
         road: item.road,
@@ -768,6 +778,13 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
         raw: { trunkList: true, asOf: list.asOf, note: item.note, mapUrl: list.mapUrl },
       })
     }
+  }
+  for (const key of listCleared) {
+    if (stillListed.has(key)) continue
+    const i = active.findIndex((a) => a.key === key)
+    if (i < 0) continue
+    active.splice(i, 1)
+    notes.push(`一覧で解除済みの記事は、読めた一覧に通行止めとして載るまで戻しません: ${key}`)
   }
   return { active, cleared, notes, warnings }
 }

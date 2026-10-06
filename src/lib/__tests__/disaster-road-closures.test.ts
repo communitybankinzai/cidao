@@ -301,6 +301,40 @@ describe('印西市', () => {
     expect(scan.warnings?.[0]).toContain(TRUNK)
   })
 
+  // 2026-10-06：市は記事の題名を直さず、一覧の「⇒ 通行止め解除」だけで解除を出すことがある。一覧が読めない回に
+  // 解除済みの記事（題名はまだ「通行止め」）が「解除済みなら通行止めに戻す」で通行止めに戻っていた（山田・平賀線）
+  const listClearedRow: ExistingClosure = {
+    closure_key: D2, url: D2, in_area: true, cleared_at: '2026-09-26T00:00:00.000Z', clear_reason: 'announced',
+    raw: { statusUrl: STATUS, onStatus: true, road: '市道山田・平賀線', place: '中平橋付近', reason: '道路冠水' },
+  }
+  const siteWithTrunk = (trunk: string) => ({
+    [TOP]: topPage([['./0000022578.html', '道路の通行止めの状況']]),
+    [STATUS]: statusPage([[D2, '市道山田・平賀線の中平橋付近'], [TRUNK, '主要幹線道路等の通行止めの状況']]),
+    [D2]: detail('中平橋付近　道路冠水による通行止めについて'),
+    [TRUNK]: trunk,
+  })
+
+  it('一覧で解除済みの記事は、一覧が読めない回に通行止めへ戻さない', async () => {
+    mockSite(siteWithTrunk(trunkPage.replace('【令和8年9月26日　8：00現在】', '【9月26日 夕方時点】')))
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [listClearedRow])
+    expect(scan.active.map((a) => a.key)).toEqual([])
+    expect(scan.warnings).toHaveLength(1)
+    expect(scan.notes.some((n) => n.includes(D2))).toBe(true)
+  })
+
+  it('一覧で解除済みの記事は、読めた一覧に載っていなければ戻さず、まだ通行止めとして載っていれば戻す', async () => {
+    // 一覧から山田・平賀線の行が消えた → 解除のまま
+    mockSite(siteWithTrunk(trunkPage.replace('市道山田・平賀線　　中平橋付近（酒々井町側）⇒　通行止め解除(片側通行)<br>', '')))
+    let scan = await scanInzai(source('road-closure-inzai', TOP), [listClearedRow])
+    expect(scan.active.map((a) => a.road).sort()).toEqual(['市道師戸・江川線', '県道千葉竜ケ崎線'])
+    expect(scan.active.some((a) => a.key === D2)).toBe(false)
+    // 一覧に「⇒ 解除」なしで載った（再び通行止め）→ 記事を通行止めに戻す。一覧の行は二重に出さない
+    mockSite(siteWithTrunk(trunkPage.replace('⇒　通行止め解除(片側通行)', '')))
+    scan = await scanInzai(source('road-closure-inzai', TOP), [listClearedRow])
+    expect(scan.active.find((a) => a.key === D2)).toMatchObject({ road: '市道山田・平賀線' })
+    expect(scan.active.filter((a) => a.road === '市道山田・平賀線')).toHaveLength(1)
+  })
+
   const onStatusRow = (url: string): ExistingClosure => ({
     closure_key: url, url, in_area: true, cleared_at: null, clear_reason: null,
     raw: { statusUrl: STATUS, onStatus: true, road: '市道師戸・江川線', place: '一部区間', reason: '道路冠水' },
