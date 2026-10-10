@@ -141,7 +141,7 @@ async function build(adminKey: string) {
         ['group_by[]', 'api_key_id'],
         ['group_by[]', 'model'],
       ],
-      since30,
+      hasBaseline ? Math.min(baselineMs, since30) : since30,
       todayUtc,
     ),
   ])
@@ -179,10 +179,6 @@ async function build(adminKey: string) {
     const bucketMs = new Date(b.starting_at).getTime()
     for (const c of b.results ?? []) {
       const usd = Number(c.amount ?? 0) / 100 // cost_report の amount はセント建て
-      if (hasBaseline && bucketMs >= Date.UTC(new Date(baselineMs).getUTCFullYear(), new Date(baselineMs).getUTCMonth(), new Date(baselineMs).getUTCDate())) {
-        spentSinceBaseline += usd
-      }
-      if (bucketMs < since30) continue
       const key = `${date}|${c.model}|${c.token_type}`
       let share = 0
       if (total.has(key)) {
@@ -196,7 +192,11 @@ async function build(adminKey: string) {
         share = t > 0 ? m / t : 0
       }
       const est = usd * share
-      if (est <= 0) continue
+      // 残高は CiDAO のキー分だけを基準額から引く（2026-10-11 事業主決定。N's factory 分は含めない）
+      if (hasBaseline && bucketMs >= Date.UTC(new Date(baselineMs).getUTCFullYear(), new Date(baselineMs).getUTCMonth(), new Date(baselineMs).getUTCDate())) {
+        spentSinceBaseline += est
+      }
+      if (bucketMs < since30 || est <= 0) continue
       daily.set(date, (daily.get(date) ?? 0) + est)
       byModel.set(c.model ?? '不明', (byModel.get(c.model ?? '不明') ?? 0) + est)
     }
