@@ -28,9 +28,21 @@ import { normalizeMailFrom } from '@/lib/mail'
 const API_BASE = 'https://api.anthropic.com/v1/organizations'
 const CENTS_PER_USD = 100
 
-type CostItem = { amount?: string }
-type CostBucket = { results?: CostItem[] }
+type CostItem = { amount?: string; model?: string | null; token_type?: string | null }
+type CostBucket = { starting_at: string; results?: CostItem[] }
+type UsageItem = {
+  api_key_id?: string | null
+  model?: string | null
+  uncached_input_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation?: { ephemeral_1h_input_tokens?: number; ephemeral_5m_input_tokens?: number }
+}
+type UsageBucket = { starting_at: string; results?: UsageItem[] }
 type ApiKey = { id: string; name?: string; status?: string; expires_at?: string | null }
+
+// 名前がこの接頭辞で始まるキーを CiDAO（CBI）のものとみなす（管理画面 anthropic-usage と同じ）
+const CBI_KEY_PREFIX = 'cidao'
 
 function adminHeaders(key: string) {
   return { 'x-api-key': key, 'anthropic-version': '2023-06-01' }
@@ -46,12 +58,17 @@ const DAY_MS = 86400_000
 // そのため starting_at は前日以前に丸め、31日ずつ分割して取得する。
 // 当日分は集計に含まれない＝最大1日ぶん少なく出るが、残高を少なめに見積もる方向なので
 // 警告用途としては安全側に倒れる。
-async function fetchCostSince(adminKey: string, since: Date): Promise<number> {
+async function fetchBuckets<T>(
+  adminKey: string,
+  path: string,
+  extra: [string, string][],
+  since: Date,
+): Promise<T[]> {
   const now = new Date()
   const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   // starting_at の上限は「前日」
   let cursor = Math.min(since.getTime(), todayUtc - DAY_MS)
-  let cents = 0
+  const out: T[] = []
 
   for (let guard = 0; guard < 24 && cursor < todayUtc; guard++) {
     const end = Math.min(cursor + 31 * DAY_MS, todayUtc + DAY_MS)
@@ -60,15 +77,92 @@ async function fetchCostSince(adminKey: string, since: Date): Promise<number> {
       ending_at: new Date(end).toISOString(),
       limit: '31',
     })
-    const res = await fetch(`${API_BASE}/cost_report?${qs}`, { headers: adminHeaders(adminKey) })
-    if (!res.ok) throw new Error(`cost_report ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const json = (await res.json()) as { data?: CostBucket[] }
-    for (const bucket of json.data ?? []) {
-      for (const item of bucket.results ?? []) cents += Number(item.amount ?? 0)
-    }
+    for (const [k, v] of extra) qs.append(k, v)
+    const res = await fetch(`${API_BASE}/${path}?${qs}`, { headers: adminHeaders(adminKey) })
+    if (!res.ok) throw new Error(`${path} ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const json = (await res.json()) as { data?: T[] }
+    out.push(...(json.data ?? []))
     cursor = end
   }
-  return cents / CENTS_PER_USD
+  return out
+}
+
+function tokenParts(u: UsageItem): Record<string, number> {
+  return {
+    uncached_input_tokens: u.uncached_input_tokens ?? 0,
+    output_tokens: u.output_tokens ?? 0,
+    cache_read_input_tokens: u.cache_read_input_tokens ?? 0,
+    'cache_creation.ephemeral_5m_input_tokens': u.cache_creation?.ephemeral_5m_input_tokens ?? 0,
+    'cache_creation.ephemeral_1h_input_tokens': u.cache_creation?.ephemeral_1h_input_tokens ?? 0,
+  }
+}
+
+// 基準日以降の消費（USD）を「組織全体」と「CiDAO のキー分（推定）」で返す。
+// cost_report はキー別に分けられないため、日×モデル×トークン種別ごとの組織全体の費用を、
+// usage_report のそのトークン数のうち CiDAO のキーが占める割合で按分する（anthropic-usage と同じ方式）。
+async function fetchSpentSince(
+  adminKey: string,
+  since: Date,
+  cbiIds: Set<string>,
+): Promise<{ org: number; cbi: number }> {
+  const [costBuckets, usageBuckets] = await Promise.all([
+    fetchBuckets<CostBucket>(adminKey, 'cost_report', [['group_by[]', 'description']], since),
+    fetchBuckets<UsageBucket>(
+      adminKey,
+      'usage_report/messages',
+      [
+        ['bucket_width', '1d'],
+        ['group_by[]', 'api_key_id'],
+        ['group_by[]', 'model'],
+      ],
+      since,
+    ),
+  ])
+
+  const total = new Map<string, number>()
+  const mine = new Map<string, number>()
+  for (const b of usageBuckets) {
+    const date = b.starting_at.slice(0, 10)
+    for (const u of b.results ?? []) {
+      const isCbi = !!u.api_key_id && cbiIds.has(u.api_key_id)
+      for (const [type, n] of Object.entries(tokenParts(u))) {
+        const k = `${date}|${u.model}|${type}`
+        total.set(k, (total.get(k) ?? 0) + n)
+        if (isCbi) mine.set(k, (mine.get(k) ?? 0) + n)
+      }
+    }
+  }
+
+  let orgCents = 0
+  let cbiCents = 0
+  for (const b of costBuckets) {
+    const date = b.starting_at.slice(0, 10)
+    for (const c of b.results ?? []) {
+      const cents = Number(c.amount ?? 0)
+      orgCents += cents
+      const key = `${date}|${c.model}|${c.token_type}`
+      let share = 0
+      if (total.has(key)) {
+        share = (mine.get(key) ?? 0) / (total.get(key) || 1)
+      } else {
+        // 種別が一致しないときは、そのモデルのその日の全トークンに占める割合で代用する
+        let t = 0
+        let m = 0
+        for (const [k, n] of total) if (k.startsWith(`${date}|${c.model}|`)) t += n
+        for (const [k, n] of mine) if (k.startsWith(`${date}|${c.model}|`)) m += n
+        share = t > 0 ? m / t : 0
+      }
+      cbiCents += cents * share
+    }
+  }
+  return { org: orgCents / CENTS_PER_USD, cbi: cbiCents / CENTS_PER_USD }
+}
+
+async function fetchCbiKeyIds(adminKey: string): Promise<Set<string>> {
+  const res = await fetch(`${API_BASE}/api_keys?limit=100`, { headers: adminHeaders(adminKey) })
+  if (!res.ok) throw new Error(`api_keys ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const json = (await res.json()) as { data?: ApiKey[] }
+  return new Set((json.data ?? []).filter((k) => (k.name ?? '').startsWith(CBI_KEY_PREFIX)).map((k) => k.id))
 }
 
 // 失効を知らせる残日数。毎日送ると30日間うるさいので、この日数のときだけ通知する。
@@ -137,17 +231,21 @@ export async function GET(request: Request) {
   const alerts: string[] = []
   let remaining: number | null = null
   let spent: number | null = null
+  let orgSpent: number | null = null
 
-  // 1. 残高
+  // 1. 残高（2026-10-11 事業主決定: N's factory 側の消費が大きいため、CiDAO のキー分だけで判定する）
   if (Number.isFinite(baselineUsd) && baselineAt) {
     try {
-      spent = await fetchCostSince(adminKey, new Date(baselineAt))
+      const cbiIds = await fetchCbiKeyIds(adminKey)
+      const s = await fetchSpentSince(adminKey, new Date(baselineAt), cbiIds)
+      spent = s.cbi
+      orgSpent = s.org
       remaining = baselineUsd - spent
       if (remaining < threshold) {
         alerts.push(
           `<strong>Anthropic のクレジット残高が少なくなっています。</strong>`,
-          `推定残高: <strong>$${remaining.toFixed(2)}</strong>（警告ライン $${threshold.toFixed(2)}）`,
-          `基準額 $${baselineUsd.toFixed(2)}（${baselineAt}）から $${spent.toFixed(2)} を消費しました。`,
+          `CiDAO 分の推定残高: <strong>$${remaining.toFixed(2)}</strong>（警告ライン $${threshold.toFixed(2)}）`,
+          `基準額 $${baselineUsd.toFixed(2)}（${baselineAt}）から CiDAO のキーで $${spent.toFixed(2)} を消費しました（組織全体は $${orgSpent.toFixed(2)}・N's factory 分を含む）。`,
           '残高が尽きると CiDAO のチラシAI抽出・提案分類・団体マッチングがすべて停止します。',
         )
       }
@@ -184,6 +282,7 @@ export async function GET(request: Request) {
     baseline_usd: Number.isFinite(baselineUsd) ? baselineUsd : null,
     baseline_at: baselineAt || null,
     spent_usd: spent === null ? null : Number(spent.toFixed(4)),
+    org_spent_usd: orgSpent === null ? null : Number(orgSpent.toFixed(4)),
     remaining_usd: remaining === null ? null : Number(remaining.toFixed(2)),
     threshold_usd: threshold,
     expiring_keys: expiring.map((k) => ({ name: k.name, expires_at: k.expires_at })),
