@@ -8,6 +8,7 @@ import { categoryLabel } from '@/lib/categories'
 import { findMatchingOrgs, type EnrichedMatch } from '@/lib/match-orgs'
 import { TYPE_LABEL as ORG_TYPE_LABEL } from '@/lib/org-labels'
 import DeleteAccountSection from './_components/DeleteAccountSection'
+import DisasterNotifySettings from './_components/DisasterNotifySettings'
 import { PushToggle } from '@/components/PushToggle'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
@@ -309,6 +310,9 @@ export default async function MyPage({
             スマホのホーム画面に追加してアプリとして使う方法
           </Link>
         </p>
+
+        {/* 災害情報の通知の希望（初期OFF・押した時点で保存。通知許可の直下に置く：2026-10-12） */}
+        <DisasterNotifySettings prefs={(member.contact_preferences ?? {}) as Record<string, unknown>} />
 
         {/* 団体メアドでログイン中の警告 */}
         {collidingOrgs.length > 0 && (

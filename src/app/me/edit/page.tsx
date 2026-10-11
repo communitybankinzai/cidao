@@ -8,8 +8,6 @@ import { updateProfile } from '../actions'
 import { claimMemberships, leaveOrg, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
 import AvatarUpload from './_components/AvatarUpload'
-import DisasterNotifySettings from './_components/DisasterNotifySettings'
-import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
 
 export default async function EditProfilePage({
   searchParams,
@@ -74,8 +72,6 @@ export default async function EditProfilePage({
       proposal_email: formData.get('proposal_email') === 'on',
       notify_event: formData.get('notify_event') === 'on',
       notify_freefree: formData.get('notify_freefree') === 'on',
-      notify_disaster: formData.get('notify_disaster') === 'on',
-      notify_disaster_kinds: Object.fromEntries(DISASTER_CATEGORIES.map((c) => [c.prefKey, formData.get(c.prefKey) === 'on'])),
       upgradeToEmailOnly: formData.get('upgrade') === 'on',
     })
 
@@ -288,7 +284,6 @@ export default async function EditProfilePage({
                   <span className="block text-xs text-slate-500">FreeFree掲示板に新しい掲載があったときにベル🔔でお知らせします</span>
                 </span>
               </label>
-              <DisasterNotifySettings prefs={(member.contact_preferences ?? {}) as Record<string, unknown>} />
               {wasLight && (
                 <label className="flex items-start gap-2 p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded">
                   <input type="checkbox" name="upgrade" defaultChecked className="mt-1" />

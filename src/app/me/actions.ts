@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { nameWithSan } from '@/lib/honorific'
 import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
+import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -49,8 +50,6 @@ type ProfileUpdate = {
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
   notify_event: boolean         // 新着イベントのベル🔔＋Webプッシュ（contact_preferences.notify_event）
   notify_freefree: boolean      // FreeFree掲示板の新着（contact_preferences.notify_freefree）
-  notify_disaster?: boolean     // 災害情報の通知（contact_preferences.notify_disaster・初期OFF＝未設定は受け取らない）
-  notify_disaster_kinds?: Record<string, boolean> | null  // 種類ごと（ONのときだけ送られる。キーは notify_disaster_evac など）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
 
@@ -79,9 +78,6 @@ export async function updateProfile(input: ProfileUpdate) {
     proposal_email: input.proposal_email,
     notify_event: input.notify_event,
     notify_freefree: input.notify_freefree,
-    // 災害通知：親スイッチだけ必ず更新。種類の設定は親がONのときだけ更新（OFFの間は以前の選択を残す）
-    ...(input.notify_disaster === undefined ? {} : { notify_disaster: input.notify_disaster }),
-    ...(input.notify_disaster && input.notify_disaster_kinds ? input.notify_disaster_kinds : {}),
   }
 
   const update: Record<string, unknown> = {
@@ -205,4 +201,36 @@ export async function sendDisasterTestNotification(): Promise<{ ok: boolean; mes
     linkUrl: `${DISASTER_MAP_URL}#d=test`,
   })
   return { ok: true, message: '試験通知を送りました。ヘッダーのベル🔔を確認してください（プッシュを許可していればスマホにも届きます）' }
+}
+
+/**
+ * 災害情報の通知の希望と種類を保存する（マイページの通知欄・押した時点で保存。2026-10-12）。
+ * - contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
+ * - 種類（notify_disaster_*）は DISASTER_CATEGORIES に挙げたキーだけ受け付ける（任意のキーは書かせない）
+ * - 親（notify_disaster）がOFFの間も、種類の以前の選択は残す
+ */
+export async function saveDisasterNotifyPrefs(input: {
+  enabled: boolean
+  kinds?: Record<string, boolean>
+}): Promise<{ ok: boolean; message: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, message: 'ログインしてください' }
+
+  const { data: current } = await supabase
+    .from('members')
+    .select('contact_preferences')
+    .eq('id', user.id)
+    .single()
+  const prefs: Record<string, unknown> = {
+    ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
+    notify_disaster: input.enabled === true,
+  }
+  for (const c of DISASTER_CATEGORIES) {
+    if (input.kinds && typeof input.kinds[c.prefKey] === 'boolean') prefs[c.prefKey] = input.kinds[c.prefKey]
+  }
+  const { error } = await supabase.from('members').update({ contact_preferences: prefs }).eq('id', user.id)
+  if (error) return { ok: false, message: `保存できませんでした：${error.message}` }
+  revalidatePath('/me')
+  return { ok: true, message: '保存しました' }
 }
