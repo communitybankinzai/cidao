@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { sendDisasterTestNotification } from '../../actions'
 import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
 
 /**
@@ -10,6 +11,8 @@ import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
  */
 export default function DisasterNotifySettings({ prefs }: { prefs: Record<string, unknown> }) {
   const [on, setOn] = useState(prefs.notify_disaster === true)
+  const [pending, startTransition] = useTransition()
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   return (
     <div className="space-y-2">
@@ -42,6 +45,19 @@ export default function DisasterNotifySettings({ prefs }: { prefs: Record<string
               {c.label}
             </label>
           ))}
+          <div className="pt-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => startTransition(async () => setResult(await sendDisasterTestNotification()))}
+              className="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
+            >
+              {pending ? '送信中…' : '試験通知を自分に送る'}
+            </button>
+            {result && (
+              <p className={`mt-1 text-xs ${result.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600'}`}>{result.message}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

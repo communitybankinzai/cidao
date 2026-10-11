@@ -6,6 +6,7 @@ import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { nameWithSan } from '@/lib/honorific'
+import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -172,4 +173,36 @@ export async function updatePublicSettings(publicSettings: Record<string, 'publi
 
   if (error) throw new Error(`公開範囲設定に失敗: ${error.message}`)
   revalidatePath('/me')
+}
+
+/**
+ * 災害情報の通知の試験送信（本人宛てだけ・2026-10-12）。
+ * マイメニューの「試験通知を自分に送る」から呼ぶ。ベル🔔とWebプッシュが実際に届くかを本人が確かめる用途。
+ * - 宛先はログイン中の本人だけ（他の会員には絶対に送らない）
+ * - 設定の保存前でも送れる（スイッチの状態は見ない）
+ * - 連打は30秒に1回まで
+ */
+export async function sendDisasterTestNotification(): Promise<{ ok: boolean; message: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, message: 'ログインしてください' }
+
+  const since = new Date(Date.now() - 30_000).toISOString()
+  const { data: recent } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('kind', 'disaster')
+    .like('title', '【試験】%')
+    .gte('created_at', since)
+    .limit(1)
+  if (recent && recent.length > 0) return { ok: false, message: '30秒ほど待ってからもう一度押してください' }
+
+  await insertNotification({
+    recipientId: user.id,
+    kind: 'disaster',
+    title: '【試験】災害情報の通知のテストです',
+    body: 'ベルとスマホ（プッシュ許可時）に届けば設定は正常です。実際の災害情報ではありません。',
+    linkUrl: `${DISASTER_MAP_URL}#d=test`,
+  })
+  return { ok: true, message: '試験通知を送りました。ヘッダーのベル🔔を確認してください（プッシュを許可していればスマホにも届きます）' }
 }
