@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import places from './disaster-sns-road-places.json'
 import road464 from './disaster-sns-road-464.json'
+import { notifyFloodRoadAdded } from './disaster-notify'
 
 export const SNS_ROAD_MODEL = 'claude-haiku-4-5'
 export const SNS_ROAD_EVENT_START = '2026-09-20T00:00:00+09:00'
@@ -557,6 +558,10 @@ export async function processSnsRoadCandidates(supabase: SupabaseClient, options
         if (existing && String(existing.location_basis || '').startsWith(UNLOCATED_BASIS)) row.hidden = false
         const { error: insertError } = await supabase.from(SNS_ROAD_TABLE).upsert(row, { onConflict: 'candidate_id' })
         if (insertError) throw new Error(`report insert: ${insertError.message}`)
+        // 地図に一般公開される（確度high・通れない）新しい投稿だけ、希望した会員へ災害通知（10分に最大1通）
+        if (!existing && extraction.kind === 'blocked' && confidence === 'high') {
+          await notifyFloodRoadAdded('sns', extraction.location_text.slice(0, 20)).catch(() => undefined)
+        }
         scan = { ...scan, result: 'report', detail: `${extraction.kind} ${extraction.location_text} (${confidence})${imageCount ? ` 写真${imageCount}枚` : ''}`.slice(0, 300) }
       }
     } catch (err) {

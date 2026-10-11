@@ -48,6 +48,8 @@ type ProfileUpdate = {
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
   notify_event: boolean         // 新着イベントのベル🔔＋Webプッシュ（contact_preferences.notify_event）
   notify_freefree: boolean      // FreeFree掲示板の新着（contact_preferences.notify_freefree）
+  notify_disaster?: boolean     // 災害情報の通知（contact_preferences.notify_disaster・初期OFF＝未設定は受け取らない）
+  notify_disaster_kinds?: Record<string, boolean> | null  // 種類ごと（ONのときだけ送られる。キーは notify_disaster_evac など）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
 
@@ -76,6 +78,9 @@ export async function updateProfile(input: ProfileUpdate) {
     proposal_email: input.proposal_email,
     notify_event: input.notify_event,
     notify_freefree: input.notify_freefree,
+    // 災害通知：親スイッチだけ必ず更新。種類の設定は親がONのときだけ更新（OFFの間は以前の選択を残す）
+    ...(input.notify_disaster === undefined ? {} : { notify_disaster: input.notify_disaster }),
+    ...(input.notify_disaster && input.notify_disaster_kinds ? input.notify_disaster_kinds : {}),
   }
 
   const update: Record<string, unknown> = {

@@ -22,6 +22,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { parseStationPage, type Levels } from '@/lib/disaster-river-station-page'
+import { notifyRiverDanger } from '@/lib/disaster-notify'
 
 const CACHE_SECONDS = 300
 const HISTORY_TABLE = 'disaster_river_levels'
@@ -352,6 +353,11 @@ export async function GET(request: Request) {
   if (tone.status === 'rejected') errors.push(`利根川の洪水予報: ${msg(tone)}`)
   if (errors.length) console.error('[disaster/river-level]', errors.join(' / '))
   if (stations.length) await saveHistory(stations)
+  // 沼が危険水位（印旛沼は計画高水位の手前の目安）に達していたら、希望した会員へ災害通知（同じ観測所は6時間に1回）。
+  // 水位は定期取得をしない作りなので、防災MAPが開かれて取得したときにだけ判定する
+  for (const st of stations.filter((s) => s.role === 'lake' && s.stage === 'danger')) {
+    await notifyRiverDanger(st.name, st.latest != null ? `${st.latest}m` : '最新値は防災MAPで確認').catch(() => undefined)
+  }
   if (!stations.length && tone.status === 'rejected') {
     return NextResponse.json({ error: errors.join(' / ') }, { status: 502, headers: corsHeaders(request) })
   }

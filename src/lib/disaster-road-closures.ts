@@ -1288,7 +1288,13 @@ export async function scanRoadClosures(source: ClosureSource, existing: Existing
  * - active の件：無ければ追加、あれば最終確認時刻と中身を更新（解除済みなら通行止めに戻す。運営が解除した行は戻さない）
  * - DB で通行止め中なのに active に無い件：解除（理由は scan.cleared、無ければ disappeared）
  */
-export async function syncRoadClosures(supabase: SupabaseClient, sourceId: string, scan: ClosureScan, existing: ExistingClosure[]) {
+export async function syncRoadClosures(
+  supabase: SupabaseClient,
+  sourceId: string,
+  scan: ClosureScan,
+  existing: ExistingClosure[],
+  freshOut?: Array<{ key: string; road: string; place: string; reason?: string; inArea: boolean }>,
+) {
   const now = new Date().toISOString()
   const known = new Map(existing.map((row) => [row.closure_key, row]))
   const seen = new Set<string>()
@@ -1327,6 +1333,8 @@ export async function syncRoadClosures(supabase: SupabaseClient, sourceId: strin
       })
       if (error) throw error
       inserted += 1
+      // 災害通知用に、新しく入った件を返す（情報源を足した直後の初回は過去分なので渡さない）
+      if (existing.length > 0) freshOut?.push({ key: draft.key, road: draft.road, place: draft.place, reason: draft.reason, inArea: Boolean(draft.inArea) })
       continue
     }
     const { error } = await supabase

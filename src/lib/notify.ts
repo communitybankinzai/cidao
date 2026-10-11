@@ -10,6 +10,7 @@ export type NotificationKind =
   | 'event'
   | 'member'
   | 'org'
+  | 'disaster'
 
 const INSERT_CHUNK = 500 // 一度に INSERT する notifications 行数
 
@@ -158,6 +159,74 @@ export async function notifyAllMembers(input: {
     }
 
     return { recipients: recipientIds.length, pushed, broadcastId }
+  } catch {
+    return empty
+  }
+}
+
+/**
+ * 災害情報の通知（ベル🔔＋Webプッシュ）。マイメニューで希望した会員だけが宛先（2026-10-12 事業主指示）。
+ *
+ * - 宛先は contact_preferences.notify_disaster === true の未退会メンバーだけ（未設定＝受け取らない。初期OFF）
+ * - さらに種類ごとの設定 contact_preferences[prefKey]（例 notify_disaster_evac）が false の人は外す
+ *   （親がONで種類が未設定なら受け取る）
+ * - dedupeKey が同じ通知が dedupeMinutes 以内に出ていたら送らない（link_url の末尾 #d=<dedupeKey> で照合）
+ * - best-effort：失敗しても呼び出し元（巡回・記録の保存）は成立させる
+ */
+export async function notifyDisasterSubscribers(input: {
+  prefKey: string
+  dedupeKey: string
+  title: string
+  body?: string
+  linkBase: string
+  dedupeMinutes?: number
+}): Promise<{ recipients: number; pushed: number }> {
+  const empty = { recipients: 0, pushed: 0 }
+  try {
+    const admin = adminClient()
+    if (!admin) return empty
+    const linkUrl = `${input.linkBase}#d=${encodeURIComponent(input.dedupeKey)}`
+
+    const since = new Date(Date.now() - (input.dedupeMinutes ?? 360) * 60_000).toISOString()
+    const { data: recent } = await admin
+      .from('notifications')
+      .select('id')
+      .eq('kind', 'disaster')
+      .eq('link_url', linkUrl)
+      .gte('created_at', since)
+      .limit(1)
+    if (recent && recent.length > 0) return empty
+
+    const { data: members, error } = await admin
+      .from('members')
+      .select('id, contact_preferences')
+      .is('deleted_at', null)
+      .contains('contact_preferences', { notify_disaster: true })
+    if (error || !members) return empty
+
+    const recipientIds = (members as { id: string; contact_preferences: unknown }[])
+      .filter((m) => ((m.contact_preferences ?? {}) as Record<string, unknown>)[input.prefKey] !== false)
+      .map((m) => m.id)
+    if (recipientIds.length === 0) return empty
+
+    const broadcastId = crypto.randomUUID()
+    const title = input.title.slice(0, 200)
+    for (let i = 0; i < recipientIds.length; i += INSERT_CHUNK) {
+      const chunk = recipientIds.slice(i, i + INSERT_CHUNK)
+      const { error: insertErr } = await admin.from('notifications').insert(
+        chunk.map((recipientId) => ({
+          recipient_id: recipientId,
+          kind: 'disaster',
+          title,
+          body: input.body ?? null,
+          link_url: linkUrl,
+          broadcast_id: broadcastId,
+        })),
+      )
+      if (insertErr) return empty
+    }
+    const pushed = await sendWebPushToMany({ recipientIds, title, body: input.body, url: linkUrl })
+    return { recipients: recipientIds.length, pushed }
   } catch {
     return empty
   }

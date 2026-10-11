@@ -10,6 +10,7 @@ export const KIND_ICON: Record<string, string> = {
   event: '📅',
   member: '🙋',
   org: '👥',
+  disaster: '🚨',
 }
 
 export const KIND_LABEL: Record<string, string> = {
@@ -21,4 +22,5 @@ export const KIND_LABEL: Record<string, string> = {
   event: 'イベント',
   member: 'メンバー',
   org: '団体',
+  disaster: '災害情報',
 }

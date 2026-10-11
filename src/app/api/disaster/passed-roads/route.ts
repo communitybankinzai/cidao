@@ -26,6 +26,7 @@ function rainV2Columns(rain: RainInfo) {
   }
 }
 import { normalizeRoadMediaUrls } from '@/lib/disaster-road-media'
+import { notifyFloodRoadAdded } from '@/lib/disaster-notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -373,6 +374,9 @@ export async function POST(request: Request) {
 
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
+
+  // 通れない道が追加されたら、希望した会員へ災害通知（10分に最大1通・失敗しても記録は成立）
+  if (kind === 'blocked') await notifyFloodRoadAdded('citizen').catch(() => undefined)
 
   // 応答は従来の1件の形（id・pointCount・lengthM・rain＝最初の区間）に、区間ごとの `records` と飛ばした `skipped` を足したもの
   const records = (inserted ?? []).map((row, i) => ({

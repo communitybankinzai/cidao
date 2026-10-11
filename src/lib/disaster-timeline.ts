@@ -8,6 +8,7 @@ import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
 import { checkCityPageHealth, handleCityTransitChange } from '@/lib/disaster-rail-watch'
+import { notifyNewClosures, notifyTimelineDrafts } from '@/lib/disaster-notify'
 import {
   isRoadClosureKind,
   loadExistingClosures,
@@ -1105,6 +1106,7 @@ export async function upsertTimelineItems(
   supabase: SupabaseClient,
   source: InfoSource,
   drafts: TimelineItemDraft[],
+  freshOut?: TimelineItemDraft[],
 ) {
   const counts = { inserted: 0, updated: 0, unchanged: 0 }
   // 同じ external_key が1バッチに複数あると2件目の insert がユニーク制約に当たる
@@ -1164,6 +1166,7 @@ export async function upsertTimelineItems(
         })
       if (error) throw error
       counts.inserted += 1
+      freshOut?.push(draft)   // 新規に保存したものだけ（災害通知の判定に使う）
     }
   }
   return counts
@@ -1226,7 +1229,10 @@ export async function runDisasterTimeline(
       const parser = PARSERS[source.kind]
       if (!parser) throw new Error(`未対応の種別です: ${source.kind}`)
       const drafts = await parser(source, { supabase })
-      const counts = await upsertTimelineItems(supabase, source, drafts)
+      const fresh: TimelineItemDraft[] = []
+      const counts = await upsertTimelineItems(supabase, source, drafts, fresh)
+      // 希望した会員への災害通知（避難情報・気象警報）。失敗しても巡回は止めない
+      if (fresh.length) await notifyTimelineDrafts(source.kind, fresh).catch((e) => console.error('[disaster-notify]', errorMessage(e)))
       results.push({ sourceId: source.id, label: source.label, kind: source.kind, status: 'success', fetched: drafts.length, ...counts })
       // 市の公共交通の案内が書き換わったら、路線バスは自動で地図へ反映し、
       // 鉄道は承認リンク付きで運営へ知らせる（disaster-rail-watch.ts）
@@ -1292,7 +1298,10 @@ export async function runRoadClosures(supabase: SupabaseClient): Promise<SourceR
       }
       const existing = await loadExistingClosures(supabase, source.id)
       const scan = await scanRoadClosures(source, existing)
-      const counts = await syncRoadClosures(supabase, source.id, scan, existing)
+      const fresh: Array<{ key: string; road: string; place: string; reason?: string; inArea: boolean }> = []
+      const counts = await syncRoadClosures(supabase, source.id, scan, existing, fresh)
+      // 希望した会員への災害通知（通行止めの新規発表）。失敗しても巡回は止めない
+      if (fresh.length) await notifyNewClosures(fresh).catch((e) => console.error('[disaster-notify]', errorMessage(e)))
       await markRoadClosureFetched(supabase, source)
       // 読めたが気づいてほしいこと（一覧のページの形が変わった等）は「一部失敗」として管理画面と点検画面に出す
       const warning = scan.warnings?.length ? scan.warnings.join(' ／ ').slice(0, 1000) : null
