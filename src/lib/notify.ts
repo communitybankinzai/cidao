@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { sendWebPush, sendWebPushToMany } from '@/lib/push'
+import { wantsDisasterNotify } from '@/lib/disaster-notify-categories'
 
 export type NotificationKind =
   | 'comment'
@@ -171,8 +172,8 @@ export async function notifyAllMembers(input: {
  * 災害情報の通知（ベル🔔＋Webプッシュ）。マイメニューで希望した会員だけが宛先（2026-10-12 事業主指示）。
  *
  * - 宛先は contact_preferences.notify_disaster === true の未退会メンバーだけ（未設定＝受け取らない。初期OFF）
- * - さらに種類ごとの設定 contact_preferences[prefKey]（例 notify_disaster_evac）が false の人は外す
- *   （親がONで種類が未設定なら受け取る）
+ * - さらに種類ごとのチェック contact_preferences[prefKey]（例 notify_disaster_evac）が true の人だけ
+ *   （未設定＝受け取らない。2026-10-14 事業主指示「チェックした人だけ」）
  * - dedupeKey が同じ通知が dedupeMinutes 以内に出ていたら送らない（link_url の末尾 #d=<dedupeKey> で照合）
  * - best-effort：失敗しても呼び出し元（巡回・記録の保存）は成立させる
  */
@@ -208,7 +209,7 @@ export async function notifyDisasterSubscribers(input: {
     if (error || !members) return empty
 
     const recipientIds = (members as { id: string; contact_preferences: unknown }[])
-      .filter((m) => ((m.contact_preferences ?? {}) as Record<string, unknown>)[input.prefKey] !== false)
+      .filter((m) => wantsDisasterNotify(m.contact_preferences, input.prefKey))
       .map((m) => m.id)
     if (recipientIds.length === 0) return empty
 

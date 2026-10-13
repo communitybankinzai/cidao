@@ -7,13 +7,13 @@ import { saveDisasterNotifyPrefs, sendDisasterTestNotification } from '../action
 /**
  * 災害情報の通知の希望（マイページの通知欄・2026-10-12）。
  * - スイッチは初期OFF。ONにした人にだけ、受け取る種類のチェックと試験送信を出す
- * - 押した時点でその場で保存する（保存ボタンなし）。種類は親がONで未設定なら全部ON
+ * - 押した時点でその場で保存する（保存ボタンなし）。種類は初期すべて未チェックで、チェックした種類だけ通知する
  * - 通知はベル🔔と、プッシュ許可済みの端末へのプッシュ（許可は上の「プッシュ通知設定」で行う）
  */
 export default function DisasterNotifySettings({ prefs }: { prefs: Record<string, unknown> }) {
   const [on, setOn] = useState(prefs.notify_disaster === true)
   const [kinds, setKinds] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(DISASTER_CATEGORIES.map((c) => [c.prefKey, prefs[c.prefKey] !== false])),
+    () => Object.fromEntries(DISASTER_CATEGORIES.map((c) => [c.prefKey, prefs[c.prefKey] === true])),
   )
   const [pending, startTransition] = useTransition()
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null)
@@ -44,12 +44,15 @@ export default function DisasterNotifySettings({ prefs }: { prefs: Record<string
 
       {on && (
         <div className="ml-6 space-y-1.5 rounded border border-slate-200 p-3 dark:border-slate-700">
-          <p className="text-xs text-slate-500">受け取る種類</p>
+          <p className="text-xs text-slate-500">受け取る種類（チェックしたものだけお知らせします）</p>
+          {DISASTER_CATEGORIES.every((c) => kinds[c.prefKey] !== true) && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-300">どれもチェックされていないため、今はお知らせしません</p>
+          )}
           {DISASTER_CATEGORIES.map((c) => (
             <label key={c.key} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={kinds[c.prefKey] !== false}
+                checked={kinds[c.prefKey] === true}
                 disabled={pending}
                 onChange={(e) => save(on, { ...kinds, [c.prefKey]: e.target.checked })}
               />

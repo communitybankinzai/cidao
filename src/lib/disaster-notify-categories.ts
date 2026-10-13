@@ -10,3 +10,12 @@ export const DISASTER_CATEGORIES = [
 ] as const
 
 export type DisasterCategory = (typeof DISASTER_CATEGORIES)[number]['key']
+
+/**
+ * この会員が、その種類の災害通知を受け取るか。チェックを入れた人だけが対象（2026-10-14 事業主指示）。
+ * 親のスイッチ（notify_disaster）と、種類のチェック（prefKey）の両方が true のときだけ。未設定は受け取らない。
+ */
+export function wantsDisasterNotify(prefs: unknown, prefKey: string): boolean {
+  const p = (prefs ?? {}) as Record<string, unknown>
+  return p.notify_disaster === true && p[prefKey] === true
+}

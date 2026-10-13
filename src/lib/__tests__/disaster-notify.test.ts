@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyFireIncident, classifyTimelineDraft, DISASTER_CATEGORIES } from '@/lib/disaster-notify'
+import { wantsDisasterNotify } from '@/lib/disaster-notify-categories'
 
 describe('classifyTimelineDraft', () => {
   it('気象庁の警報（発表）は warning、特別警報は見出しを変える', () => {
@@ -60,3 +61,16 @@ describe('classifyFireIncident', () => {
   })
 })
 
+describe('wantsDisasterNotify（チェックした人だけ）', () => {
+  it('親ON かつ 種類にチェックがある人だけが対象', () => {
+    expect(wantsDisasterNotify({ notify_disaster: true, notify_disaster_fire: true }, 'notify_disaster_fire')).toBe(true)
+  })
+
+  it('種類が未設定・false、親がOFF・未設定は対象外（後から足した種類を、以前のスイッチだけで受け取らない）', () => {
+    expect(wantsDisasterNotify({ notify_disaster: true }, 'notify_disaster_fire')).toBe(false)
+    expect(wantsDisasterNotify({ notify_disaster: true, notify_disaster_fire: false }, 'notify_disaster_fire')).toBe(false)
+    expect(wantsDisasterNotify({ notify_disaster: false, notify_disaster_fire: true }, 'notify_disaster_fire')).toBe(false)
+    expect(wantsDisasterNotify({ notify_disaster_fire: true }, 'notify_disaster_fire')).toBe(false)
+    expect(wantsDisasterNotify(null, 'notify_disaster_fire')).toBe(false)
+  })
+})
