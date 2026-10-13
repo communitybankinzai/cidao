@@ -193,14 +193,26 @@ export async function sendDisasterTestNotification(): Promise<{ ok: boolean; mes
     .limit(1)
   if (recent && recent.length > 0) return { ok: false, message: '30秒ほど待ってからもう一度押してください' }
 
-  await insertNotification({
+  const r = await insertNotification({
     recipientId: user.id,
     kind: 'disaster',
     title: '【試験】災害情報の通知のテストです',
     body: 'ベルとスマホ（プッシュ許可時）に届けば設定は正常です。実際の災害情報ではありません。',
     linkUrl: `${DISASTER_MAP_URL}#d=test`,
   })
-  return { ok: true, message: '試験通知を送りました。ヘッダーのベル🔔を確認してください（プッシュを許可していればスマホにも届きます）' }
+  // 成否を正直に返す（以前は保存に失敗しても「送りました」と出していた）
+  if (!r.inserted) {
+    return {
+      ok: false,
+      message: `ベル🔔の保存に失敗しました（${r.error ?? '原因不明'}）。運営に連絡してください`,
+    }
+  }
+  return {
+    ok: true,
+    message: r.pushed > 0
+      ? `試験通知を送りました。ベル🔔と、プッシュ許可済みの${r.pushed}台に送信しました`
+      : '試験通知をベル🔔に入れました。スマホへのプッシュは0台です（この端末で「プッシュ通知設定」を許可すると届きます）',
+  }
 }
 
 /**
