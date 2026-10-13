@@ -6,6 +6,7 @@ export const DISASTER_CATEGORIES = [
   { key: 'river', prefKey: 'notify_disaster_river', label: '印旛沼・手賀沼の危険水位' },
   { key: 'closure', prefKey: 'notify_disaster_closure', label: '通行止めの新規発表' },
   { key: 'flood', prefKey: 'notify_disaster_flood', label: '通れない冠水道路の追加' },
+  { key: 'fire', prefKey: 'notify_disaster_fire', label: '消防情報（火災・調査活動・事故）' },
 ] as const
 
 export type DisasterCategory = (typeof DISASTER_CATEGORIES)[number]['key']

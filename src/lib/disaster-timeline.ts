@@ -8,7 +8,7 @@ import { parse as parseHtml } from 'node-html-parser'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchOfficialUpdates } from '@/lib/inzai-city-alerts'
 import { checkCityPageHealth, handleCityTransitChange } from '@/lib/disaster-rail-watch'
-import { notifyNewClosures, notifyTimelineDrafts } from '@/lib/disaster-notify'
+import { notifyFireIncidents, notifyNewClosures, notifyTimelineDrafts } from '@/lib/disaster-notify'
 import {
   isRoadClosureKind,
   loadExistingClosures,
@@ -1265,6 +1265,9 @@ export async function runDisasterTimeline(
       }).eq('id', source.id)
     }
   }
+
+  // 消防情報（CBIが受信・公開した fire-incidents.json）の新着を、希望した会員へ通知する。失敗しても巡回は止めない
+  await notifyFireIncidents().catch((e) => console.error('[disaster-notify:fire]', errorMessage(e)))
 
   const failed = results.filter((result) => result.status === 'failed').length
   const status: TimelineRunResult['status'] = failed === 0 ? 'success' : failed === results.length && results.length > 0 ? 'failed' : 'partial'

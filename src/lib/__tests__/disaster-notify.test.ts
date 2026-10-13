@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyTimelineDraft, DISASTER_CATEGORIES } from '@/lib/disaster-notify'
+import { classifyFireIncident, classifyTimelineDraft, DISASTER_CATEGORIES } from '@/lib/disaster-notify'
 
 describe('classifyTimelineDraft', () => {
   it('気象庁の警報（発表）は warning、特別警報は見出しを変える', () => {
@@ -32,9 +32,31 @@ describe('classifyTimelineDraft', () => {
     expect(classifyTimelineDraft('city-alert-xml', { title: '避難所を開設しました' })).toBeNull()
   })
 
-  it('設定の種類は5つで、キーが重複しない', () => {
+  it('設定の種類は6つで、キーが重複しない', () => {
     const keys = DISASTER_CATEGORIES.map((c) => c.prefKey)
-    expect(new Set(keys).size).toBe(5)
+    expect(new Set(keys).size).toBe(6)
     expect(keys.every((k) => k.startsWith('notify_disaster_'))).toBe(true)
   })
 })
+
+describe('classifyFireIncident', () => {
+  const now = Date.parse('2026-10-14T00:00:00Z')
+  const recent = '2026-10-13T23:00:00Z'
+  const base = { id: 'abc', status: 'active', receivedAtIso: recent }
+
+  it('火災・調査活動・事故の active は通知文面になる（印西市を補い、白井市は補わない）', () => {
+    const f = classifyFireIncident({ ...base, kind: 'fire', addressText: '浦部2213番氏神' }, now)
+    expect(f?.title).toBe('🔥 消防情報（火災）：印西市浦部2213番氏神付近')
+    expect(f?.dedupeKey).toBe('abc')
+    expect(classifyFireIncident({ ...base, kind: 'investigating', addressText: '戸神台1丁目' }, now)?.title).toContain('調査活動')
+    expect(classifyFireIncident({ ...base, kind: 'accident', addressText: '白井市復1449番' }, now)?.title).toContain('：白井市復1449番付近')
+  })
+
+  it('救急支援・解除済み・3時間より古い・idなしは対象外', () => {
+    expect(classifyFireIncident({ ...base, kind: 'ems', addressText: 'x' }, now)).toBeNull()
+    expect(classifyFireIncident({ ...base, kind: 'fire', status: 'cleared' }, now)).toBeNull()
+    expect(classifyFireIncident({ ...base, kind: 'fire', receivedAtIso: '2026-10-13T20:00:00Z' }, now)).toBeNull()
+    expect(classifyFireIncident({ ...base, id: undefined, kind: 'fire' }, now)).toBeNull()
+  })
+})
+

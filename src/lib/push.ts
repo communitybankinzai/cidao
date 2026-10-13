@@ -69,26 +69,28 @@ function buildPayload(input: { title: string; body?: string; url?: string }): st
  * - recipient の push_subscriptions 全端末に送信（best-effort）
  * - 失効した購読（404/410）は削除する
  * - VAPID鍵未設定時は何もしない
+ * - 戻り値は実際に送れた端末数（試験通知の結果表示に使う）
  */
 export async function sendWebPush(input: {
   recipientId: string
   title: string
   body?: string
   url?: string
-}): Promise<void> {
+}): Promise<number> {
   try {
     const env = resolveEnv()
-    if (!env) return
+    if (!env) return 0
 
     const { data: subs } = await env.admin
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
       .eq('member_id', input.recipientId)
-    if (!subs || subs.length === 0) return
+    if (!subs || subs.length === 0) return 0
 
-    await deliver(env, subs as Subscription[], buildPayload(input))
+    return await deliver(env, subs as Subscription[], buildPayload(input))
   } catch {
     // best-effort。プッシュ失敗は本体処理に影響させない
+    return 0
   }
 }
 

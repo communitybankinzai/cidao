@@ -1,6 +1,7 @@
 // 災害情報の通知（2026-10-12 事業主指示）。
 // 希望した会員（マイメニュー /me/edit のスイッチ・初期OFF）にだけ、ベル🔔＋Webプッシュで知らせる。
 // きっかけは新しい定期実行を作らず、既存の巡回（公式発表・通行止め）と記録の保存に相乗りする。
+// 消防情報（2026-10-14追加）は、防災MAPの fire-incidents.json（CBI手元の見張りが公開）を巡回のついでに読む。
 // 停電は対象外：東京電力PGとの了承条件が「利用者が表示を選んだときだけ取得・常時巡回なし」のため。
 import { notifyDisasterSubscribers } from '@/lib/notify'
 import { DISASTER_CATEGORIES, type DisasterCategory } from '@/lib/disaster-notify-categories'
@@ -128,4 +129,64 @@ export async function notifyRiverDanger(stationName: string, level: string) {
     '水位の最新値は防災MAPで確認してください。避難の判断は市の避難情報に従ってください。',
     6 * 60,
   )
+}
+
+// ---- 消防情報（印西地区消防組合の災害案内メール・CBIが受信して公開した fire-incidents.json）----
+// 手元の見張りは CiDAO に何も送らないため、既存の災害タイムライン巡回のついでに公開JSONを読んで通知する。
+// 救急支援活動（ems）は件数が多く火災ではないので対象外。
+
+export const FIRE_INCIDENTS_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/fire-incidents.json'
+
+export type FireIncidentLite = {
+  id?: string
+  kind?: string
+  status?: string
+  addressText?: string
+  receivedAtIso?: string
+}
+
+const FIRE_KIND_LABEL: Record<string, { emoji: string; label: string }> = {
+  fire: { emoji: '🔥', label: '火災' },
+  investigating: { emoji: '🔍', label: '調査活動・火災の疑い' },
+  accident: { emoji: '💥', label: '事故' },
+}
+
+/** 受信からこれより古い分は通知しない（情報源の追加直後や復旧後に、過去分が一斉に鳴らないように） */
+export const FIRE_NOTIFY_MAX_AGE_MS = 3 * 3600_000
+
+/** 消防情報の1件が通知対象なら通知の文面を返す。対象外は null */
+export function classifyFireIncident(
+  inc: FireIncidentLite,
+  now: number = Date.now(),
+): { dedupeKey: string; title: string; body: string } | null {
+  if (!inc.id || inc.status !== 'active') return null
+  const k = FIRE_KIND_LABEL[inc.kind ?? '']
+  if (!k) return null
+  const at = Date.parse(inc.receivedAtIso ?? '')
+  if (!Number.isFinite(at) || now - at > FIRE_NOTIFY_MAX_AGE_MS) return null
+  const addr = (inc.addressText ?? '').trim()
+  const place = addr ? `${/^白井市/.test(addr) ? '' : '印西市'}${addr}付近` : '場所は防災MAPで確認'
+  return {
+    dedupeKey: inc.id,
+    title: `${k.emoji} 消防情報（${k.label}）：${place}`.slice(0, 120),
+    body: '印西地区消防組合のメール配信をCBIが受信した情報です（消防の公式な発表そのものではありません）。場所は防災MAPの「消防情報」で確認してください。',
+  }
+}
+
+/** 公開されている fire-incidents.json を読み、新しい消防情報を希望した会員へ通知する（重複は incident id で防ぐ） */
+export async function notifyFireIncidents(fetchImpl: typeof fetch = fetch): Promise<number> {
+  const res = await fetchImpl(`${FIRE_INCIDENTS_URL}?t=${Date.now()}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!res.ok) throw new Error(`fire-incidents.json HTTP ${res.status}`)
+  const data = (await res.json()) as { incidents?: FireIncidentLite[] }
+  let sent = 0
+  for (const inc of data.incidents ?? []) {
+    const hit = classifyFireIncident(inc)
+    if (!hit) continue
+    const r = await send('fire', hit.dedupeKey, hit.title, hit.body, 24 * 60)
+    if (r.recipients > 0) sent += 1
+  }
+  return sent
 }

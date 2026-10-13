@@ -29,6 +29,7 @@ function adminClient() {
  * - INSERT は RLS で一般ユーザーに開放していないため service_role で行う
  * - best-effort：通知の失敗は呼び出し元のアクション（コメント投稿等）を失敗させない
  * - recipient と actor が同一人物の場合はスキップ（自分のアクションは通知しない）
+ * - 戻り値で保存・プッシュの成否を返す（呼び出し側は無視してよい。試験通知の結果表示に使う）
  */
 export async function insertNotification(input: {
   recipientId: string
@@ -37,14 +38,14 @@ export async function insertNotification(input: {
   title: string
   body?: string
   linkUrl?: string
-}): Promise<void> {
+}): Promise<{ inserted: boolean; pushed: number; error?: string }> {
   try {
-    if (input.actorId && input.actorId === input.recipientId) return
+    if (input.actorId && input.actorId === input.recipientId) return { inserted: false, pushed: 0 }
 
     const admin = adminClient()
-    if (!admin) return
+    if (!admin) return { inserted: false, pushed: 0, error: 'サーバーの設定（SUPABASE_SERVICE_ROLE_KEY）がありません' }
 
-    await admin.from('notifications').insert({
+    const { error } = await admin.from('notifications').insert({
       recipient_id: input.recipientId,
       actor_id: input.actorId ?? null,
       kind: input.kind,
@@ -54,14 +55,16 @@ export async function insertNotification(input: {
     })
 
     // Webプッシュ（購読者のみ・best-effort）。スリープ中の端末にも届く
-    await sendWebPush({
+    const pushed = await sendWebPush({
       recipientId: input.recipientId,
       title: input.title,
       body: input.body,
       url: input.linkUrl,
     })
+    return { inserted: !error, pushed, error: error?.message }
   } catch {
     // best-effort：通知失敗は本体処理に影響させない
+    return { inserted: false, pushed: 0, error: '予期しないエラー' }
   }
 }
 
