@@ -37,6 +37,18 @@ export default async function AdminBugReportsPage() {
   type Row = NonNullable<typeof reports>[number]
   const rows = (reports ?? []) as Row[]
 
+  // 返信履歴（古い順）。報告ごとにまとめる
+  const { data: replyRows } = await supabase
+    .from('bug_report_replies')
+    .select('id, report_id, body, created_at')
+    .order('created_at', { ascending: true })
+  const repliesByReport = new Map<string, { id: string; body: string; created_at: string }[]>()
+  for (const rep of replyRows ?? []) {
+    const list = repliesByReport.get(rep.report_id) ?? []
+    list.push(rep)
+    repliesByReport.set(rep.report_id, list)
+  }
+
   async function handleUpdate(formData: FormData) {
     'use server'
     const id = String(formData.get('id') ?? '')
@@ -143,10 +155,20 @@ export default async function AdminBugReportsPage() {
                   <label className="text-[10px] text-slate-500 block">
                     報告者への返信（送信すると本人のベル🔔に届きます。対応メモとは別です）
                   </label>
-                  {r.replied_at && (
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                      返信済み（{new Date(r.replied_at).toLocaleString('ja-JP')}）：{r.reply_text}
-                    </p>
+                  {(repliesByReport.get(r.id) ?? []).length > 0 && (
+                    <ol className="space-y-1 rounded border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/30 p-2">
+                      <li className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        返信履歴（{repliesByReport.get(r.id)!.length}件）
+                      </li>
+                      {repliesByReport.get(r.id)!.map((rep) => (
+                        <li key={rep.id} className="text-[11px] text-slate-700 dark:text-slate-300">
+                          <span className="text-[10px] text-slate-500 mr-1">
+                            {new Date(rep.created_at).toLocaleString('ja-JP')}
+                          </span>
+                          <span className="whitespace-pre-wrap">{rep.body}</span>
+                        </li>
+                      ))}
+                    </ol>
                   )}
                   {r.reporter_id ? (
                     <div className="flex flex-wrap items-end gap-2">

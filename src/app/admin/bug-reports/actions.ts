@@ -59,6 +59,12 @@ export async function replyToBugReport(id: string, replyText: string) {
     .eq('id', id)
   if (error) throw new Error(`返信の保存に失敗しました: ${error.message}`)
 
+  // bug_reports の返信列は最新1件で上書きされるため、1通ずつ履歴にも積む
+  const { error: historyError } = await supabase
+    .from('bug_report_replies')
+    .insert({ report_id: id, body: text, replied_by: user.id })
+  if (historyError) throw new Error(`返信履歴の保存に失敗しました: ${historyError.message}`)
+
   if (report.reporter_id) {
     await insertNotification({
       recipientId: report.reporter_id,
