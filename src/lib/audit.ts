@@ -19,6 +19,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 export type AuditAction =
   | 'freefree.create'
   | 'freefree.update'
+  | 'freefree.close'
   | 'freefree.comment'
   | 'freefree.like'
   | 'freefree.import'

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { freefreeCategoryLabel, freefreePosterKindMeta, resolveFreefreePosterKind } from '@/lib/freefree-categories'
 import { canEditFreefreePost } from '@/lib/freefree-permissions'
+import { CloseFreefreeButton } from '../_components/CloseFreefreeButton'
 import { normalizeVideoUrl, youtubeEmbedUrl } from '@/lib/freefree-video'
 import OpenpoiAttribution from '../_components/OpenpoiAttribution'
 import { likeFreefree, commentFreefree, useCoupon } from '../actions'
@@ -112,6 +113,7 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
                   ✏️ 編集する
                 </Link>
               )}
+              {canEdit && post.status === 'active' && <CloseFreefreeButton postId={id} />}
             </div>
           )}
         </header>

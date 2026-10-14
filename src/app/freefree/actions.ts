@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { FREEFREE_CATEGORIES, freefreeCategoryLabel, type FreefreePosterKind } from '@/lib/freefree-categories'
 import {
   endOfDayJstIso,
@@ -349,6 +350,67 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
   revalidatePath('/freefree')
   revalidatePath(`/freefree/${postId}`)
   redirect(`/freefree/${postId}`)
+}
+
+/**
+ * 募集を打ち切る（掲載をその場で終了する）。
+ *
+ * 終了日を待たずに、掲載を即「期限切れ」にし、配信待ちのSNS告知も取り消す。
+ * 掲載者が status を変えることは DB のトリガーで禁じているため、権限を確認したうえで
+ * service_role で更新する（編集できる人＝掲載者・団体メンバー・運営者だけが対象）。
+ * すでにSNSへ出た投稿は消えない（消す場合は管理画面の「SNS削除待ち」）。
+ */
+export async function closeFreefreePost(postId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('未ログイン')
+
+  const { data: post } = await supabase
+    .from('freefree_posts')
+    .select('id, title, status, poster_type, poster_id')
+    .eq('id', postId)
+    .maybeSingle()
+  if (!post) throw new Error('掲載が見つかりません')
+  if (!(await canEditFreefreePost(supabase, user.id, post))) throw new Error('この掲載を終了する権限がありません')
+  if (post.status !== 'active') throw new Error('この掲載はすでに終了している（または公開されていない）ため、打ち切れません')
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key) throw new Error('サーバー設定エラー（service role 未設定）')
+  const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+
+  const nowIso = new Date().toISOString()
+  const { data: closed, error } = await admin
+    .from('freefree_posts')
+    .update({ status: 'expired', expires_at: nowIso })
+    .eq('id', postId)
+    .eq('status', 'active')
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(`終了に失敗しました: ${error.message}`)
+  if (!closed) throw new Error('この掲載はすでに終了している（または公開されていない）ため、打ち切れません')
+
+  // クーポンも掲載と一緒に終わらせる（期限は掲載終了日と同じ決まり）。失敗しても掲載の終了は成立する
+  await admin.from('coupons').update({ expires_at: nowIso }).eq('post_id', postId)
+
+  // 配信待ち（未承認・承認済みとも）のSNS告知を取り消す。配信側でも掲載の状態を見て止まるが、記録を明確にする
+  await admin
+    .from('sns_post_logs')
+    .update({ status: 'failed', error_message: '募集の打ち切りにより取り消しました' })
+    .eq('target_type', 'freefree')
+    .eq('target_id', postId)
+    .eq('status', 'pending')
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'freefree.close',
+    targetType: 'freefree',
+    targetId: postId,
+    detail: { title: post.title },
+  })
+
+  revalidatePath('/freefree')
+  revalidatePath(`/freefree/${postId}`)
 }
 
 export async function useCoupon(couponId: string, postId: string) {
