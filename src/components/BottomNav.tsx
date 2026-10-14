@@ -75,8 +75,16 @@ export function BottomNav() {
       />
       <nav
         aria-label="主要メニュー"
-        className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
+        // iPhone で下スクロール中にタブが画面の途中に浮く不具合の対策。
+        // backdrop-filter（ぼかし）は fixed 要素の位置ズレを起こしやすいので使わず、
+        // translateZ で独立した合成レイヤーにして、ツールバーの伸縮に追従させる。
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'transform',
+        }}
       >
         <ul className="mx-auto max-w-lg grid grid-cols-5">
           {TABS.map((t) => (
