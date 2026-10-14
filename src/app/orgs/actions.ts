@@ -85,9 +85,15 @@ export async function createOrganization(input: OrgInput) {
   const asRep = !!input.as_representative
   const nowIso = new Date().toISOString()
 
-  const { data: org, error } = await supabase
+  // 一般ユーザーの申告は public_flag=false ・まだ所属も無いため、作った直後の行は本人から見えない。
+  // INSERT ... RETURNING（.select('id')）は SELECT の権限も要るので RLS で弾かれる。
+  // そこで ID を先に自分で決め、読み返さずに挿入する。
+  const orgId = crypto.randomUUID()
+  const org = { id: orgId }
+  const { error } = await supabase
     .from('organizations')
     .insert({
+      id: orgId,
       name: input.name,
       type: input.type,
       legal_form: input.legal_form || null,
@@ -100,8 +106,6 @@ export async function createOrganization(input: OrgInput) {
       // そうでない場合は NULL（後から admin/me/edit で代表者が確定）。
       representative_id: asRep ? user.id : null,
     })
-    .select('id')
-    .single()
   if (error) throw new Error(`団体作成失敗: ${error.message}`)
 
   await supabase.from('memberships').insert({
@@ -115,9 +119,12 @@ export async function createOrganization(input: OrgInput) {
   })
 
   if (input.categories.length > 0) {
-    await supabase.from('organization_categories').insert(
-      input.categories.map((c, i) => ({ org_id: org.id, category: c, is_primary: i === 0 })),
-    )
+    // 活動分野の書込は代表者権限（is_org_representative）が要り、申告直後の本人は通らない。
+    // 上で本人が作った団体（org.id は自分で採番）への書込に限り、service_role で保存する。
+    const { error: catError } = await createAdminClient()
+      .from('organization_categories')
+      .insert(input.categories.map((c, i) => ({ org_id: org.id, category: c, is_primary: i === 0 })))
+    if (catError) throw new Error(`活動分野の保存失敗: ${catError.message}`)
   }
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。
