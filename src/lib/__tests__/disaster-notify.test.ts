@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyFireIncident, classifyTimelineDraft, DISASTER_CATEGORIES } from '@/lib/disaster-notify'
+import { classifyFireIncident, classifyTimelineDraft, DISASTER_CATEGORIES, fireNotifyToken, verifyFireNotifyToken } from '@/lib/disaster-notify'
 import { wantsDisasterNotify } from '@/lib/disaster-notify-categories'
 
 describe('classifyTimelineDraft', () => {
@@ -58,6 +58,24 @@ describe('classifyFireIncident', () => {
     expect(classifyFireIncident({ ...base, kind: 'fire', status: 'cleared' }, now)).toBeNull()
     expect(classifyFireIncident({ ...base, kind: 'fire', receivedAtIso: '2026-10-13T20:00:00Z' }, now)).toBeNull()
     expect(classifyFireIncident({ ...base, id: undefined, kind: 'fire' }, now)).toBeNull()
+  })
+})
+
+describe('fireNotifyToken（見張りが新着を直接知らせるための合言葉）', () => {
+  it('同じキーなら同じ値・別キーなら別の値で、キー本体は含まない', () => {
+    const key = 'service-role-key-example'
+    expect(fireNotifyToken(key)).toBe(fireNotifyToken(key))
+    expect(fireNotifyToken(key)).not.toBe(fireNotifyToken('other-key'))
+    expect(fireNotifyToken(key)).toMatch(/^[0-9a-f]{64}$/)
+    expect(fireNotifyToken(key)).not.toContain(key)
+  })
+  it('正しい値だけ通す（空・違う値・キー未設定は拒否）', () => {
+    const key = 'service-role-key-example'
+    expect(verifyFireNotifyToken(key, fireNotifyToken(key))).toBe(true)
+    expect(verifyFireNotifyToken(key, fireNotifyToken('other'))).toBe(false)
+    expect(verifyFireNotifyToken(key, '')).toBe(false)
+    expect(verifyFireNotifyToken(key, null)).toBe(false)
+    expect(verifyFireNotifyToken('', fireNotifyToken(''))).toBe(false)
   })
 })
 

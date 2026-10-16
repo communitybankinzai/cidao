@@ -3,6 +3,7 @@
 // きっかけは新しい定期実行を作らず、既存の巡回（公式発表・通行止め）と記録の保存に相乗りする。
 // 消防情報（2026-10-14追加）は、防災MAPの fire-incidents.json（CBI手元の見張りが公開）を巡回のついでに読む。
 // 停電は対象外：東京電力PGとの了承条件が「利用者が表示を選んだときだけ取得・常時巡回なし」のため。
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { notifyDisasterSubscribers } from '@/lib/notify'
 import { DISASTER_CATEGORIES, type DisasterCategory } from '@/lib/disaster-notify-categories'
 
@@ -171,6 +172,30 @@ export function classifyFireIncident(
     title: `${k.emoji} 消防情報（${k.label}）：${place}`.slice(0, 120),
     body: '印西地区消防組合のメール配信をCBIが受信した情報です（消防の公式な発表そのものではありません）。場所は防災MAPの「消防情報」で確認してください。',
   }
+}
+
+/**
+ * 手元の見張り（fire_mail_watch.py）が新着を見つけた1件を、公開や巡回を待たずに通知するための合言葉。
+ * Supabase のサービスキーから作る派生値（キー本体は戻せない）。新しい環境変数は増やさない。
+ * 見張りは公開前でもこの口を呼ぶ。通知の重複は巡回側と同じ incident id で防ぐ。
+ */
+export function fireNotifyToken(serviceKey: string): string {
+  return createHmac('sha256', serviceKey).update('disaster-fire-notify').digest('hex')
+}
+
+export function verifyFireNotifyToken(serviceKey: string, token: string | null | undefined): boolean {
+  if (!serviceKey || !token) return false
+  const expected = Buffer.from(fireNotifyToken(serviceKey), 'utf8')
+  const given = Buffer.from(String(token), 'utf8')
+  return expected.length === given.length && timingSafeEqual(expected, given)
+}
+
+/** 見張りから渡された1件を通知する。対象外（救急支援・解除済み・古い）は sent=false */
+export async function notifyFireIncident(inc: FireIncidentLite): Promise<{ sent: boolean; recipients: number }> {
+  const hit = classifyFireIncident(inc)
+  if (!hit) return { sent: false, recipients: 0 }
+  const r = await send('fire', hit.dedupeKey, hit.title, hit.body, 24 * 60)
+  return { sent: r.recipients > 0, recipients: r.recipients }
 }
 
 /** 公開されている fire-incidents.json を読み、新しい消防情報を希望した会員へ通知する（重複は incident id で防ぐ） */
