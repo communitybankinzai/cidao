@@ -133,7 +133,7 @@ export async function notifyRiverDanger(stationName: string, level: string) {
 }
 
 // ---- 消防情報（印西地区消防組合の災害案内メール・CBIが受信して公開した fire-incidents.json）----
-// 手元の見張りは CiDAO に何も送らないため、既存の災害タイムライン巡回のついでに公開JSONを読んで通知する。
+// 巡回（毎時）は取りこぼし用の保険として、公開JSONを読んで通知する。通常は見張りが新着を記録した瞬間に fire-notify 口へ直接渡す（2026-10-16）。
 // 救急支援活動（ems）は件数が多く火災ではないので対象外。
 
 export const FIRE_INCIDENTS_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/fire-incidents.json'
