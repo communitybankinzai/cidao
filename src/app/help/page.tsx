@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
@@ -13,18 +15,17 @@ const TOC = [
 
 export default function HelpPage() {
   return (
-    <main className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
-      <div>
-        <nav className="text-xs text-slate-500">
-          <Link href="/" className="hover:underline">← ホーム</Link>
-        </nav>
-        <h1 className="text-2xl font-bold mt-2">使い方ヘルプ</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          CiDAOの使い方を説明します。わからないことや困ったことがあれば
-          <Link href="/bug-report" className="text-blue-600 hover:underline mx-1">不具合・ご要望の報告</Link>
-          からお知らせください。
-        </p>
-      </div>
+    <PageShell width="narrow">
+      <PageHeader
+        title="使い方ヘルプ"
+        description={
+          <>
+            CiDAOの使い方を説明します。わからないことや困ったことがあれば
+            <Link href="/bug-report" className="mx-1 text-blue-600 hover:underline">不具合・ご要望の報告</Link>
+            からお知らせください。
+          </>
+        }
+      />
 
       <nav className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
         <p className="text-xs font-semibold text-slate-500 mb-2">もくじ</p>
@@ -131,6 +132,6 @@ export default function HelpPage() {
       <p className="text-xs text-slate-500 text-center">
         この先、提案の出し方やFreeFree掲示板の使い方も順次ここに追加していきます。
       </p>
-    </main>
+    </PageShell>
   )
 }

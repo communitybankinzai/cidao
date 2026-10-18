@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
@@ -107,15 +108,13 @@ export default async function InboxPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <div className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/me" className="hover:underline">← マイページ</Link>
-        </nav>
+        <BackLink href="/me">マイページ</BackLink>
 
         <header className="space-y-2">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">受信箱</p>
-          <h1 className="text-2xl font-serif font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
             📥 届いた声がけ
           </h1>
           <p className="text-xs text-slate-500">

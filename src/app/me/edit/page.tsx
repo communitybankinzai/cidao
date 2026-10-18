@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
@@ -107,13 +108,11 @@ export default async function EditProfilePage({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <form action={handleSubmit} className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/me" className="hover:underline">← マイページ</Link>
-        </nav>
+        <BackLink href="/me">マイページ</BackLink>
         <header>
-          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
             {wasLight ? '本登録（プロフィール完成）' : 'プロフィール編集'}
           </h1>
           <p className="text-sm text-slate-500 mt-2">

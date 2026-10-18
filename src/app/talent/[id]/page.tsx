@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -43,9 +44,9 @@ export default async function TalentDetailPage({ params, searchParams }: { param
   const intro = await publishedIntro(supabase, id)
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-2xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/talent" className="hover:underline">← 登録メンバー</Link></nav>
+        <BackLink href="/talent">登録メンバー</BackLink>
         <header className="flex items-center gap-4">
           <Avatar
             src={member.avatar_url}
@@ -54,7 +55,7 @@ export default async function TalentDetailPage({ params, searchParams }: { param
             objectPosition={member.avatar_position ?? undefined}
             zoom={member.avatar_zoom ?? undefined}
           />
-          <h1 className="text-3xl font-serif font-bold">{published?.version.fields_json.display_name?.value ?? member.display_name}</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">{published?.version.fields_json.display_name?.value ?? member.display_name}</h1>
         </header>
 
         {video && (

@@ -1,5 +1,5 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { categoryLabel, budgetLabel, bindingMeta, quarterEndAt, formatJstDate, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
 import { finalizeVotingIfDue } from '../actions'
@@ -181,11 +181,9 @@ export default async function ProposalDetailPage({
     : null
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/proposals" className="hover:underline">← 提案一覧</Link>
-        </nav>
+        <BackLink href="/proposals">提案一覧</BackLink>
 
         <header className="space-y-3">
           <div className="flex flex-wrap gap-2 text-xs">
@@ -196,7 +194,7 @@ export default async function ProposalDetailPage({
               {STATUS_LABEL[proposal.status]}
             </span>
           </div>
-          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
             {proposal.title}
           </h1>
           <p className="text-sm text-slate-500">

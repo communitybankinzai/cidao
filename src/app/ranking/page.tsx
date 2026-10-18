@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
@@ -55,48 +57,40 @@ export default async function RankingPage() {
     .slice(0, 50)
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/" className="hover:underline">← ホーム</Link>
-        </nav>
-        <header>
-          <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">貢献度ランキング</h1>
-          <p className="text-xs text-slate-500 mt-2">
-            「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）
-          </p>
-        </header>
+    <PageShell width="narrow">
+      <PageHeader
+        title="貢献度ランキング"
+        description={<>「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）</>}
+      />
 
-        <ol className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-200 dark:divide-slate-800">
-          {ranking.map((m, i) => (
-            <li key={m.id} className="flex items-center gap-4 px-4 py-3">
-              <span className={`w-8 text-center font-bold ${
-                i === 0 ? 'text-amber-500 text-xl'
-                : i === 1 ? 'text-slate-400 text-lg'
-                : i === 2 ? 'text-amber-700 text-lg'
-                : 'text-slate-400'
-              }`}>
-                {i + 1}
-              </span>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{m.display_name}</div>
-                <div className="text-xs text-slate-500">
-                  {m.residency_type === 'citizen' ? '市民' : '関係人口'} · {TIER_LABEL[m.tier] ?? m.tier}
-                </div>
+      <ol className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-200 dark:divide-slate-800">
+        {ranking.map((m, i) => (
+          <li key={m.id} className="flex items-center gap-4 px-4 py-3">
+            <span className={`w-8 text-center font-bold ${
+              i === 0 ? 'text-amber-500 text-xl'
+              : i === 1 ? 'text-slate-400 text-lg'
+              : i === 2 ? 'text-amber-700 text-lg'
+              : 'text-slate-400'
+            }`}>
+              {i + 1}
+            </span>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{m.display_name}</div>
+              <div className="text-xs text-slate-500">
+                {m.residency_type === 'citizen' ? '市民' : '関係人口'} · {TIER_LABEL[m.tier] ?? m.tier}
               </div>
-              <div className="font-mono text-right">
-                <div className="text-lg font-bold">{m.pt}</div>
-                <div className="text-[10px] text-slate-500">pt</div>
-              </div>
-            </li>
-          ))}
-        </ol>
+            </div>
+            <div className="font-mono text-right">
+              <div className="text-lg font-bold">{m.pt}</div>
+              <div className="text-[10px] text-slate-500">pt</div>
+            </div>
+          </li>
+        ))}
+      </ol>
 
-        <p className="text-xs text-slate-400 text-center">
-          自分も表示するには <Link href="/me/edit" className="underline">マイページから参加</Link>
-        </p>
-      </div>
-    </div>
+      <p className="text-xs text-slate-400 text-center">
+        自分も表示するには <Link href="/me/edit" className="underline">マイページから参加</Link>
+      </p>
+    </PageShell>
   )
 }

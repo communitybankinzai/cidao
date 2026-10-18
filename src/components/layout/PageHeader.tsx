@@ -2,6 +2,24 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 
 /**
+ * 「← 前のページへ」のリンク。押しやすい高さ（40px以上）で、全ページ同じ見た目にする。
+ * PageHeader の中でも、見出しが特別な詳細ページでも使う。
+ */
+export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <nav aria-label="前のページへ">
+      <Link
+        href={href}
+        className="-ml-1 inline-flex min-h-10 items-center gap-0.5 rounded-md pr-2 text-sm text-slate-500 hover:text-slate-900 hover:underline dark:text-slate-400 dark:hover:text-slate-100"
+      >
+        <ChevronLeft aria-hidden className="size-4" />
+        {children}
+      </Link>
+    </nav>
+  )
+}
+
+/**
  * ページの先頭（戻るリンク＋見出し＋説明＋右側の操作ボタン）。
  *
  * 見出しの大きさ（text-2xl／md:text-3xl）、「Citizen DAO」の小見出し、
@@ -26,17 +44,7 @@ export function PageHeader({
 }) {
   return (
     <>
-      {back && (
-        <nav aria-label="前のページへ">
-          <Link
-            href={back.href}
-            className="-ml-1 inline-flex min-h-10 items-center gap-0.5 rounded-md pr-2 text-sm text-slate-500 hover:text-slate-900 hover:underline dark:text-slate-400 dark:hover:text-slate-100"
-          >
-            <ChevronLeft aria-hidden className="size-4" />
-            {back.label}
-          </Link>
-        </nav>
-      )}
+      {back && <BackLink href={back.href}>{back.label}</BackLink>}
       <header className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">

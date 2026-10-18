@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -133,11 +134,9 @@ export default async function MyPage({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <div className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/" className="hover:underline">← ホーム</Link>
-        </nav>
+        <BackLink href="/">ホーム</BackLink>
 
         {sp.updated && (
           <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-3 rounded text-sm">
@@ -233,7 +232,7 @@ export default async function MyPage({
               zoom={member.avatar_zoom ?? undefined}
             />
             <div className="flex-1 min-w-0 space-y-2">
-              <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 truncate">
+              <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 truncate">
                 {member.display_name}
               </h1>
               <div className="flex flex-wrap gap-2 text-xs">

@@ -88,7 +88,7 @@ export default async function ReceptionHistoryPage({ params }: { params: Promise
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <div className="max-w-2xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500 flex gap-3">
           <Link href={`/orgs/${id}`} className="hover:underline">← {org.name}</Link>
@@ -98,7 +98,7 @@ export default async function ReceptionHistoryPage({ params }: { params: Promise
         <header className="flex items-end justify-between gap-3 flex-wrap">
           <div className="space-y-1">
             <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Reception History</p>
-            <h1 className="text-2xl font-serif font-bold">受付履歴</h1>
+            <h1 className="text-2xl md:text-3xl font-serif font-bold">受付履歴</h1>
             <p className="text-xs text-slate-500">直近90日 · {items.length}件</p>
           </div>
           <a href={`/orgs/${id}/reception/csv`} download>

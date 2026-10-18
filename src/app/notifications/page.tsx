@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -43,15 +45,9 @@ export default async function NotificationsPage() {
   const hasUnread = rows.some((r) => !r.read_at)
 
   return (
-    <main className="max-w-2xl mx-auto p-4 sm:p-6 space-y-4">
+    <PageShell width="narrow">
       <MarkAllRead hasUnread={hasUnread} />
-
-      <div>
-        <h1 className="text-2xl font-bold">通知</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          自分宛の通知を新しい順に最大100件表示します。
-        </p>
-      </div>
+      <PageHeader title="通知" description="自分宛の通知を新しい順に最大100件表示します。" />
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-400 bg-white dark:bg-slate-900 border rounded-lg p-6 text-center">
@@ -102,6 +98,6 @@ export default async function NotificationsPage() {
           ))}
         </ul>
       )}
-    </main>
+    </PageShell>
   )
 }

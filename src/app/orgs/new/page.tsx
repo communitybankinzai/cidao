@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -42,10 +43,10 @@ export default async function NewOrgPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
-        <nav className="text-xs text-slate-500"><Link href="/orgs" className="hover:underline">← 団体一覧</Link></nav>
-        <h1 className="text-3xl font-serif font-bold">新しい団体</h1>
+        <BackLink href="/orgs">団体一覧</BackLink>
+        <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい団体</h1>
 
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
           登録後、管理者の承認を経て一般公開されます。印西市市民活動推進条例 第10条で市に登録した団体は「印西市民活動団体登録番号」（例: 08-001）を入力できます（任意）。

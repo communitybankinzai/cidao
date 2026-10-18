@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -83,27 +85,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const today = ymdInJst(new Date())
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-12">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href="/" className="hover:underline">← ホーム</Link>
-        </nav>
-        <header className="space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-              <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
-                印西市のイベント・活動カレンダー
-              </h1>
-            </div>
-            {user && (
-              <Link href="/events/new">
-                <Button>イベント登録</Button>
-              </Link>
-            )}
-          </div>
-          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            印西市内で活動する<strong className="text-slate-800 dark:text-slate-200">市民団体・企業・行政・個人</strong>が主催するイベントをまとめて掲載しています。各イベントをタップすると詳細・参加方法をご覧いただけます。
+    <PageShell width="default">
+      <PageHeader
+        title="印西市のイベント・活動カレンダー"
+        description={
+          <>
+            印西市内で活動する<strong className="text-slate-800 dark:text-slate-200">市民団体・企業・行政・個人</strong>が主催するイベントをまとめて掲載
             {!user && (
               <>
                 {' '}
@@ -113,22 +100,29 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 してください（LINEでワンタップ・無料）。
               </>
             )}
-          </p>
-        </header>
+          </>
+        }
+        actions={
+          user && (
+            <Link href="/events/new">
+              <Button>イベント登録</Button>
+            </Link>
+          )
+        }
+      />
 
-        <EventsBrowser
-          events={rows}
-          orgInfo={orgInfo}
-          cells={cells}
-          year={y}
-          month={m}
-          today={today}
-          isLoggedIn={!!user}
-          view={view}
-          currentUserId={user?.id ?? null}
-          isAdmin={!!isAdmin}
-        />
-      </div>
-    </div>
+      <EventsBrowser
+        events={rows}
+        orgInfo={orgInfo}
+        cells={cells}
+        year={y}
+        month={m}
+        today={today}
+        isLoggedIn={!!user}
+        view={view}
+        currentUserId={user?.id ?? null}
+        isAdmin={!!isAdmin}
+      />
+    </PageShell>
   )
 }

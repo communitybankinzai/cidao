@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -59,23 +61,25 @@ export default async function FreefreePage() {
   })
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/" className="hover:underline">← ホーム</Link></nav>
-        <header className="flex items-end justify-between">
-          <div>
-            <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-            <h1 className="text-3xl font-serif font-bold">FreeFree 地域応援掲示板</h1>
-            <p className="text-sm text-slate-500 mt-2">印西の小さなお店・個人事業・団体・企業・行政を応援</p>
-            <p className="text-xs mt-1"><Link href="/freefree/for-shops" className="text-sky-700 dark:text-sky-400 hover:underline">お店の方へ（無料で掲載できます）</Link></p>
-          </div>
-          {user && (
+    <PageShell width="default">
+      <PageHeader
+        title="FreeFree 地域応援掲示板"
+        description={
+          <>
+            印西の小さなお店・個人事業・団体・企業・行政を応援
+            <span className="mt-1 block text-xs">
+              <Link href="/freefree/for-shops" className="text-sky-700 hover:underline dark:text-sky-400">お店の方へ（無料で掲載できます）</Link>
+            </span>
+          </>
+        }
+        actions={
+          user && (
             <Link href="/freefree/new"><Button>掲載する</Button></Link>
-          )}
-        </header>
+          )
+        }
+      />
 
-        <FreefreeBrowser rows={rows} />
-      </div>
-    </div>
+      <FreefreeBrowser rows={rows} />
+    </PageShell>
   )
 }

@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -52,9 +54,9 @@ export default async function MyTalentPage() {
   const published = !!profile?.current_version_id
   const editable = version?.status === 'draft' || version?.status === 'owner_reviewed'
 
-  return <main className="mx-auto min-h-dvh max-w-2xl space-y-6 px-4 py-6">
-    <nav className="flex gap-4 text-sm"><Link href="/me" className="underline">← マイページ</Link><Link href="/talent" className="underline">登録メンバー一覧</Link>{published && <Link href={`/talent/${memberId}`} className="underline">自分の紹介ページ</Link>}</nav>
-    <h1 className="text-2xl font-semibold">人材バンク</h1>
+  return <PageShell width="narrow">
+    <PageHeader title="人材バンク" back={{ href: "/me", label: "マイページ" }} />
+    <nav className="flex gap-4 text-sm"><Link href="/talent" className="underline">登録メンバー一覧</Link>{published && <Link href={`/talent/${memberId}`} className="underline">自分の紹介ページ</Link>}</nav>
 
     {/* ① 紹介文 */}
     <section aria-label="紹介文" className={box}>
@@ -166,5 +168,5 @@ export default async function MyTalentPage() {
 
     {/* ④ CBI からの他己紹介 */}
     <IntroSection intro={intro} />
-  </main>
+  </PageShell>
 }

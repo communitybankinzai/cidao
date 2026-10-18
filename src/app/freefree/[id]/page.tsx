@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -83,9 +84,9 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-2xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/freefree" className="hover:underline">← FreeFree</Link></nav>
+        <BackLink href="/freefree">FreeFree</BackLink>
 
         <header className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -97,7 +98,7 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
               </span>
             )}
           </div>
-          <h1 className="text-3xl font-serif font-bold">{post.title}</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">{post.title}</h1>
           {orgInfo && (
             <p className="text-sm text-slate-600 dark:text-slate-400">
               by {orgInfo.name}

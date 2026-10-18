@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -82,10 +83,10 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
-        <nav className="text-xs text-slate-500"><Link href="/events" className="hover:underline">← イベント一覧</Link></nav>
-        <h1 className="text-3xl font-serif font-bold">新しいイベント</h1>
+        <BackLink href="/events">イベント一覧</BackLink>
+        <h1 className="text-2xl md:text-3xl font-serif font-bold">新しいイベント</h1>
 
         {sp.error && (
           <p className="text-sm text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded p-3">

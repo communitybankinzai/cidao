@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -120,9 +121,9 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
   const hasContactDetails = !!(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url || org.inzaici_url)
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/orgs" className="hover:underline">← 団体一覧</Link></nav>
+        <BackLink href="/orgs">団体一覧</BackLink>
 
         <header className="space-y-3">
           <div className="flex items-start gap-4">
@@ -152,7 +153,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
               </span>
             ))}
           </div>
-          <h1 className="text-3xl font-serif font-bold">{org.name}</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">{org.name}</h1>
             </div>
           </div>
         </header>

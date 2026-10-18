@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -70,15 +72,12 @@ export default async function ProposalsPage() {
   }))
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">提案一覧</h1>
-            <p className="text-xs text-slate-500 mt-1">市民から寄せられた {summaries.length} 件の提案</p>
-          </div>
-          {user ? (
+    <PageShell width="default">
+      <PageHeader
+        title="提案一覧"
+        description={<>市民から寄せられた {summaries.length} 件の提案</>}
+        actions={
+          user ? (
             <Link href="/proposals/new">
               <Button>新しい提案</Button>
             </Link>
@@ -86,15 +85,12 @@ export default async function ProposalsPage() {
             <Link href="/login">
               <Button variant="outline">ログインして提案する</Button>
             </Link>
-          )}
-        </header>
+          )
+        }
+      />
 
-        <ProposalsBrowser proposals={summaries} isLoggedIn={!!user} />
+      <ProposalsBrowser proposals={summaries} isLoggedIn={!!user} />
 
-        <p className="text-xs text-slate-400 text-center pt-4">
-          <Link href="/" className="hover:underline">← ホーム</Link>
-        </p>
-      </div>
-    </div>
+    </PageShell>
   )
 }

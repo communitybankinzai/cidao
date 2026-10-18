@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -114,14 +115,12 @@ export default async function EditOrgPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500">
-          <Link href={`/orgs/${id}`} className="hover:underline">← {org.name} に戻る</Link>
-        </nav>
+        <BackLink href={`/orgs/${id}`}>{org.name} に戻る</BackLink>
 
         <header className="space-y-2">
-          <h1 className="text-2xl font-serif font-bold">団体情報を編集</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">団体情報を編集</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">{org.name}</p>
           {isUnverified && (
             <div className="text-xs px-3 py-2 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 rounded">

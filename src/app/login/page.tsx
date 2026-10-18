@@ -131,7 +131,7 @@ export default function LoginPage() {
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
             CiDAO · Citizen DAO
           </p>
-          <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
             ログイン
           </h1>
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">

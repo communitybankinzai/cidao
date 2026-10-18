@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { createClient } from '@/lib/supabase/server'
 import { BugReportForm } from './_components/BugReportForm'
 
@@ -24,11 +26,11 @@ export default async function BugReportPage({
   }
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-bold mb-2">不具合・ご要望の報告</h1>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-        CBIサイトやCiDAOアプリで気になった不具合・使いにくい点・ご要望をお寄せください。ログインしていなくても送信できます。
-      </p>
+    <PageShell width="narrow">
+      <PageHeader
+        title="不具合・ご要望の報告"
+        description="CBIサイトやCiDAOアプリで気になった不具合・使いにくい点・ご要望をお寄せください。ログインしていなくても送信できます。"
+      />
       <BugReportForm
         source={source === 'cbi_site' ? 'cbi_site' : 'cidao_app'}
         isLoggedIn={!!user}
@@ -36,6 +38,6 @@ export default async function BugReportPage({
         contextLabel={contextLabel}
         defaultPageUrl={contextLabel ? '/notifications' : ''}
       />
-    </main>
+    </PageShell>
   )
 }

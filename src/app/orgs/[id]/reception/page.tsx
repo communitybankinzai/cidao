@@ -66,7 +66,7 @@ export default async function ReceptionPage({ params }: { params: Promise<{ id: 
   })
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <div className="max-w-2xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500 flex gap-3">
           <Link href={`/orgs/${id}`} className="hover:underline">← {org.name} に戻る</Link>
@@ -75,7 +75,7 @@ export default async function ReceptionPage({ params }: { params: Promise<{ id: 
 
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Reception</p>
-          <h1 className="text-2xl font-serif font-bold">受付モード</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">受付モード</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">{org.name}</p>
           <p className="text-xs text-slate-500">
             参加者の会員証 QR（トップページに表示）をカメラで読み取ると受付が記録されます。

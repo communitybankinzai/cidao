@@ -1,3 +1,5 @@
+import { PageShell } from '@/components/layout/PageShell'
+import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -63,21 +65,17 @@ export default async function OrgsPage() {
   })
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/" className="hover:underline">← ホーム</Link></nav>
-        <header className="flex items-end justify-between">
-          <div>
-            <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
-            <h1 className="text-3xl font-serif font-bold">団体</h1>
-          </div>
-          {user && (
+    <PageShell width="default">
+      <PageHeader
+        title="団体"
+        actions={
+          user && (
             <Link href="/orgs/new"><Button>団体登録</Button></Link>
-          )}
-        </header>
+          )
+        }
+      />
 
-        <OrgsBrowser orgs={merged} />
-      </div>
-    </div>
+      <OrgsBrowser orgs={merged} />
+    </PageShell>
   )
 }

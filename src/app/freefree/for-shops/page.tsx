@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
@@ -38,13 +39,13 @@ const FEATURES = [
 
 export default function ForShopsPage() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <article className="max-w-2xl mx-auto space-y-8">
-        <nav className="text-xs text-slate-500"><Link href="/freefree" className="hover:underline">← FreeFree</Link></nav>
+        <BackLink href="/freefree">FreeFree</BackLink>
 
         <header className="space-y-3">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">For Shops</p>
-          <h1 className="text-3xl font-serif font-bold">お店の方へ</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">お店の方へ</h1>
           <p className="text-slate-700 dark:text-slate-300">
             FreeFree 地域応援掲示板は、印西の小さなお店・教室・団体を応援する掲示板です。
             <strong>無料で掲載できます。</strong>写真とPR文は、ご自身で登録できます。

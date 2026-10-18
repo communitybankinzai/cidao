@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -60,10 +61,10 @@ export default async function EventDetailPage({
     : null
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <EventViewTracker eventId={id} />
       <article className="max-w-3xl mx-auto space-y-6">
-        <nav className="text-xs text-slate-500"><Link href="/events" className="hover:underline">← イベント一覧</Link></nav>
+        <BackLink href="/events">イベント一覧</BackLink>
 
         {sp.error === 'forbidden' && (
           <div className="border-l-4 border-rose-500 bg-rose-50 dark:bg-rose-950/30 px-4 py-2 rounded text-sm text-rose-800 dark:text-rose-200">
@@ -87,7 +88,7 @@ export default async function EventDetailPage({
           {isAdmin && event.status === 'open' && (
             <AnnounceEventButton eventId={id} hasFlyer={!!event.flyer_image_url} />
           )}
-          <h1 className="text-3xl font-serif font-bold">{event.title}</h1>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">
             {new Date(event.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} 〜 {new Date(event.end_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
           </p>

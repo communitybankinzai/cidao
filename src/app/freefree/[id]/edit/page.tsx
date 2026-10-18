@@ -1,5 +1,5 @@
+import { BackLink } from '@/components/layout/PageHeader'
 import { notFound, redirect, unstable_rethrow } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { FREEFREE_CATEGORIES } from '@/lib/freefree-categories'
 import { jstYmdOf, maxEndDateForEdit } from '@/lib/freefree-dates'
@@ -23,9 +23,9 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
 
   if (!(await canEditFreefreePost(supabase, user.id, post))) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+      <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
         <div className="max-w-2xl mx-auto space-y-4">
-          <nav className="text-xs text-slate-500"><Link href={`/freefree/${id}`} className="hover:underline">← 掲載に戻る</Link></nav>
+          <BackLink href={`/freefree/${id}`}>掲載に戻る</BackLink>
           <p className="text-sm">この掲載を編集できるのは、掲載した本人（団体の掲載ならその団体のメンバー）と運営者だけです。</p>
         </div>
       </div>
@@ -74,10 +74,10 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
     : []
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
       <div className="max-w-2xl mx-auto space-y-4">
-        <nav className="text-xs text-slate-500"><Link href={`/freefree/${id}`} className="hover:underline">← 掲載に戻る</Link></nav>
-        <h1 className="text-3xl font-serif font-bold">掲載を編集</h1>
+        <BackLink href={`/freefree/${id}`}>掲載に戻る</BackLink>
+        <h1 className="text-2xl md:text-3xl font-serif font-bold">掲載を編集</h1>
         <EditFreefreeForm
           action={handleUpdate}
           postId={id}
