@@ -6,6 +6,21 @@ import { Avatar } from '@/components/ui/avatar'
 import { summarize } from '@/lib/contribution-summary'
 import { getCivicGroupCount } from '@/lib/org-count'
 import { PushNudge } from '@/components/PushNudge'
+import { PageShell } from '@/components/layout/PageShell'
+import { Tile, TileGrid } from '@/components/Tile'
+import {
+  Bot,
+  Building2,
+  CalendarDays,
+  CircleHelp,
+  LogIn,
+  Megaphone,
+  Smartphone,
+  Trophy,
+  UserRound,
+  Users,
+  Vote,
+} from 'lucide-react'
 import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
 
 const SITE_URL = 'https://cidao.vercel.app'
@@ -77,9 +92,37 @@ export default async function Home() {
   const isLight = member?.tier === 'light'
   const tierInfo = member ? (TIER_LABEL[member.tier] ?? TIER_LABEL.light) : null
 
+  // やりたいことを、絵と短い言葉で選ぶ（9個まで）。ログイン前は見出しの直下、ログイン後は会員証の下に置く
+  const tiles = (
+    <section aria-label="できること" className="space-y-3">
+      <TileGrid label="CiDAOでできること">
+        <Tile href="/proposals" icon={Vote} label="提案・投票" />
+        <Tile href="/events" icon={CalendarDays} label="イベント" />
+        <Tile href="/orgs" icon={Building2} label="団体をさがす" />
+        <Tile href="/talent" icon={Users} label="メンバー" />
+        <Tile href="/freefree" icon={Megaphone} label="掲示板" />
+        <Tile href="/ranking" icon={Trophy} label="ランキング" />
+        <Tile href="/match" icon={Bot} label="AIに相談" />
+        <Tile href="/help" icon={CircleHelp} label="使い方" />
+        {userId ? (
+          <Tile href="/me" icon={UserRound} label="マイページ" />
+        ) : (
+          <Tile href="/login" icon={LogIn} label="ログイン" />
+        )}
+      </TileGrid>
+      {orgCount || memberCount ? (
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+          {[orgCount ? `団体 ${orgCount} 件` : null, memberCount ? `登録メンバー ${memberCount} 名` : null]
+            .filter(Boolean)
+            .join('・')}
+          （印西市内）
+        </p>
+      ) : null}
+    </section>
+  )
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-8">
-      <main className="max-w-2xl w-full space-y-8">
+    <PageShell width="narrow">
         <header className="space-y-2">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
             Citizen DAO · 市民DAO
@@ -108,9 +151,13 @@ export default async function Home() {
           </details>
         </header>
 
+        {!userId && tiles}
+
         {/* 初めての人向け：自分に合う入口を選ぶ（未ログイン時のみ） */}
         {!userId && (
-          <section aria-label="はじめての方へ" className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <section aria-label="はじめての方へ" className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">はじめての方へ</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Link
               href="/login?next=/me/talent"
               className="block bg-white dark:bg-slate-900 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg p-4 hover:border-emerald-500 transition space-y-1.5"
@@ -145,6 +192,7 @@ export default async function Home() {
                 印西市内{orgCount ? ` ${orgCount} ` : 'の'}団体の情報とイベントを、登録なしでもそのまま見られます。
               </p>
             </Link>
+            </div>
           </section>
         )}
 
@@ -241,97 +289,30 @@ export default async function Home() {
           </section>
         )}
 
-        <section className="bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950 dark:to-sky-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-5 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs tracking-[0.2em] text-emerald-700 dark:text-emerald-300 uppercase">Agent A7 · Match</div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mt-0.5">マッチング相談</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                AI（自動でおすすめを教えてくれる相談相手）と会話しながら、あなたに合う活動先や仲間を見つけられます
-              </p>
-            </div>
-            <span className="text-2xl shrink-0" aria-hidden>💬</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <Link
-              href="/match"
-              className="block bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60 rounded-md p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg" aria-hidden>🏛️</span>
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">団体を探す</h4>
-              </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                印西市内{orgCount ? ` ${orgCount} ` : 'の'}団体から、活動可能な時間・関心に合う団体を AI が提案します。
-              </p>
-            </Link>
-            <Link
-              href="/match?mode=members"
-              className="block bg-white/70 dark:bg-slate-900/60 border border-emerald-200/60 dark:border-emerald-800/60 rounded-md p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg" aria-hidden>🤝</span>
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">メンバーを探す</h4>
-              </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                現在 {memberCount ?? '–'} 名が登録。声をかけたい人を AI が提案します。
-              </p>
-            </Link>
-          </div>
-          <p className="text-[11px] text-slate-600 dark:text-slate-400">
-            自分の目で探したい方は{' '}
-            <Link href="/orgs" className="underline hover:text-emerald-700 dark:hover:text-emerald-300">団体一覧・検索</Link>
-            {' '}／{' '}
-            <Link href="/talent" className="underline hover:text-emerald-700 dark:hover:text-emerald-300">メンバー一覧</Link>
-            {' '}へ
-          </p>
-        </section>
-
-        <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <NavCard href="/proposals" label="提案・投票" />
-          <NavCard href="/events"    label="イベント" />
-          <NavCard href="/orgs"      label="団体一覧・検索" />
-          <NavCard href="/talent"    label="登録メンバー" />
-          <NavCard href="/freefree"  label="FreeFree掲示板" />
-          <NavCard href="/ranking"   label="ランキング" />
-        </section>
+        {userId && tiles}
 
         <Link
           href="/install"
-          className="block bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg p-3 hover:border-sky-400 transition text-center"
+          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
         >
-          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            📲 スマホのホーム画面に追加してアプリとして使う →
-          </span>
-        </Link>
-
-        <Link
-          href="/help"
-          className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 hover:border-slate-400 dark:hover:border-slate-600 transition text-center"
-        >
-          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            📖 使い方ヘルプ（通知の受け取り方・止め方）→
-          </span>
+          <Smartphone aria-hidden className="size-4" />
+          スマホのホーム画面に追加して、アプリのように使う
         </Link>
 
         <footer className="flex gap-3">
           {userId ? (
             <>
-              <Link href="/me">
-                <Button variant="default">マイページ</Button>
-              </Link>
               <form action="/auth/sign-out" method="post">
                 <Button type="submit" variant="outline">サインアウト</Button>
               </form>
             </>
           ) : (
             <Link href="/login">
-              <Button variant="default">ログイン</Button>
+              <Button variant="default" className="h-11 px-6 text-base">ログイン（LINEで無料）</Button>
             </Link>
           )}
         </footer>
-      </main>
-    </div>
+    </PageShell>
   )
 }
 
@@ -347,13 +328,5 @@ function StepChip({ label, state }: { label: string; state: 'done' | 'now' | 'to
       {label}
       {state === 'done' && ' ✓'}
     </span>
-  )
-}
-
-function NavCard({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 hover:border-slate-400 transition text-center">
-      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</div>
-    </Link>
   )
 }
