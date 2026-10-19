@@ -96,18 +96,18 @@ export default async function Home() {
   const tiles = (
     <section aria-label="できること" className="space-y-3">
       <TileGrid label="CiDAOでできること">
-        <Tile href="/proposals" icon={Vote} label="提案・投票" />
-        <Tile href="/events" icon={CalendarDays} label="イベント" />
-        <Tile href="/orgs" icon={Building2} label="団体をさがす" />
-        <Tile href="/talent" icon={Users} label="メンバー" />
-        <Tile href="/freefree" icon={Megaphone} label="掲示板" />
-        <Tile href="/ranking" icon={Trophy} label="ランキング" />
-        <Tile href="/match" icon={Bot} label="AIに相談" />
-        <Tile href="/help" icon={CircleHelp} label="使い方" />
+        <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" />
+        <Tile href="/events" icon={CalendarDays} label="イベント" color="orange" />
+        <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
+        <Tile href="/talent" icon={Users} label="メンバー" color="violet" />
+        <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
+        <Tile href="/ranking" icon={Trophy} label="ランキング" color="rose" />
+        <Tile href="/match" icon={Bot} label="AIに相談" color="cyan" />
+        <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
-          <Tile href="/me" icon={UserRound} label="マイページ" />
+          <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />
         ) : (
-          <Tile href="/login" icon={LogIn} label="ログイン" />
+          <Tile href="/login" icon={LogIn} label="ログイン" color="navy" />
         )}
       </TileGrid>
       {orgCount || memberCount ? (
