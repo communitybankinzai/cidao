@@ -111,11 +111,18 @@ export default async function Home() {
         )}
       </TileGrid>
       {orgCount || memberCount ? (
-        <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-          {[orgCount ? `団体 ${orgCount} 件` : null, memberCount ? `登録メンバー ${memberCount} 名` : null]
-            .filter(Boolean)
-            .join('・')}
-          （印西市内）
+        <p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-center text-sm text-slate-600 dark:text-slate-300">
+          {orgCount ? (
+            <span className="whitespace-nowrap">
+              団体 <b className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{orgCount}</b> 件
+            </span>
+          ) : null}
+          {memberCount ? (
+            <span className="whitespace-nowrap">
+              登録メンバー <b className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{memberCount}</b> 名
+            </span>
+          ) : null}
+          <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">（印西市内）</span>
         </p>
       ) : null}
     </section>
