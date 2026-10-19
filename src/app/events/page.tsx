@@ -85,7 +85,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const today = ymdInJst(new Date())
 
   return (
-    <PageShell width="default">
+    <PageShell feature="events" width="default">
       <PageHeader feature="events"
         title="印西市のイベント・活動カレンダー"
         description={

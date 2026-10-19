@@ -398,7 +398,7 @@ function PickerCell({
       data-instant="true"
       className={`rounded-md py-2 text-sm tabular-nums transition ${
         selected
-          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+          ? 'bg-accent-strong text-accent-strong-fg'
           : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
       } ${isNow && !selected ? 'ring-1 ring-inset ring-amber-400 dark:ring-amber-600' : ''}`}
     >
@@ -511,7 +511,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       data-instant="true"
       className={`px-2.5 py-1 rounded-full text-xs border transition ${
         active
-          ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
+          ? 'bg-accent-strong text-accent-strong-fg border-accent-strong'
           : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400'
       }`}
     >
@@ -644,7 +644,7 @@ function CalendarView({
               className={`min-h-[92px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${items.length > 0 ? 'cursor-pointer' : ''} ${isSelected ? 'bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-inset ring-amber-300 dark:ring-amber-800' : inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}
             >
               <div className="flex items-center justify-between">
-                <span className={`text-xs tabular-nums ${isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : !inMonth ? 'text-slate-300 dark:text-slate-700' : dow === 0 ? 'text-rose-600 dark:text-rose-400' : dow === 6 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}`}>{cd}</span>
+                <span className={`text-xs tabular-nums ${isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent-strong text-accent-strong-fg' : !inMonth ? 'text-slate-300 dark:text-slate-700' : dow === 0 ? 'text-rose-600 dark:text-rose-400' : dow === 6 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}`}>{cd}</span>
                 {isLoggedIn && inMonth && (
                   <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} onClick={(ev) => ev.stopPropagation()} className="opacity-0 hover:opacity-100 focus:opacity-100 [@media(hover:none)]:pointer-events-none text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
                 )}

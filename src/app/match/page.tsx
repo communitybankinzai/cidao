@@ -22,7 +22,7 @@ export default async function MatchPage({ searchParams }: { searchParams: Promis
       : `印西市内${orgCount ? ` ${orgCount} ` : 'の'}団体から、あなたに合う活動先を AI と会話で絞り込みます。`
 
   return (
-    <PageShell width="form">
+    <PageShell feature="match" width="form">
       <PageHeader feature="match"
         title="マッチング相談"
         description={
@@ -43,7 +43,7 @@ export default async function MatchPage({ searchParams }: { searchParams: Promis
             className={
               'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ' +
               (mode === t.key
-                ? 'border-slate-900 dark:border-slate-100 text-slate-900 dark:text-slate-100'
+                ? 'border-accent-strong text-slate-900 dark:text-slate-100'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300')
             }
           >

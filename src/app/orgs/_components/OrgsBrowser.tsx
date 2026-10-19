@@ -231,7 +231,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
             <span aria-hidden>⚙️</span>
             <span>絞り込み・並び替え</span>
             {activeChips.length > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold flex items-center justify-center">
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent-strong text-accent-strong-fg text-[10px] font-bold flex items-center justify-center">
                 {activeChips.length}
               </span>
             )}
@@ -249,7 +249,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                 type="button"
                 onClick={c.clear}
                 data-instant="true"
-                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-accent-strong text-accent-strong-fg"
               >
                 {c.label}
                 <span aria-hidden className="opacity-70">✕</span>
@@ -294,7 +294,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
               type="button"
               onClick={() => setSheetOpen(false)}
               data-instant="true"
-              className="ml-auto flex-1 h-11 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold"
+              className="ml-auto flex-1 h-11 rounded-lg bg-accent-strong text-accent-strong-fg text-sm font-semibold"
             >
               {filtered.length} 団体を見る
             </button>
@@ -606,7 +606,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       className={
         'text-xs px-2.5 py-1 rounded-full border transition ' +
         (active
-          ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
+          ? 'bg-accent-strong text-accent-strong-fg border-accent-strong'
           : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 dark:hover:border-slate-500')
       }
     >

@@ -65,7 +65,7 @@ export default async function OrgsPage() {
   })
 
   return (
-    <PageShell width="default">
+    <PageShell feature="orgs" width="default">
       <PageHeader feature="orgs"
         title="団体"
         actions={

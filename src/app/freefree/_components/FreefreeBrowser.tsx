@@ -132,7 +132,7 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
             <span aria-hidden>⚙️</span>
             <span>絞り込み・並び替え</span>
             {activeChips.length > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold flex items-center justify-center">
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent-strong text-accent-strong-fg text-[10px] font-bold flex items-center justify-center">
                 {activeChips.length}
               </span>
             )}
@@ -150,7 +150,7 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
                 type="button"
                 onClick={c.clear}
                 data-instant="true"
-                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-accent-strong text-accent-strong-fg"
               >
                 {c.label}
                 <span aria-hidden className="opacity-70">✕</span>
@@ -184,7 +184,7 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
             type="button"
             onClick={() => setSheetOpen(false)}
             data-instant="true"
-            className="w-full h-11 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold"
+            className="w-full h-11 rounded-lg bg-accent-strong text-accent-strong-fg text-sm font-semibold"
           >
             {filtered.length} 件を見る
           </button>
@@ -301,7 +301,7 @@ function Chip({ active, onClick, label, className }: { active: boolean; onClick:
       data-instant="true"
       className={
         active
-          ? 'px-3 py-1 rounded-full text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+          ? 'px-3 py-1 rounded-full text-xs font-medium bg-accent-strong text-accent-strong-fg'
           : `px-3 py-1 rounded-full text-xs border border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 ${className ?? 'bg-slate-50 dark:bg-slate-800'}`
       }
     >

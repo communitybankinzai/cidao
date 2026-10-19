@@ -15,7 +15,7 @@ const TOC = [
 
 export default function HelpPage() {
   return (
-    <PageShell width="narrow">
+    <PageShell feature="help" width="narrow">
       <PageHeader feature="help"
         title="使い方ヘルプ"
         description={

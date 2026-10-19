@@ -38,6 +38,8 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-fg: var(--accent-strong-fg);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -263,4 +265,113 @@
     }
   }
 
+}
+
+/* ページごとの「機能の色」（ホームのタイルと同じ）。
+   PageShell の feature 指定で、そのページの中の「主なボタン（bg-primary）」と
+   「選んだ印（bg-accent-strong）」だけがこの色になる。指定のないページは今までの黒のまま。
+   明るい画面は白文字で4.5:1以上の濃さ、暗い画面は淡い色＋濃い文字（2026-10-19 事業主がB案を選択） */
+:root {
+  --accent-strong: #0f172a;
+  --accent-strong-fg: #ffffff;
+}
+.dark {
+  --accent-strong: #f1f5f9;
+  --accent-strong-fg: #0f172a;
+}
+.accent-indigo {
+  --accent-strong: #4338ca;
+  --accent-strong-fg: #ffffff;
+  --primary: #4338ca;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-indigo {
+  --accent-strong: #a5b4fc;
+  --accent-strong-fg: #0f172a;
+  --primary: #a5b4fc;
+  --primary-foreground: #0f172a;
+}
+.accent-orange {
+  --accent-strong: #c2410c;
+  --accent-strong-fg: #ffffff;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-orange {
+  --accent-strong: #fdba74;
+  --accent-strong-fg: #0f172a;
+  --primary: #fdba74;
+  --primary-foreground: #0f172a;
+}
+.accent-emerald {
+  --accent-strong: #047857;
+  --accent-strong-fg: #ffffff;
+  --primary: #047857;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-emerald {
+  --accent-strong: #6ee7b7;
+  --accent-strong-fg: #0f172a;
+  --primary: #6ee7b7;
+  --primary-foreground: #0f172a;
+}
+.accent-violet {
+  --accent-strong: #6d28d9;
+  --accent-strong-fg: #ffffff;
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-violet {
+  --accent-strong: #c4b5fd;
+  --accent-strong-fg: #0f172a;
+  --primary: #c4b5fd;
+  --primary-foreground: #0f172a;
+}
+.accent-amber {
+  --accent-strong: #b45309;
+  --accent-strong-fg: #ffffff;
+  --primary: #b45309;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-amber {
+  --accent-strong: #fcd34d;
+  --accent-strong-fg: #0f172a;
+  --primary: #fcd34d;
+  --primary-foreground: #0f172a;
+}
+.accent-rose {
+  --accent-strong: #be123c;
+  --accent-strong-fg: #ffffff;
+  --primary: #be123c;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-rose {
+  --accent-strong: #fda4af;
+  --accent-strong-fg: #0f172a;
+  --primary: #fda4af;
+  --primary-foreground: #0f172a;
+}
+.accent-cyan {
+  --accent-strong: #0e7490;
+  --accent-strong-fg: #ffffff;
+  --primary: #0e7490;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-cyan {
+  --accent-strong: #67e8f9;
+  --accent-strong-fg: #0f172a;
+  --primary: #67e8f9;
+  --primary-foreground: #0f172a;
+}
+.accent-sky {
+  --accent-strong: #0369a1;
+  --accent-strong-fg: #ffffff;
+  --primary: #0369a1;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-sky {
+  --accent-strong: #7dd3fc;
+  --accent-strong-fg: #0f172a;
+  --primary: #7dd3fc;
+  --primary-foreground: #0f172a;
 }
