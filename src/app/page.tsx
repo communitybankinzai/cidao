@@ -8,6 +8,7 @@ import { getCivicGroupCount } from '@/lib/org-count'
 import { PushNudge } from '@/components/PushNudge'
 import { PageShell } from '@/components/layout/PageShell'
 import { Tile, TileGrid } from '@/components/Tile'
+import { MemberQr } from '@/components/MemberQr'
 import {
   Bot,
   Building2,
@@ -75,7 +76,7 @@ export default async function Home() {
     if (member) {
       qrDataUrl = await QRCode.toDataURL(`${SITE_URL}/talent/${userId}`, {
         margin: 1,
-        width: 240,
+        width: 600,
         color: { dark: '#1e293b', light: '#ffffff' },
       })
       const { data: contributions } = await supabase
@@ -217,7 +218,7 @@ export default async function Home() {
                   <div className="flex items-center gap-3">
                     <Avatar src={member.avatar_url} name={member.display_name} size="md" />
                     <div className="min-w-0">
-                      <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      <div className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 line-clamp-2 break-words">
                         {member.display_name}
                       </div>
                       <div className="text-[10px] text-slate-400">
@@ -240,19 +241,7 @@ export default async function Home() {
                     </div>
                   </dl>
                 </div>
-                {qrDataUrl && (
-                  <div className="shrink-0 text-center space-y-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={qrDataUrl}
-                      alt="会員識別QRコード（プロフィールページへのリンク）"
-                      width={96}
-                      height={96}
-                      className="rounded border border-slate-200 dark:border-slate-700"
-                    />
-                    <p className="text-[9px] text-slate-400">会員QR</p>
-                  </div>
-                )}
+                {qrDataUrl && <MemberQr src={qrDataUrl} name={member.display_name} />}
               </div>
             </div>
             {isLight && (
