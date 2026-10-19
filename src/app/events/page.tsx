@@ -86,7 +86,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   return (
     <PageShell width="default">
-      <PageHeader
+      <PageHeader feature="events"
         title="印西市のイベント・活動カレンダー"
         description={
           <>

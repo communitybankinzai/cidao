@@ -58,7 +58,7 @@ export default async function RankingPage() {
 
   return (
     <PageShell width="narrow">
-      <PageHeader
+      <PageHeader feature="ranking"
         title="貢献度ランキング"
         description={<>「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）</>}
       />

@@ -62,7 +62,7 @@ export default async function FreefreePage() {
 
   return (
     <PageShell width="default">
-      <PageHeader
+      <PageHeader feature="freefree"
         title="FreeFree 地域応援掲示板"
         description={
           <>

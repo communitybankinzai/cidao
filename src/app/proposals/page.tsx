@@ -73,7 +73,7 @@ export default async function ProposalsPage() {
 
   return (
     <PageShell width="default">
-      <PageHeader
+      <PageHeader feature="proposals"
         title="提案一覧"
         description={<>市民から寄せられた {summaries.length} 件の提案</>}
         actions={

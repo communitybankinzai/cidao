@@ -19,7 +19,7 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
 
   return (
     <PageShell width="default">
-      <PageHeader
+      <PageHeader feature="talent"
         title="登録メンバー"
         description={<>スキル・経験を活かしたい人と募集する人をつなぐ。AI と会話で探したい場合は <Link href="/match?mode=members" className="underline hover:text-slate-700 dark:hover:text-slate-300">マッチング相談</Link> をご利用ください。</>}
         actions={

@@ -23,7 +23,7 @@ export default async function MatchPage({ searchParams }: { searchParams: Promis
 
   return (
     <PageShell width="form">
-      <PageHeader
+      <PageHeader feature="match"
         title="マッチング相談"
         description={
           <>
