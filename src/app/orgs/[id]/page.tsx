@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -121,9 +122,10 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
   const hasContactDetails = !!(org.website_url || snsEntries.length > 0 || org.activity_area || org.contact_email || org.contact_url || org.inzaici_url)
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('orgs')}`}>
       <article className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/orgs">団体一覧</BackLink>
+        <FeatureEyebrow feature="orgs" />
 
         <header className="space-y-3">
           <div className="flex items-start gap-4">

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
@@ -50,9 +51,10 @@ function Num({ n }: { n: number }) {
 export default function FreefreeGuidePage() {
   const mail = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載の取り下げ')}`
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-6">
         <BackLink href="/freefree/for-shops">お店の方へ</BackLink>
+        <FeatureEyebrow feature="freefree" />
 
         <img src="/freefree/banner.png" width={1500} height={500} alt="FreeFree 地域応援掲示板　みんなで印西市をもりあげよう　フレー！フレー！" className="w-full h-auto rounded-lg border bg-white" />
 

@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { notFound, redirect, unstable_rethrow } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { FREEFREE_CATEGORIES } from '@/lib/freefree-categories'
@@ -23,7 +24,7 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
 
   if (!(await canEditFreefreePost(supabase, user.id, post))) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+      <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
         <div className="max-w-2xl mx-auto space-y-4">
           <BackLink href={`/freefree/${id}`}>掲載に戻る</BackLink>
           <p className="text-sm">この掲載を編集できるのは、掲載した本人（団体の掲載ならその団体のメンバー）と運営者だけです。</p>
@@ -74,9 +75,10 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
     : []
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <div className="max-w-2xl mx-auto space-y-4">
         <BackLink href={`/freefree/${id}`}>掲載に戻る</BackLink>
+        <FeatureEyebrow feature="freefree" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">掲載を編集</h1>
         <EditFreefreeForm
           action={handleUpdate}

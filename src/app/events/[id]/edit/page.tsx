@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -115,9 +116,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('events')}`}>
       <form action={handleUpdate} className="max-w-2xl mx-auto space-y-4">
         <BackLink href={`/events/${id}`}>イベント詳細</BackLink>
+        <FeatureEyebrow feature="events" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">イベントを編集</h1>
 
         {/* 編集画面では AI 自動入力を既定 OFF にする。

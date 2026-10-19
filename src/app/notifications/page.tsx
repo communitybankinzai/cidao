@@ -45,9 +45,9 @@ export default async function NotificationsPage() {
   const hasUnread = rows.some((r) => !r.read_at)
 
   return (
-    <PageShell width="narrow">
+    <PageShell feature="account" width="narrow">
       <MarkAllRead hasUnread={hasUnread} />
-      <PageHeader title="通知" description="自分宛の通知を新しい順に最大100件表示します。" />
+      <PageHeader feature="account" title="通知" description="自分宛の通知を新しい順に最大100件表示します。" />
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-400 bg-white dark:bg-slate-900 border rounded-lg p-6 text-center">

@@ -1,3 +1,5 @@
+import { FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createProposal } from '../actions'
@@ -60,10 +62,10 @@ export default async function NewProposalPage() {
   const minDeadline = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10)
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('proposals')}`}>
       <form action={handleCreate} className="max-w-3xl mx-auto space-y-6">
         <header>
-          <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Citizen DAO</p>
+          <div className="mb-1"><FeatureEyebrow feature="proposals" /></div>
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">新しい提案</h1>
           <p className="text-sm text-slate-500 mt-2">
             投稿後 48 時間の議論期間を経て、自動的に投票期間へ移行します。投票の締切は四半期の末日が既定です

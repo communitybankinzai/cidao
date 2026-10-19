@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 
@@ -39,9 +40,10 @@ const FEATURES = [
 
 export default function ForShopsPage() {
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-8">
         <BackLink href="/freefree">FreeFree</BackLink>
+        <FeatureEyebrow feature="freefree" />
 
         <header className="space-y-3">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">For Shops</p>

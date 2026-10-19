@@ -42,8 +42,8 @@ export default function InstallPage() {
   }
 
   return (
-    <PageShell width="narrow">
-      <PageHeader
+    <PageShell feature="help" width="narrow">
+      <PageHeader feature="help"
         title="CiDAOをアプリとして使う"
         description={
           <>

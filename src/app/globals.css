@@ -375,3 +375,15 @@
   --primary: #7dd3fc;
   --primary-foreground: #0f172a;
 }
+.accent-navy {
+  --accent-strong: #1e3a5f;
+  --accent-strong-fg: #ffffff;
+  --primary: #1e3a5f;
+  --primary-foreground: #ffffff;
+}
+.dark .accent-navy {
+  --accent-strong: #7dd3fc;
+  --accent-strong-fg: #0f172a;
+  --primary: #7dd3fc;
+  --primary-foreground: #0f172a;
+}

@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { categoryLabel, budgetLabel, bindingMeta, quarterEndAt, formatJstDate, STRONG_SUPPORT_CHOICE } from '@/lib/categories'
@@ -181,9 +182,10 @@ export default async function ProposalDetailPage({
     : null
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('proposals')}`}>
       <article className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/proposals">提案一覧</BackLink>
+        <FeatureEyebrow feature="proposals" />
 
         <header className="space-y-3">
           <div className="flex flex-wrap gap-2 text-xs">

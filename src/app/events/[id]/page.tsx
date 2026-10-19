@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -61,10 +62,11 @@ export default async function EventDetailPage({
     : null
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('events')}`}>
       <EventViewTracker eventId={id} />
       <article className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/events">イベント一覧</BackLink>
+        <FeatureEyebrow feature="events" />
 
         {sp.error === 'forbidden' && (
           <div className="border-l-4 border-rose-500 bg-rose-50 dark:bg-rose-950/30 px-4 py-2 rounded text-sm text-rose-800 dark:text-rose-200">

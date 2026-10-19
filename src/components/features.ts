@@ -1,4 +1,4 @@
-import { Bot, Building2, CalendarDays, CircleHelp, Megaphone, Trophy, Users, Vote, type LucideIcon } from 'lucide-react'
+import { Bot, Building2, CalendarDays, CircleHelp, Megaphone, Trophy, UserRound, Users, Vote, type LucideIcon } from 'lucide-react'
 import type { TileColor } from '@/components/Tile'
 
 /**
@@ -15,6 +15,7 @@ export const FEATURES = {
   ranking: { label: 'ランキング', color: 'rose', icon: Trophy },
   match: { label: 'AIに相談', color: 'cyan', icon: Bot },
   help: { label: '使い方', color: 'sky', icon: CircleHelp },
+  account: { label: 'マイページ', color: 'navy', icon: UserRound },
 } as const satisfies Record<string, { label: string; color: TileColor; icon: LucideIcon }>
 
 export type FeatureKey = keyof typeof FEATURES
@@ -33,4 +34,9 @@ export const HEADER_COLORS: Record<TileColor, { chip: string; eyebrow: string }>
   cyan: { chip: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200', eyebrow: 'text-cyan-700 dark:text-cyan-300' },
   sky: { chip: 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-200', eyebrow: 'text-sky-700 dark:text-sky-300' },
   navy: { chip: 'bg-slate-200 text-[#1e3a5f] dark:bg-slate-700 dark:text-sky-200', eyebrow: 'text-[#1e3a5f] dark:text-sky-300' },
+}
+
+/** 画面全体の「機能の色」のクラス（globals.css の .accent-*）。ページの外側の枠に付ける */
+export function accentClass(feature: FeatureKey): string {
+  return `accent-${FEATURES[feature].color}`
 }

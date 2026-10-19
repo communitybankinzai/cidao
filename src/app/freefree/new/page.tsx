@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { redirect, unstable_rethrow } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { FREEFREE_CATEGORIES, FREEFREE_POSTER_KINDS, type FreefreePosterKind } from '@/lib/freefree-categories'
@@ -110,9 +111,10 @@ export default async function NewFreefreePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <div className="max-w-2xl mx-auto space-y-4">
         <BackLink href="/freefree">FreeFree</BackLink>
+        <FeatureEyebrow feature="freefree" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい掲載</h1>
         <NewFreefreeForm
           action={handleCreate}

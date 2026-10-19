@@ -1,4 +1,5 @@
-import { BackLink } from '@/components/layout/PageHeader'
+import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -43,9 +44,10 @@ export default async function NewOrgPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950">
+    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('orgs')}`}>
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
         <BackLink href="/orgs">団体一覧</BackLink>
+        <FeatureEyebrow feature="orgs" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい団体</h1>
 
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">

@@ -54,8 +54,8 @@ export default async function MyTalentPage() {
   const published = !!profile?.current_version_id
   const editable = version?.status === 'draft' || version?.status === 'owner_reviewed'
 
-  return <PageShell width="narrow">
-    <PageHeader title="人材バンク" back={{ href: "/me", label: "マイページ" }} />
+  return <PageShell feature="talent" width="narrow">
+    <PageHeader feature="talent" title="人材バンク" back={{ href: "/me", label: "マイページ" }} />
     <nav className="flex gap-4 text-sm"><Link href="/talent" className="underline">登録メンバー一覧</Link>{published && <Link href={`/talent/${memberId}`} className="underline">自分の紹介ページ</Link>}</nav>
 
     {/* ① 紹介文 */}

@@ -28,8 +28,8 @@ export default async function InterviewPage() {
   const profileConsented = done && await hasConsent({ memberId, subjectId: interview.subject_id, kind: 'profile', version: CONSENT_TEXTS.profile.version })
   // 案がすでにあるときは作り直しボタンを出さない（2026-09-15、戻ってきて押し、意図せず新しい版が増えた）。
   const hasProfile = done && !!(await db.from('talent_profiles').select('id').eq('member_id', memberId).limit(1).maybeSingle()).data
-  return <PageShell width="narrow">
-    <PageHeader
+  return <PageShell feature="talent" width="narrow">
+    <PageHeader feature="talent"
       title="AIインタビューで登録"
       eyebrow="CBI 人材バンク・試行版"
       back={{ href: "/talent", label: "登録メンバー" }}

@@ -21,6 +21,25 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
 }
 
 /**
+ * 見出しの上の「機能の色のアイコン＋小見出し」。ホームのタイルと同じ色・アイコン。
+ * PageHeader の中でも、見出しが特別な詳細ページ・入力フォームでも使う。
+ * label を null にするとアイコンだけ出す。
+ */
+export function FeatureEyebrow({ feature, label = 'Citizen DAO' }: { feature: FeatureKey; label?: string | null }) {
+  const f = FEATURES[feature]
+  const Icon = f.icon
+  const hc = HEADER_COLORS[f.color]
+  return (
+    <div className="flex items-center gap-2">
+      <span aria-hidden className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${hc.chip}`}>
+        <Icon className="size-5" strokeWidth={1.75} />
+      </span>
+      {label && <p className={`text-xs uppercase tracking-[0.3em] ${hc.eyebrow}`}>{label}</p>}
+    </div>
+  )
+}
+
+/**
  * ページの先頭（戻るリンク＋見出し＋説明＋右側の操作ボタン）。
  *
  * 見出しの大きさ（text-2xl／md:text-3xl）、「Citizen DAO」の小見出し、
@@ -46,26 +65,18 @@ export function PageHeader({
   /** ホームのタイルと同じ色・アイコンを、見出しの左のチップと小見出しに使う */
   feature?: FeatureKey
 }) {
-  const f = feature ? FEATURES[feature] : null
-  const Icon = f?.icon
-  const hc = f ? HEADER_COLORS[f.color] : null
   return (
     <>
       {back && <BackLink href={back.href}>{back.label}</BackLink>}
       <header className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            {(Icon || eyebrow) && (
-              <div className="mb-1 flex items-center gap-2">
-                {Icon && hc && (
-                  <span aria-hidden className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${hc.chip}`}>
-                    <Icon className="size-5" strokeWidth={1.75} />
-                  </span>
-                )}
-                {eyebrow && (
-                  <p className={`text-xs uppercase tracking-[0.3em] ${hc ? hc.eyebrow : 'text-slate-500'}`}>{eyebrow}</p>
-                )}
+            {feature ? (
+              <div className="mb-1">
+                <FeatureEyebrow feature={feature} label={eyebrow} />
               </div>
+            ) : (
+              eyebrow && <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{eyebrow}</p>
             )}
             <h1 className="font-serif text-2xl font-bold text-slate-900 md:text-3xl dark:text-slate-100">
               {title}

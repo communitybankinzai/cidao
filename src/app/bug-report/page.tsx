@@ -26,8 +26,8 @@ export default async function BugReportPage({
   }
 
   return (
-    <PageShell width="narrow">
-      <PageHeader
+    <PageShell feature="help" width="narrow">
+      <PageHeader feature="help"
         title="不具合・ご要望の報告"
         description="CBIサイトやCiDAOアプリで気になった不具合・使いにくい点・ご要望をお寄せください。ログインしていなくても送信できます。"
       />
