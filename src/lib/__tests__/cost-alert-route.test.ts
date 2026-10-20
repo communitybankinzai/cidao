@@ -131,6 +131,22 @@ describe('cost-alert: 共用クレジットの実残高', () => {
     expect(body.alerted).toBe(true)
   })
 
+  it('点検のたびに、判定結果を1行ログに残す（未設定でも出る＝監視が動いていることが Logs で分かる）', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    stubFetch((p) => (p.endsWith('/api_keys') ? json({ data: [] }) : json({}, 500)))
+    await callCron()
+    expect(log).toHaveBeenCalledWith('[cron/cost-alert] shared_credit', JSON.stringify({ status: 'not_configured' }))
+
+    log.mockClear()
+    vi.stubEnv('SHARED_CREDIT_BASELINE_USD', '30')
+    vi.stubEnv('SHARED_CREDIT_BASELINE_AT', '2026-10-19T00:00:00Z')
+    stubFetch((p) => (p.endsWith('/cost_report') ? json(costBuckets(300, 200)) : json({ data: [] })))
+    await callCron()
+    const line = String(log.mock.calls.find((c) => c[0] === '[cron/cost-alert] shared_credit')?.[1])
+    expect(JSON.parse(line)).toMatchObject({ status: 'ok', remaining_usd: 25 })
+    expect(line).not.toMatch(/sk-ant|secret/i) // 鍵や秘密は出さない
+  })
+
   it('Authorization が違えば 401（既存の保護を壊していない）', async () => {
     stubFetch(() => json({ data: [] }))
     const res = await GET(new Request('http://localhost/api/cron/cost-alert', { headers: { authorization: 'Bearer wrong' } }))

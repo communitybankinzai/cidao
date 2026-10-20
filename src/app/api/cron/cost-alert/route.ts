@@ -306,6 +306,9 @@ export async function GET(request: Request) {
       sharedCredit = { status: 'error' }
     }
   }
+  // 点検のたびに判定結果を1行ログに残す（Vercel の Logs で、監視が動いていること・設定の有無・残高が見える。
+  // 警告が出ない日は静かなので、これが無いと「正常」と「止まっている」を区別できない）。値は金額と日時だけ
+  console.log('[cron/cost-alert] shared_credit', JSON.stringify(sharedCredit))
 
   // 2. APIキーの有効期限
   let expiring: ApiKey[] = []
