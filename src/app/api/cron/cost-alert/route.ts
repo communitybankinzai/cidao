@@ -21,9 +21,23 @@
 //   COST_ALERT_TO              : 宛先メールアドレス
 //   RESEND_API_KEY / MAIL_FROM : 送信設定（未設定なら送信せず skipped）
 //   CRON_SECRET                : Vercel Cron が Authorization: Bearer で自動付与
+//
+// 共用クレジット（組織全体）の実残高の警告（2026-10-20 追加・任意）:
+//   上の CREDIT_BASELINE_* は「CiDAO のキー分だけ」を引く判定（2026-10-11 決定）で、N's factory 側が大きく使っても
+//   警告が出ない。共用クレジットが尽きると CiDAO も止まるため、組織全体の消費で実残高も別に判定する。
+//   SHARED_CREDIT_BASELINE_USD        : 基準日時の Console の実残高（USD）。補充したら更新する
+//   SHARED_CREDIT_BASELINE_AT         : その日時（ISO8601）。両方そろったときだけ有効
+//   SHARED_CREDIT_ALERT_THRESHOLD_USD : 警告ライン（既定 15）
+//   詳細は src/lib/cost-alert-shared.ts
 
 import { NextResponse } from 'next/server'
 import { normalizeMailFrom } from '@/lib/mail'
+import {
+  buildSharedCreditAlertLines,
+  evaluateSharedCredit,
+  readSharedCreditConfig,
+  startOfUtcDay,
+} from '@/lib/cost-alert-shared'
 
 const API_BASE = 'https://api.anthropic.com/v1/organizations'
 const CENTS_PER_USD = 100
@@ -158,6 +172,14 @@ async function fetchSpentSince(
   return { org: orgCents / CENTS_PER_USD, cbi: cbiCents / CENTS_PER_USD }
 }
 
+// 基準日の日の頭（UTC）から昨日までの、組織全体の消費（USD）。キー別には分けず、cost_report の実額をそのまま足す。
+async function fetchOrgSpentSince(adminKey: string, since: Date): Promise<number> {
+  const buckets = await fetchBuckets<CostBucket>(adminKey, 'cost_report', [['group_by[]', 'description']], since)
+  let cents = 0
+  for (const b of buckets) for (const c of b.results ?? []) cents += Number(c.amount ?? 0)
+  return cents / CENTS_PER_USD
+}
+
 async function fetchCbiKeyIds(adminKey: string): Promise<Set<string>> {
   const res = await fetch(`${API_BASE}/api_keys?limit=100`, { headers: adminHeaders(adminKey) })
   if (!res.ok) throw new Error(`api_keys ${res.status}: ${(await res.text()).slice(0, 200)}`)
@@ -255,6 +277,36 @@ export async function GET(request: Request) {
     }
   }
 
+  // 1b. 共用クレジット（組織全体）の実残高（2026-10-20 追加）。SHARED_CREDIT_BASELINE_* が未設定なら何もしない。
+  //     設定が壊れているときは、黙って無効にせず警告に出す（監視が止まっているのに気づけなくなるため）
+  const shared = readSharedCreditConfig(process.env)
+  let sharedCredit: Record<string, unknown> = { status: shared.status }
+  if (shared.status === 'invalid') {
+    alerts.push(`共用クレジットの実残高の設定が正しくありません（監視できていません）: ${shared.reason}`)
+    sharedCredit = { status: 'invalid', reason: shared.reason }
+  } else if (shared.status === 'ok') {
+    try {
+      const orgSpentUsd = await fetchOrgSpentSince(adminKey, startOfUtcDay(shared.config.baselineAt))
+      const ev = evaluateSharedCredit(shared.config, orgSpentUsd)
+      if (ev.belowThreshold) {
+        alerts.push(...buildSharedCreditAlertLines(shared.config, orgSpentUsd, ev.remainingUsd))
+      }
+      sharedCredit = {
+        status: 'ok',
+        baseline_usd: shared.config.baselineUsd,
+        baseline_at: shared.config.baselineAt.toISOString(),
+        org_spent_usd: Number(orgSpentUsd.toFixed(4)),
+        remaining_usd: Number(ev.remainingUsd.toFixed(2)),
+        threshold_usd: shared.config.thresholdUsd,
+        below_threshold: ev.belowThreshold,
+      }
+    } catch (e) {
+      console.error('[cron/cost-alert] shared credit fetch failed:', e instanceof Error ? e.message : e)
+      alerts.push(`共用クレジットの実残高の取得に失敗しました: ${e instanceof Error ? e.message : String(e)}`)
+      sharedCredit = { status: 'error' }
+    }
+  }
+
   // 2. APIキーの有効期限
   let expiring: ApiKey[] = []
   try {
@@ -285,6 +337,7 @@ export async function GET(request: Request) {
     org_spent_usd: orgSpent === null ? null : Number(orgSpent.toFixed(4)),
     remaining_usd: remaining === null ? null : Number(remaining.toFixed(2)),
     threshold_usd: threshold,
+    shared_credit: sharedCredit,
     expiring_keys: expiring.map((k) => ({ name: k.name, expires_at: k.expires_at })),
     alerted: alerts.length > 0,
     mail,
