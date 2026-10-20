@@ -131,6 +131,59 @@ describe('cost-alert: 共用クレジットの実残高', () => {
     expect(body.alerted).toBe(true)
   })
 
+  describe('期限つきクレジット（2026-11-18 に $199.32 が失効・合計 $216.04・有料分 $16.72）', () => {
+    const setup = () => {
+      vi.stubEnv('SHARED_CREDIT_BASELINE_USD', '216.04')
+      vi.stubEnv('SHARED_CREDIT_BASELINE_AT', '2026-10-20T09:00:00Z')
+      vi.stubEnv('SHARED_CREDIT_EXPIRING_USD', '199.32')
+      vi.stubEnv('SHARED_CREDIT_EXPIRING_AT', '2026-11-18T00:00:00Z')
+      stubFetch((p) => (p.endsWith('/cost_report') ? json(costBuckets(300, 200)) : json({ data: [] }))) // 消費 $5
+    }
+
+    it('失効の前で予告の日でもなければ、静か。応答には失効までの日数と失効後の見込みが出る', async () => {
+      vi.setSystemTime(new Date('2026-10-25T06:00:00Z'))
+      setup()
+      const { body } = await callCron()
+      expect(body.shared_credit).toMatchObject({
+        status: 'ok',
+        remaining_usd: 211.04,
+        expiring_usd: 199.32,
+        days_to_expiry: 24,
+        expired: false,
+        after_expiry_usd: 11.72,
+        below_threshold: false,
+      })
+      expect(body.alerted).toBe(false)
+    })
+
+    it('失効の14日前の当日は、予告を出す（失効後の見込みが警告ライン未満）', async () => {
+      vi.setSystemTime(new Date('2026-11-04T06:00:00Z'))
+      setup()
+      const { body } = await callCron()
+      expect(body.shared_credit).toMatchObject({ days_to_expiry: 14, after_expiry_usd: 11.72 })
+      expect(body.alerted).toBe(true)
+    })
+
+    it('失効後は、有料分だけで判定して警告する', async () => {
+      vi.setSystemTime(new Date('2026-11-19T06:00:00Z'))
+      setup()
+      const { body } = await callCron()
+      expect(body.shared_credit).toMatchObject({ expired: true, remaining_usd: 11.72, below_threshold: true })
+      expect(body.alerted).toBe(true)
+    })
+
+    it('設定が片方だけなら、警告に出す', async () => {
+      vi.setSystemTime(new Date('2026-10-25T06:00:00Z'))
+      vi.stubEnv('SHARED_CREDIT_BASELINE_USD', '216.04')
+      vi.stubEnv('SHARED_CREDIT_BASELINE_AT', '2026-10-20T09:00:00Z')
+      vi.stubEnv('SHARED_CREDIT_EXPIRING_USD', '199.32')
+      stubFetch(() => json({ data: [] }))
+      const { body } = await callCron()
+      expect(body.shared_credit.status).toBe('invalid')
+      expect(body.alerted).toBe(true)
+    })
+  })
+
   it('点検のたびに、判定結果を1行ログに残す（未設定でも出る＝監視が動いていることが Logs で分かる）', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     stubFetch((p) => (p.endsWith('/api_keys') ? json({ data: [] }) : json({}, 500)))

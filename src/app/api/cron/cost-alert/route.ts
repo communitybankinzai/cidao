@@ -28,12 +28,15 @@
 //   SHARED_CREDIT_BASELINE_USD        : 基準日時の Console の実残高（USD）。補充したら更新する
 //   SHARED_CREDIT_BASELINE_AT         : その日時（ISO8601）。両方そろったときだけ有効
 //   SHARED_CREDIT_ALERT_THRESHOLD_USD : 警告ライン（既定 15）
+//   SHARED_CREDIT_EXPIRING_USD / _AT   : 期限つきクレジット（プロモーションクレジットなど）の残高と失効日時（任意・両方そろえる）。
+//                                       失効後は有料分だけで数え、失効の 14・7・3・1 日前に予告する
 //   詳細は src/lib/cost-alert-shared.ts
 
 import { NextResponse } from 'next/server'
 import { normalizeMailFrom } from '@/lib/mail'
 import {
   buildSharedCreditAlertLines,
+  buildSharedCreditExpiryLines,
   evaluateSharedCredit,
   readSharedCreditConfig,
   startOfUtcDay,
@@ -289,7 +292,11 @@ export async function GET(request: Request) {
       const orgSpentUsd = await fetchOrgSpentSince(adminKey, startOfUtcDay(shared.config.baselineAt))
       const ev = evaluateSharedCredit(shared.config, orgSpentUsd)
       if (ev.belowThreshold) {
-        alerts.push(...buildSharedCreditAlertLines(shared.config, orgSpentUsd, ev.remainingUsd))
+        alerts.push(...buildSharedCreditAlertLines(shared.config, orgSpentUsd, ev))
+      }
+      // 期限つきクレジットの失効の予告（14・7・3・1 日前の当日だけ。毎日は鳴らさない）
+      if (ev.expiryMilestone) {
+        alerts.push(...buildSharedCreditExpiryLines(shared.config, orgSpentUsd, ev))
       }
       sharedCredit = {
         status: 'ok',
@@ -299,6 +306,11 @@ export async function GET(request: Request) {
         remaining_usd: Number(ev.remainingUsd.toFixed(2)),
         threshold_usd: shared.config.thresholdUsd,
         below_threshold: ev.belowThreshold,
+        expiring_usd: shared.config.expiringAt ? shared.config.expiringUsd : null,
+        expires_at: shared.config.expiringAt ? shared.config.expiringAt.toISOString() : null,
+        days_to_expiry: ev.daysToExpiry,
+        expired: ev.expired,
+        after_expiry_usd: ev.afterExpiryUsd === null ? null : Number(ev.afterExpiryUsd.toFixed(2)),
       }
     } catch (e) {
       console.error('[cron/cost-alert] shared credit fetch failed:', e instanceof Error ? e.message : e)
