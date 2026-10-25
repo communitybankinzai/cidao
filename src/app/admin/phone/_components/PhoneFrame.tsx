@@ -124,17 +124,19 @@ export function PhoneFrame() {
       const kx = video.videoWidth / window.innerWidth
       const ky = video.videoHeight / window.innerHeight
       const rect = el.getBoundingClientRect() // 拡大縮小したあとの、枠（ベゼル）を含む外形
-      const pad = 8 * scale                   // 外側の輪（影の線）までを含める
-      const sx = (rect.left - pad) * kx
-      const sy = (rect.top - pad) * ky
-      const sw = (rect.width + pad * 2) * kx
-      const sh = (rect.height + pad * 2) * ky
+      // スマホ本体（黒い枠）だけを切り出す。周りの背景・外側の輪・影は入れない（2026-10-25 事業主指示「周囲の背景は保存時は要らない」）。
+      // 縁に背景色がにじまないよう、1px（画面上の大きさ）だけ内側を切る
+      const inset = scale
+      const sx = (rect.left + inset) * kx
+      const sy = (rect.top + inset) * ky
+      const sw = (rect.width - inset * 2) * kx
+      const sh = (rect.height - inset * 2) * ky
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(sw)
       canvas.height = Math.round(sh)
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('画像を作れませんでした')
-      clipRoundRect(ctx, canvas.width, canvas.height, (62 * scale + pad) * kx)
+      clipRoundRect(ctx, canvas.width, canvas.height, (62 * scale - inset) * kx)
       ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'))
       if (!blob) throw new Error('画像を作れませんでした')
