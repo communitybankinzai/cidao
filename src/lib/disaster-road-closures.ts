@@ -519,7 +519,16 @@ export async function scanPref(source: ClosureSource, existing: ExistingClosure[
 
 const INZAI_TOP = 'https://www.city.inzai.lg.jp/'
 const INZAI_DETAIL_LIMIT = 12
-const INZAI_HUB_LIMIT = 3
+const INZAI_HUB_LIMIT = 1
+/** 防災ポータル「災害情報」の一覧。災害ごとの「支援・手続き」ページが（新着から流れたあとも）残っている */
+const INZAI_HUB_INDEX = 'https://www.city.inzai.lg.jp/bousaiportal/category/16-5-2-0-0.html'
+/**
+ * 「くらし＞交通＞災害時の公共交通のご案内」。市が路線の一覧「主要幹線道路等の通行止めの状況」（22584）を置いている恒久の場所。
+ * 2026-10-28 に、災害ページの「道路状況」（22578）や解除済みの記事（22577・22352）が市に削除されて404になったため、
+ * 災害のたびに消える入口ではなく、ここからも一覧を見つける
+ */
+const INZAI_STATUS_INDEX = 'https://www.city.inzai.lg.jp/category/1-18-6-0-0.html'
+const INZAI_STATUS_TITLE = /通行止めの状況|道路状況/
 
 /** 新着の題名が道路の通行止め・規制の記事らしいか。2026-10-28 に「通行止」だけから広げた（規制・禁止の言い回しでも拾う） */
 const INZAI_CLOSURE_TITLE = /通行止|通行規制|交通規制|車線規制|通行禁止/
@@ -534,6 +543,23 @@ const INZAI_HUB_ROAD_LINK = /^(?:道路状況|道路の通行止めの状況|通
 /** 通行止め・通行禁止の語が無い規制（車線規制・交通規制など）は「注意」、あれば「通行止め」 */
 export function inzaiSeverity(text: string): 'caution' | 'closure' {
   return /通行止|通行禁止/.test(text) ? 'closure' : 'caution'
+}
+
+/** 市のカテゴリ・一覧のページから、題名が re に合う記事のリンク（ページ全体を見る）。1つも無ければ null */
+export function parseInzaiLinksByTitle(html: string, baseUrl: string, re: RegExp) {
+  const root = parseHtml(html)
+  const out: Array<{ title: string; url: string }> = []
+  for (const a of root.querySelectorAll('a')) {
+    const url = resolve(a.getAttribute('href') ?? '', baseUrl)
+    const title = clean(a.innerHTML)
+    if (url && /\/\d{10}\.html$/.test(url) && re.test(title) && !out.some((o) => o.url === url)) out.push({ title, url })
+  }
+  return out.length ? out : null
+}
+
+/** 災害情報の一覧から、題名が「…に対する支援・手続き」のページ（災害ごとの入口）のリンク。リンクが1つも無ければ null */
+export function parseInzaiHubIndex(html: string, baseUrl = INZAI_HUB_INDEX) {
+  return parseInzaiLinksByTitle(html, baseUrl, INZAI_HUB_TITLE)
 }
 
 /** 災害の「支援・手続き」ページにある「道路状況」のまとめページへのリンク。本文の枠が無ければ null */
@@ -676,16 +702,37 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
 
   // まとめページ：config の指定＋新着に出たもの＋前回までに記事が載っていたもの
   const statusUrls = new Set(configList(source, 'statusUrls', ''))
-  for (const item of news) if (/通行止めの状況|道路状況/.test(item.title)) statusUrls.add(item.url)
+  for (const item of news) if (INZAI_STATUS_TITLE.test(item.title)) statusUrls.add(item.url)
   for (const row of activeRows) {
     const s = (row.raw as { statusUrl?: string } | null)?.statusUrl
     if (s) statusUrls.add(s)
   }
+  // 市の恒久の置き場（カテゴリ）にある「通行止めの状況」も足す。新着から流れても、災害ページが消えても見つかる
+  const statusIndexUrl = configList(source, 'statusIndexUrls', INZAI_STATUS_INDEX)[0]
+  if (statusIndexUrl && statusIndexUrl !== 'off') {
+    const idx = await fetchPage(statusIndexUrl)
+    const found = idx.ok ? parseInzaiLinksByTitle(idx.text, statusIndexUrl, INZAI_STATUS_TITLE) : null
+    if (found === null) notes.push(`通行止めの状況の置き場を読めませんでした（${idx.status}）: ${statusIndexUrl}`)
+    else for (const f of found) {
+      if (!statusUrls.has(f.url)) notes.push(`市のカテゴリから通行止めの状況のページを見つけました: ${f.url}`)
+      statusUrls.add(f.url)
+    }
+  }
   // 災害の「支援・手続き」ページ（新着に出る）から「道路状況」のまとめページを見つけて足す。
   // 災害のたびにまとめページのURLが替わるので、config に手で書くことに頼らない。読めなくても他は止めない
+  // 入口は 新着＋防災ポータルの災害情報一覧＋config。**ページ番号が最も新しい1件だけ**使う
+  // （古い災害の入口まで見ると、そのまとめページに残った古い記事が通行止めに戻るため）
   const hubUrls = new Set(configList(source, 'hubUrls', ''))
   for (const item of news) if (INZAI_HUB_TITLE.test(item.title)) hubUrls.add(item.url)
-  for (const hubUrl of [...hubUrls].slice(0, INZAI_HUB_LIMIT)) {
+  const hubIndexUrl = configList(source, 'hubIndexUrls', INZAI_HUB_INDEX)[0]
+  if (hubIndexUrl && hubIndexUrl !== 'off') {
+    const idx = await fetchPage(hubIndexUrl)
+    const found = idx.ok ? parseInzaiHubIndex(idx.text, hubIndexUrl) : null
+    if (found === null) notes.push(`災害情報の一覧を読めませんでした（${idx.status}）: ${hubIndexUrl}`)
+    else for (const h of found) hubUrls.add(h.url)
+  }
+  const pageNo = (u: string) => Number(u.match(/(\d{10})\.html$/)?.[1] ?? 0)
+  for (const hubUrl of [...hubUrls].sort((a, b) => pageNo(b) - pageNo(a)).slice(0, INZAI_HUB_LIMIT)) {
     const hub = await fetchPage(hubUrl)
     const links = hub.ok ? parseInzaiHubRoadLinks(hub.text, hubUrl) : null
     if (links === null) { notes.push(`災害ページを読めませんでした（${hub.status}）: ${hubUrl}`); continue }
@@ -694,9 +741,14 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       statusUrls.add(link.url)
     }
   }
+  const trunkLists: Array<{ url: string; asOf: string; items: Array<{ road: string; place: string; cleared: boolean; note: string }>; mapUrl: string | null }> = []
   const statusLists = new Map<string, Array<{ title: string; url: string }>>()
   for (const url of statusUrls) {
     const page = await fetchPage(url)
+    // 「主要幹線道路等の通行止めの状況」のように、まとめページではなく路線の一覧そのものだったときは一覧として読む。
+    // （新着やカテゴリで見つけたこのページは、まとめページ扱いのまま一覧として読まれていなかった）
+    const trunk = page.ok ? parseInzaiTrunkList(page.text) : null
+    if (trunk) trunkLists.push({ url, ...trunk, mapUrl: parseInzaiMapPdf(page.text, url) })
     const list = page.ok ? parseInzaiStatusPage(page.text, url) : null
     if (list) statusLists.set(url, list)
     else notes.push(`まとめページを読めませんでした（${page.status}）: ${url}`)
@@ -715,7 +767,6 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
 
   const active: ClosureDraft[] = []
   const cleared: Record<string, ClearReason> = {}
-  const trunkLists: Array<{ url: string; asOf: string; items: Array<{ road: string; place: string; cleared: boolean; note: string }>; mapUrl: string | null }> = []
   // 一覧で解除済みになった記事（題名はまだ「通行止め」のまま）。読めた一覧にその路線がまだ通行止めとして
   // 載っているときだけ通行止めに戻す。一覧が読めない・載っていないときは解除のまま残す
   // （2026-10-06 山田・平賀線：一覧が読めない回に「解除済みなら通行止めに戻す」で復活していた）
@@ -740,7 +791,7 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
     // 路線を並べた一覧のページは、記事1件ではなく一覧として読む（後でまとめて反映）
     const trunk = parseInzaiTrunkList(page.text)
     if (trunk) {
-      trunkLists.push({ url, ...trunk, mapUrl: parseInzaiMapPdf(page.text, url) })
+      if (!trunkLists.some((t) => t.url === url)) trunkLists.push({ url, ...trunk, mapUrl: parseInzaiMapPdf(page.text, url) })
       // 以前このページを記事1件と読んでいた行（路線名が空）は外す
       if (prev && !prev.cleared_at) cleared[url] = 'disappeared'
       continue

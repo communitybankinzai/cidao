@@ -7,6 +7,7 @@ import {
   inzaiSeverity,
   kokudoClosureOf,
   parseCityTablePage,
+  parseInzaiHubIndex,
   parseInzaiHubRoadLinks,
   parseInzaiStatusPage,
   parseInzaiTrunkList,
@@ -247,6 +248,57 @@ describe('印西市', () => {
     expect(scan.active.map((a) => a.road)).toEqual(['市道師戸・江川線'])
     expect(scan.active[0].raw?.statusUrl).toBe(STATUS)
     expect(scan.notes.join('\n')).toContain('災害ページから道路状況のまとめページを見つけました')
+  })
+
+  // 防災ポータル「災害情報」の一覧（新着から流れたあとも、災害ごとの入口が残る）
+  const HUB_INDEX = `${TOP}bousaiportal/category/16-5-2-0-0.html`
+  const OLD_HUB = `${TOP}bousaiportal/0000022367.html`
+  const OLD_STATUS = `${TOP}0000022349.html`
+  const OLD_ARTICLE = `${TOP}0000022351.html`
+  const hubIndexPage = `<ul><li><a href="${HUB}">令和8年台風25号に対する支援・手続き</a></li><li><a href="${OLD_HUB}">令和8年8月千葉豪雨に対する支援・手続き</a></li><li><a href="${TOP}0000013888.html">災害情報登録サイト</a></li></ul>`
+
+  it('災害情報の一覧から入口を見つける。古い災害の入口は見ない（古い記事が通行止めに戻るのを防ぐ）', async () => {
+    expect(parseInzaiHubIndex(hubIndexPage)?.map((h) => h.url)).toEqual([HUB, OLD_HUB])
+    expect(parseInzaiHubIndex('<p>なし</p>')).toBeNull()
+    mockSite({
+      [TOP]: topPage([['./0000022503.html', '大雨に係る避難所情報']]),   // 新着には災害ページが無い
+      [HUB_INDEX]: hubIndexPage,
+      [HUB]: hubPage,
+      [OLD_HUB]: hubPage.replace('0000022578', '0000022349'),
+      [STATUS]: statusPage([[D1, '市道師戸・江川線の一部区間']]),
+      [OLD_STATUS]: statusPage([[OLD_ARTICLE, '市道吉田・岩戸線の一部区間']]),
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+      [OLD_ARTICLE]: detail('道路冠水により、市道吉田・岩戸線の一部区間を通行止めにしています。'),
+    })
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [])
+    expect(scan.active.map((a) => a.road)).toEqual(['市道師戸・江川線'])
+  })
+
+  // 2026-10-28：災害ページの「道路状況」（22578）や解除済みの記事が市に削除されて404になった。
+  // 市が恒久的に置いている「災害時の公共交通のご案内」カテゴリから路線の一覧を見つけ、一覧として読む
+  const STATUS_INDEX = `${TOP}category/1-18-6-0-0.html`
+  const statusIndexPage = `<ul><li><a href="${TOP}0000022584.html">主要幹線道路等の通行止めの状況</a></li><li><a href="${TOP}0000022520.html">災害時の公共交通のご案内</a></li></ul>`
+
+  it('市のカテゴリで見つけた路線の一覧を、まとめページ扱いにせず一覧として読む', async () => {
+    mockSite({
+      [TOP]: topPage([['./0000022503.html', '大雨に係る避難所情報']]),   // 新着には何も無い
+      [STATUS_INDEX]: statusIndexPage,
+      [`${TOP}0000022584.html`]: trunkPage,
+    })
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [])
+    expect(scan.active.map((a) => a.road).sort()).toEqual(['市道師戸・江川線', '県道千葉竜ケ崎線'])
+    expect(scan.active.find((a) => a.road === '県道千葉竜ケ崎線')).toMatchObject({ url: `${TOP}0000022584.html`, publishedAt: '2026-09-25T23:00:00.000Z' })
+    expect(scan.notes.join('\n')).toContain('市のカテゴリから通行止めの状況のページを見つけました')
+    // 同じ一覧が新着・カテゴリ・前回の行の3経路から見えても二重に出さない
+    mockSite({
+      [TOP]: topPage([['./0000022584.html', '主要幹線道路等の通行止めの状況']]),
+      [STATUS_INDEX]: statusIndexPage,
+      [`${TOP}0000022584.html`]: trunkPage,
+    })
+    const row: ExistingClosure = { closure_key: `${TOP}0000022584.html#県道千葉竜ケ崎線#八千代市との行政界付近`, url: `${TOP}0000022584.html`, in_area: true, cleared_at: null, clear_reason: null, raw: {} }
+    const again = await scanInzai(source('road-closure-inzai', TOP), [row])
+    expect(again.active.map((a) => a.key).filter((k, i, all) => all.indexOf(k) !== i)).toEqual([])
+    expect(again.active).toHaveLength(2)
   })
 
   it('災害ページが読めなくても他の処理は止めない', async () => {
