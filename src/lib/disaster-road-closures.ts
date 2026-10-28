@@ -519,6 +519,36 @@ export async function scanPref(source: ClosureSource, existing: ExistingClosure[
 
 const INZAI_TOP = 'https://www.city.inzai.lg.jp/'
 const INZAI_DETAIL_LIMIT = 12
+const INZAI_HUB_LIMIT = 3
+
+/** 新着の題名が道路の通行止め・規制の記事らしいか。2026-10-28 に「通行止」だけから広げた（規制・禁止の言い回しでも拾う） */
+const INZAI_CLOSURE_TITLE = /通行止|通行規制|交通規制|車線規制|通行禁止/
+/**
+ * 災害ごとの「支援・手続き」ページの題名。ここに「道路状況」のまとめページへのリンクがある
+ * （2026-10-28 調査：新着220件のうち通行止めの記事が新着に載ったのは既知8件中2件。まとめページ 22578・22584 は新着に出ない。
+ * 防災ポータルの災害ページ 22580 →「道路状況」22578 →個別記事・路線の一覧、の順にたどれる）
+ */
+const INZAI_HUB_TITLE = /支援・手続き/
+const INZAI_HUB_ROAD_LINK = /^(?:道路状況|道路の通行止めの状況|通行止めの状況|道路情報)$/
+
+/** 通行止め・通行禁止の語が無い規制（車線規制・交通規制など）は「注意」、あれば「通行止め」 */
+export function inzaiSeverity(text: string): 'caution' | 'closure' {
+  return /通行止|通行禁止/.test(text) ? 'closure' : 'caution'
+}
+
+/** 災害の「支援・手続き」ページにある「道路状況」のまとめページへのリンク。本文の枠が無ければ null */
+export function parseInzaiHubRoadLinks(html: string, baseUrl = INZAI_TOP) {
+  const root = parseHtml(html)
+  const body = root.querySelector('.mol_contents')
+  if (!body) return null
+  const out: Array<{ title: string; url: string }> = []
+  for (const a of body.querySelectorAll('a')) {
+    const url = resolve(a.getAttribute('href') ?? '', baseUrl)
+    const title = clean(a.innerHTML.replace(/<span class="newwindow">[\s\S]*?<\/span>/g, ''))
+    if (url && /\/\d{10}\.html$/.test(url) && INZAI_HUB_ROAD_LINK.test(title) && !out.some((o) => o.url === url)) out.push({ title, url })
+  }
+  return out
+}
 
 export function parseInzaiNews(html: string, baseUrl = INZAI_TOP) {
   const root = parseHtml(html)
@@ -651,6 +681,19 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
     const s = (row.raw as { statusUrl?: string } | null)?.statusUrl
     if (s) statusUrls.add(s)
   }
+  // 災害の「支援・手続き」ページ（新着に出る）から「道路状況」のまとめページを見つけて足す。
+  // 災害のたびにまとめページのURLが替わるので、config に手で書くことに頼らない。読めなくても他は止めない
+  const hubUrls = new Set(configList(source, 'hubUrls', ''))
+  for (const item of news) if (INZAI_HUB_TITLE.test(item.title)) hubUrls.add(item.url)
+  for (const hubUrl of [...hubUrls].slice(0, INZAI_HUB_LIMIT)) {
+    const hub = await fetchPage(hubUrl)
+    const links = hub.ok ? parseInzaiHubRoadLinks(hub.text, hubUrl) : null
+    if (links === null) { notes.push(`災害ページを読めませんでした（${hub.status}）: ${hubUrl}`); continue }
+    for (const link of links) {
+      if (!statusUrls.has(link.url)) notes.push(`災害ページから道路状況のまとめページを見つけました: ${link.url}`)
+      statusUrls.add(link.url)
+    }
+  }
   const statusLists = new Map<string, Array<{ title: string; url: string }>>()
   for (const url of statusUrls) {
     const page = await fetchPage(url)
@@ -666,7 +709,7 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
   // 確かめる記事：新着の通行止め記事＋まとめページの記事＋いま通行止め中の行
   const candidates = new Map<string, string>()
   // まとめページ自身は記事ではないので候補にしない（題名に「通行止め」があり、路線名が空の行になっていた）
-  for (const item of news) if (/通行止/.test(item.title) && !/解除/.test(item.title) && !statusUrls.has(item.url)) candidates.set(item.url, item.title)
+  for (const item of news) if (INZAI_CLOSURE_TITLE.test(item.title) && !/解除/.test(item.title) && !statusUrls.has(item.url)) candidates.set(item.url, item.title)
   for (const [url, info] of statusOf) if (!candidates.has(url)) candidates.set(url, info.title)
   for (const row of activeRows) if (row.url && !candidates.has(row.url)) candidates.set(row.url, '')
 
@@ -717,7 +760,7 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       continue
     }
     if (/解除/.test(title)) { cleared[url] = 'announced'; continue }
-    if (!/通行止/.test(title) && !/通行止/.test(listTitle)) { cleared[url] = 'disappeared'; continue }
+    if (!INZAI_CLOSURE_TITLE.test(title) && !INZAI_CLOSURE_TITLE.test(listTitle)) { cleared[url] = 'disappeared'; continue }
 
     const onStatus = statusOf.get(url)
     const prevRaw = (prev?.raw ?? {}) as { statusUrl?: string; onStatus?: boolean }
@@ -742,7 +785,13 @@ export async function scanInzai(source: ClosureSource, existing: ExistingClosure
       url,
       sourceTitle: title,
       publishedAt: parseJpDate(listTitle) ?? parseJpDate(title),
-      raw: { statusUrl: statusUrl ?? null, onStatus: Boolean(onStatus || prevRaw.onStatus), mapUrl: parseInzaiMapPdf(page.text, url) },
+      raw: {
+        statusUrl: statusUrl ?? null,
+        onStatus: Boolean(onStatus || prevRaw.onStatus),
+        mapUrl: parseInzaiMapPdf(page.text, url),
+        // 通行止めの語が無い規制（車線規制など）は『注意』。従来の記事（通行止め）は変わらない
+        ...(inzaiSeverity(`${title} ${listTitle}`) === 'caution' ? { severity: 'caution' } : {}),
+      },
     })
   }
 

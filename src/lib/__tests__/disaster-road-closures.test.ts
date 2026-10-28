@@ -4,8 +4,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   inzaiRoadOf,
+  inzaiSeverity,
   kokudoClosureOf,
   parseCityTablePage,
+  parseInzaiHubRoadLinks,
   parseInzaiStatusPage,
   parseInzaiTrunkList,
   parseKokudoKiseiDetail,
@@ -225,8 +227,57 @@ describe('印西市', () => {
     expect(scan.active[0].raw?.mapUrl).toBe('https://www.city.inzai.lg.jp/cmsfiles/contents/0000022/22576/itizu.pdf')
   })
 
+  // 2026-10-28 に防災ポータルの災害ページ（bousaiportal/0000022580）で実際に見た形を縮めたもの
+  const HUB = `${TOP}bousaiportal/0000022580.html`
+  const hubPage = `<div class="mol_contents"><h2>令和8年台風25号に対する支援・手続き</h2><h3>参考情報</h3><div class="mol_textblock"><ul><li><a href="https://www.city.inzai.lg.jp/0000022520.html">交通状況</a></li><li><a href="https://www.city.inzai.lg.jp/0000022578.html">道路状況</a></li><li><a href="https://www.city.inzai.lg.jp/category/1-0-0-0-0.html">くらし</a></li></ul></div></div>`
+
+  it('災害ページの「道路状況」のリンクだけを拾う', () => {
+    expect(parseInzaiHubRoadLinks(hubPage, HUB)).toEqual([{ title: '道路状況', url: STATUS }])
+    expect(parseInzaiHubRoadLinks('<html><body>工事中</body></html>')).toBeNull()
+  })
+
+  it('config に書かなくても、新着の災害ページからまとめページを見つけて通行止めを拾う（2026-10-28）', async () => {
+    mockSite({
+      [TOP]: topPage([['./bousaiportal/0000022580.html', '令和8年台風25号に対する支援・手続き']]),
+      [HUB]: hubPage,
+      [STATUS]: statusPage([[D1, '市道師戸・江川線の一部区間']]),
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+    })
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [])
+    expect(scan.active.map((a) => a.road)).toEqual(['市道師戸・江川線'])
+    expect(scan.active[0].raw?.statusUrl).toBe(STATUS)
+    expect(scan.notes.join('\n')).toContain('災害ページから道路状況のまとめページを見つけました')
+  })
+
+  it('災害ページが読めなくても他の処理は止めない', async () => {
+    mockSite({
+      [TOP]: topPage([['./bousaiportal/0000022580.html', '令和8年台風25号に対する支援・手続き'], ['./0000022576.html', '道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。']]),
+      [HUB]: 500,
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+    })
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [])
+    expect(scan.active.map((a) => a.road)).toEqual(['市道師戸・江川線'])
+    expect(scan.notes.join('\n')).toContain('災害ページを読めませんでした')
+  })
+
+  it('「通行止」以外の言い回し（交通規制・車線規制）も拾い、通行止めの語が無ければ注意にする', async () => {
+    const D3 = `${TOP}0000022900.html`
+    mockSite({
+      [TOP]: topPage([['./0000022900.html', '市道00-001号線の交通規制について'], ['./0000022576.html', '道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。']]),
+      [D3]: detail('市道00-001号線の交通規制について（車線規制）'),
+      [D1]: detail('道路冠水により、市道師戸・江川線の一部区間を通行止めにしています。'),
+    })
+    const scan = await scanInzai(source('road-closure-inzai', TOP), [])
+    const lane = scan.active.find((a) => a.url === D3)
+    const closure = scan.active.find((a) => a.url === D1)
+    expect(lane?.raw?.severity).toBe('caution')
+    expect(closure?.raw?.severity).toBeUndefined()
+    expect(inzaiSeverity('市道の通行止めのお知らせ')).toBe('closure')
+    expect(inzaiSeverity('市道の車線規制のお知らせ')).toBe('caution')
+  })
+
   // 2026-09-26 に市のページ（0000022584）で実際に見た形を縮めたもの
-  const TRUNK = `${TOP}0000022584.html`
+  const TRUNK =`${TOP}0000022584.html`
   const trunkPage = `<div class="mol_contents"><h2>主要幹線道路等の通行止めの状況</h2><div class="mol_textblock"><p>台風25号の影響による大雨に伴い、以下の幹線道路等が通行止めとなっております。<br>【令和8年9月26日　8：00現在】<br>県道千葉竜ケ崎線　　八千代市との行政界付近　<br>県道八千代宗像線　　八千代市との行政界付近　⇒　通行止め解除<br>市道山田・平賀線　　中平橋付近（酒々井町側）⇒　通行止め解除(片側通行)<br>市道師戸・江川線　　別添位置図参照</p><h3>通行止め状況位置図</h3></div></div>`
 
   it('路線を並べた一覧を1行ずつ読む（通行止めと解除を分ける）', () => {
