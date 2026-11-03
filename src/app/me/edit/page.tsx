@@ -15,9 +15,9 @@ import InterestsField from './_components/InterestsField'
 export default async function EditProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ welcome?: string; error?: string }>
+  searchParams: Promise<{ welcome?: string; error?: string; msg?: string }>
 }) {
-  const { welcome, error } = await searchParams
+  const { welcome, error, msg } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/me/edit')
@@ -56,6 +56,7 @@ export default async function EditProfilePage({
 
   // 印西市３次元MAP（メタバース印西）からログインしに来た初回登録者は、保存後にそちらへ戻す（Cookie は /api/metaverse-auth が置く）
   const fromMetaverse = (await cookies()).get('mv_return') !== undefined
+  const userId = user.id
 
   async function handleSubmit(formData: FormData) {
     'use server'
@@ -64,21 +65,35 @@ export default async function EditProfilePage({
     const interests = formData.getAll('interests').map(String)
     // JavaScript が効かない環境の保険。0件のまま updateProfile へ進むと本番では原因不明の汎用エラー画面になる
     if (interests.length === 0) redirect('/me/edit?error=interests')
-    await updateProfile({
-      display_name: String(formData.get('display_name') ?? ''),
-      real_name: (formData.get('real_name') as string | null) ?? null,
-      residency_type: String(formData.get('residency_type') ?? 'citizen') as 'citizen' | 'related_population',
-      relation_type: (formData.get('relation_type') as string | null) || null,
-      interests,
-      self_introduction: (formData.get('self_introduction') as string | null) || null,
-      skills_text: (formData.get('skills_text') as string | null) || null,
-      contact_permission: formData.get('contact_permission') === 'on',
-      ranking_opt_in: formData.get('ranking_opt_in') === 'on',
-      proposal_email: formData.get('proposal_email') === 'on',
-      notify_event: formData.get('notify_event') === 'on',
-      notify_freefree: formData.get('notify_freefree') === 'on',
-      upgradeToEmailOnly: formData.get('upgrade') === 'on',
-    })
+
+    // 保存の失敗は汎用エラー画面にせず、失敗した箇所と原因を画面に出してログにも残す
+    // （本番では例外の文面が隠れ、本登録できない苦情の原因を追えなかったため）
+    const backWithError = (step: 'profile' | 'org', e: unknown): never => {
+      if ((e as { digest?: string } | null)?.digest?.startsWith('NEXT_REDIRECT')) throw e
+      const message = e instanceof Error ? e.message : String(e)
+      console.error(`[me/edit] 保存失敗 step=${step} user=${userId} message=${message}`)
+      redirect(`/me/edit?${new URLSearchParams({ error: step, msg: message.slice(0, 120) }).toString()}`)
+    }
+
+    try {
+      await updateProfile({
+        display_name: String(formData.get('display_name') ?? ''),
+        real_name: (formData.get('real_name') as string | null) ?? null,
+        residency_type: String(formData.get('residency_type') ?? 'citizen') as 'citizen' | 'related_population',
+        relation_type: (formData.get('relation_type') as string | null) || null,
+        interests,
+        self_introduction: (formData.get('self_introduction') as string | null) || null,
+        skills_text: (formData.get('skills_text') as string | null) || null,
+        contact_permission: formData.get('contact_permission') === 'on',
+        ranking_opt_in: formData.get('ranking_opt_in') === 'on',
+        proposal_email: formData.get('proposal_email') === 'on',
+        notify_event: formData.get('notify_event') === 'on',
+        notify_freefree: formData.get('notify_freefree') === 'on',
+        upgradeToEmailOnly: formData.get('upgrade') === 'on',
+      })
+    } catch (e) {
+      backWithError('profile', e)
+    }
 
     // 2. 所属団体申告（あれば）
     const raw = String(formData.get('org_claims') ?? '[]')
@@ -99,7 +114,11 @@ export default async function EditProfilePage({
 
     let claimsResult: { inserted: number; skipped?: number } | null = null
     if (parsed.length > 0) {
-      claimsResult = await claimMemberships(parsed)
+      try {
+        claimsResult = await claimMemberships(parsed)
+      } catch (e) {
+        backWithError('org', e)
+      }
     }
 
     // 3. リダイレクト（クエリで結果を区別）。３次元MAPから来た人は署名トークン付きでそちらへ戻す（2026-09-06）
@@ -131,6 +150,20 @@ export default async function EditProfilePage({
           <div role="alert" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
             <p className="text-sm font-semibold text-red-900 dark:text-red-100">
               保存できませんでした。「興味分野」を1つ以上選んでから、もう一度押してください
+            </p>
+          </div>
+        )}
+
+        {(error === 'profile' || error === 'org') && (
+          <div role="alert" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4 space-y-1">
+            <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+              {error === 'profile'
+                ? '保存できませんでした（プロフィールの保存で失敗しました）'
+                : 'プロフィールは保存されました。所属団体の申告だけ失敗しました'}
+            </p>
+            {msg && <p className="text-xs text-red-800 dark:text-red-200 break-words">原因: {msg}</p>}
+            <p className="text-xs text-red-800 dark:text-red-200">
+              この画面を撮影して、運営にお知らせください。
             </p>
           </div>
         )}
