@@ -10,13 +10,14 @@ import { updateProfile } from '../actions'
 import { claimMemberships, leaveOrg, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
 import AvatarUpload from './_components/AvatarUpload'
+import InterestsField from './_components/InterestsField'
 
 export default async function EditProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ welcome?: string }>
+  searchParams: Promise<{ welcome?: string; error?: string }>
 }) {
-  const { welcome } = await searchParams
+  const { welcome, error } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/me/edit')
@@ -61,6 +62,8 @@ export default async function EditProfilePage({
 
     // 1. プロフィール更新
     const interests = formData.getAll('interests').map(String)
+    // JavaScript が効かない環境の保険。0件のまま updateProfile へ進むと本番では原因不明の汎用エラー画面になる
+    if (interests.length === 0) redirect('/me/edit?error=interests')
     await updateProfile({
       display_name: String(formData.get('display_name') ?? ''),
       real_name: (formData.get('real_name') as string | null) ?? null,
@@ -123,6 +126,14 @@ export default async function EditProfilePage({
               : '表示名・興味分野など、会員としての基本情報を設定するページです'}
           </p>
         </header>
+
+        {error === 'interests' && (
+          <div role="alert" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
+            <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+              保存できませんでした。「興味分野」を1つ以上選んでから、もう一度押してください
+            </p>
+          </div>
+        )}
 
         {welcome === '1' && (
           <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-1.5">
@@ -194,19 +205,10 @@ export default async function EditProfilePage({
           </Field>
 
           <Field label="興味分野（複数選択可、最低1つ）" required>
-            <div className="grid grid-cols-2 gap-1">
-              {PROPOSAL_CATEGORIES.map((c) => (
-                <label key={c.key} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="interests"
-                    value={c.key}
-                    defaultChecked={(member.interests ?? []).includes(c.key)}
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
+            <InterestsField
+              categories={PROPOSAL_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
+              defaultSelected={member.interests ?? []}
+            />
           </Field>
 
           <Field label="自己紹介（400字以内）">
