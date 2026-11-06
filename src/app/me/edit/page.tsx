@@ -280,6 +280,17 @@ export default async function EditProfilePage({
                   <span className="block text-xs text-slate-500">表示名と貢献度ポイントが /ranking に公開されます。活動の励みにどうぞ</span>
                 </span>
               </label>
+            </div>
+          </Field>
+
+          <Field label="通知の受け取り">
+            <div className="space-y-2 text-sm">
+              <p className="text-xs leading-relaxed text-slate-500">
+                チェックを外すと、その種類のお知らせが届かなくなります（メール通知だけは、外してもベル🔔には届きます）。
+                アプリを開かなくても気づけるスマホへのプッシュ通知は、
+                <Link href="/me" className="text-blue-600 hover:underline">マイページ</Link>
+                で設定できます。
+              </p>
               <label className="flex items-start gap-2">
                 <input
                   type="checkbox"
@@ -301,7 +312,7 @@ export default async function EditProfilePage({
                 />
                 <span>
                   イベント通知を受け取る
-                  <span className="block text-xs text-slate-500">新しいイベントが登録されたときにベル🔔でお知らせします（プッシュ通知を許可していればスマホにも届きます）</span>
+                  <span className="block text-xs text-slate-500">新しいイベントが登録されたとき、そして参加登録したイベントの前日の朝に、ベル🔔でお知らせします（プッシュ通知を許可していればスマホにも届きます）。外すと、どちらも届かなくなります</span>
                 </span>
               </label>
               <label className="flex items-start gap-2">
@@ -313,7 +324,7 @@ export default async function EditProfilePage({
                 />
                 <span>
                   FreeFree通知を受け取る
-                  <span className="block text-xs text-slate-500">FreeFree掲示板に新しい掲載があったときにベル🔔でお知らせします</span>
+                  <span className="block text-xs text-slate-500">FreeFree掲示板に新しい掲載があったときにベル🔔でお知らせします。外すと、新しい掲載に気づく手段がなくなります</span>
                 </span>
               </label>
               {wasLight && (

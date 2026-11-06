@@ -5,6 +5,10 @@
       "schedule": "7 23 * * *"
     },
     {
+      "path": "/api/cron/event-reminder",
+      "schedule": "12 23 * * *"
+    },
+    {
       "path": "/api/cron/cost-alert",
       "schedule": "0 22 * * *"
     },

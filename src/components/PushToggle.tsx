@@ -66,7 +66,14 @@ const SUBSCRIBE_TIMEOUT_MSG =
  * マイページの「スマホ・PCへのプッシュ通知」設定カード。
  * 有効化するとアプリを閉じていても待機画面に通知が届く。
  */
-export function PushToggle() {
+export function PushToggle({
+  heading = '📲 スマホ・PCへのプッシュ通知',
+  description = '有効にすると、アプリを閉じていても待機画面に通知が届きます（コメント・いいね・声がけなど）',
+}: {
+  /** 見出しと説明は、置く場面（イベント詳細など）に合わせて差し替えられる */
+  heading?: string
+  description?: string
+} = {}) {
   const [supported, setSupported] = useState<boolean | null>(null)
   const [subscribed, setSubscribed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -154,10 +161,10 @@ export function PushToggle() {
       <div className="flex justify-between items-center gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            📲 スマホ・PCへのプッシュ通知
+            {heading}
           </p>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            有効にすると、アプリを閉じていても待機画面に通知が届きます（コメント・いいね・声がけなど）
+            {description}
           </p>
         </div>
         {supported && (

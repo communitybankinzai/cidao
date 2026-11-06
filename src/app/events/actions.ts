@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 import { notifyAllMembers } from '@/lib/notify'
+import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
 
 type CreateInput = {
@@ -379,11 +380,26 @@ export async function joinEvent(eventId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
+  // 初めての登録かどうか。連打や再送のたびに、主催者へ同じ知らせを重ねて送らないため
+  const { data: already } = await supabase
+    .from('event_participants')
+    .select('member_id')
+    .eq('event_id', eventId)
+    .eq('member_id', user.id)
+    .maybeSingle()
+
   const { error } = await supabase.from('event_participants').upsert(
     { event_id: eventId, member_id: user.id, role: 'participant' },
     { onConflict: 'event_id,member_id' }
   )
   if (error) throw new Error(`参加登録失敗: ${error.message}`)
+
+  // 主催者へ「参加登録がありました」（ベル＋Webプッシュ・人数のみで名前は載せない）。after() でレスポンス後に回す
+  if (!already) {
+    after(async () => {
+      await notifyOrganizersOfJoin({ eventId, memberId: user.id })
+    })
+  }
   revalidatePath(`/events/${eventId}`)
 }
 

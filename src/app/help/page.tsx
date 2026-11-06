@@ -102,10 +102,10 @@ export default function HelpPage() {
           <h3 className="text-sm font-semibold">通知を減らしたい・止めたい</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             <Link href="/me/edit" className="text-blue-600 hover:underline">プロフィール編集</Link>
-            の「同意・設定」で、種類ごとに切り替えられます。
+            の「通知の受け取り」で、種類ごとに切り替えられます。
           </p>
           <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc pl-5">
-            <li>「イベント通知を受け取る」のチェックを外す → 新しいイベントの通知が止まります</li>
+            <li>「イベント通知を受け取る」のチェックを外す → 新しいイベントの通知と、参加登録したイベントの前日のお知らせが止まります</li>
             <li>「FreeFree通知を受け取る」のチェックを外す → 新しい掲載の通知が止まります</li>
             <li>「提案・投票のメール通知を受け取る」のチェックを外す → 投票のご案内メールが止まります</li>
           </ul>

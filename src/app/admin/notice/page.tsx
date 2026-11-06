@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import NoticeForm from './_components/NoticeForm'
+import ReachCard from './_components/ReachCard'
+import { loadReachSummary, type ReachSummary } from '@/lib/admin-reach'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +57,7 @@ export default async function AdminNoticePage() {
   let broadcasts: Broadcast[] = []
   let memberCount = 0
   let configured = false
+  let reach: ReachSummary | null = null
   const readDetail = new Map<string, { read: string[]; unread: string[] }>()
 
   if (supaUrl && serviceKey) {
@@ -75,6 +78,9 @@ export default async function AdminNoticePage() {
     ])
     broadcasts = (rows ?? []) as Broadcast[]
     memberCount = count ?? 0
+
+    // 「届いているか」の集計。失敗してもお知らせ配信そのものは使えるよう、カードだけ出さない
+    reach = await loadReachSummary(admin).catch(() => null)
 
     // 誰が読んだかの内訳。直近 READ_DETAIL_LIMIT 件ぶんだけ取る
     // （配信数 × メンバー数の行になるため、履歴50件ぶん全部は引かない）
@@ -126,6 +132,8 @@ export default async function AdminNoticePage() {
       ) : (
         <NoticeForm memberCount={memberCount} />
       )}
+
+      {reach && <ReachCard reach={reach} />}
 
       <section className="bg-white dark:bg-slate-900 border rounded-lg p-5 space-y-3">
         <h2 className="text-lg font-semibold">🗂 配信履歴（直近50件）</h2>

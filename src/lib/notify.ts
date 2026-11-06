@@ -169,6 +169,60 @@ export async function notifyAllMembers(input: {
 }
 
 /**
+ * 宛先を呼び出し側で決める通知（ベル🔔＋Webプッシュ）。
+ *
+ * notifyAllMembers が「全員（＋個人設定での除外）」なのに対し、こちらは recipientIds をそのまま使う。
+ * 例：参加登録したイベントの前日リマインド（参加者だけに送る）。
+ * - 同じ recipientId が混じっていても1通にする
+ * - 1回の送信を broadcast_id でまとめるので、管理画面の配信履歴で既読数まで追える
+ * - push: false ならベルのみ
+ * - best-effort：失敗しても呼び出し元（巡回・登録処理）は成立させる
+ */
+export async function notifyMembers(input: {
+  recipientIds: string[]
+  kind: NotificationKind
+  title: string
+  body?: string
+  linkUrl?: string
+  push?: boolean
+}): Promise<{ recipients: number; pushed: number; broadcastId: string | null }> {
+  const empty = { recipients: 0, pushed: 0, broadcastId: null }
+  try {
+    const admin = adminClient()
+    if (!admin) return empty
+
+    const recipientIds = [...new Set(input.recipientIds)]
+    if (recipientIds.length === 0) return empty
+
+    const broadcastId = crypto.randomUUID()
+    const title = input.title.slice(0, 200)
+
+    for (let i = 0; i < recipientIds.length; i += INSERT_CHUNK) {
+      const chunk = recipientIds.slice(i, i + INSERT_CHUNK)
+      const { error: insertErr } = await admin.from('notifications').insert(
+        chunk.map((recipientId) => ({
+          recipient_id: recipientId,
+          kind: input.kind,
+          title,
+          body: input.body ?? null,
+          link_url: input.linkUrl ?? null,
+          broadcast_id: broadcastId,
+        })),
+      )
+      if (insertErr) return empty
+    }
+
+    let pushed = 0
+    if (input.push !== false) {
+      pushed = await sendWebPushToMany({ recipientIds, title, body: input.body, url: input.linkUrl })
+    }
+    return { recipients: recipientIds.length, pushed, broadcastId }
+  } catch {
+    return empty
+  }
+}
+
+/**
  * 災害情報の通知（ベル🔔＋Webプッシュ）。マイメニューで希望した会員だけが宛先（2026-10-12 事業主指示）。
  *
  * - 宛先は contact_preferences.notify_disaster === true の未退会メンバーだけ（未設定＝受け取らない。初期OFF）

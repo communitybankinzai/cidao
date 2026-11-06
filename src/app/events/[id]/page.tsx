@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
 import { EventViewTracker } from '@/components/EventViewTracker'
+import { EventPushPrompt } from '@/components/EventPushPrompt'
 import { AnnounceEventButton } from './_components/AnnounceEventButton'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
@@ -191,13 +192,17 @@ export default async function EventDetailPage({
               </div>
             </div>
           ) : myParticipation ? (
-            <div className="flex gap-3 items-center">
-              <span className="text-sm">あなたは {myParticipation.role === 'organizer' ? '主催者' : myParticipation.role === 'staff' ? 'スタッフ' : '参加者'} として登録中</span>
-              {!isOrganizer && (
-                <form action={async () => { 'use server'; await leaveEvent(id) }}>
-                  <Button type="submit" variant="outline" size="sm">キャンセル</Button>
-                </form>
-              )}
+            <div className="space-y-3">
+              <div className="flex gap-3 items-center">
+                <span className="text-sm">あなたは {myParticipation.role === 'organizer' ? '主催者' : myParticipation.role === 'staff' ? 'スタッフ' : '参加者'} として登録中</span>
+                {!isOrganizer && (
+                  <form action={async () => { 'use server'; await leaveEvent(id) }}>
+                    <Button type="submit" variant="outline" size="sm">キャンセル</Button>
+                  </form>
+                )}
+              </div>
+              {/* 参加登録済みで、この端末がプッシュ未購読のときだけ出る。前日の朝のお知らせを端末に届けるための許可依頼 */}
+              {event.status === 'open' && <EventPushPrompt />}
             </div>
           ) : isFull ? (
             <p className="text-sm text-slate-500">満員のため参加できません</p>
