@@ -153,7 +153,8 @@ export async function GET(request: Request) {
 async function osmShops(): Promise<Map<string, { name: string; lat: number; lon: number }> | null> {
   try {
     return await memoTtl('gourmet:osm', 6 * 3600_000, async () => {
-      const res = await fetch(OSM_SHOPS_URL, { next: { revalidate: 86400 } })
+      // Next のデータキャッシュは 404 も保存してしまう（公開前の 404 が1日残った）ので使わない。使い回しは memoTtl の6時間だけ
+      const res = await fetch(OSM_SHOPS_URL, { cache: 'no-store' })
       if (!res.ok) throw new Error(`osm-shops ${res.status}`)
       const data = (await res.json()) as { shops?: Array<{ id: string; name: string; lat: number; lon: number }> }
       const map = new Map<string, { name: string; lat: number; lon: number }>()
