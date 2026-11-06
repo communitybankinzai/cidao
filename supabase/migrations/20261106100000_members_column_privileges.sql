@@ -17,6 +17,7 @@
 --   ・INSERT/UPDATE の権限は変えない（本人の行の更新はこれまでどおり）
 --
 -- 確認済み:
+--   ・officer_role は members には無い（memberships 側の列）ので対象外
 --   ・RLS ポリシーが members の列を参照するのは tier / admin_role / deleted_at / id のみ（authenticated に残す）
 --   ・is_admin など補助関数はすべて SECURITY DEFINER（列権限の影響を受けない）
 --   ・ビュー・invoker 関数で絞る列を参照するものは無い
@@ -28,14 +29,14 @@ revoke select on public.members from authenticated;
 grant select (
   id, display_name, avatar_url, avatar_position, avatar_zoom,
   tier, residency_type, interests, preferred_activity_forms, preferred_activity_areas,
-  self_introduction, skills_text, officer_role, ranking_opt_in,
+  self_introduction, skills_text, ranking_opt_in,
   deleted_at, created_at
 ) on public.members to anon;
 
 grant select (
   id, display_name, avatar_url, avatar_position, avatar_zoom,
   tier, residency_type, relation_type, interests, preferred_activity_forms, preferred_activity_areas,
-  self_introduction, skills_text, officer_role, ranking_opt_in,
+  self_introduction, skills_text, ranking_opt_in,
   contact_permission, collaboration_consent, residence_verified_at,
   admin_role, last_active_at, signup_source, show_footprints,
   deleted_at, created_at, updated_at
