@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 import { notifyAllMembers } from '@/lib/notify'
+import { wantsInstantEvent } from '@/lib/event-notify-mode'
 import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
 
@@ -153,6 +154,7 @@ export async function createEvent(input: CreateInput) {
       kind: 'event',
       actorId: user.id,
       prefKey: 'notify_event',
+      recipientFilter: wantsInstantEvent, // 『毎日18時にまとめて』の人には、ここではなく /api/cron/event-digest が送る
       title: `新しいイベント「${input.title}」が登録されました`,
       body: [shortJst(input.start_at), input.online_flag ? 'オンライン' : input.location?.trim()]
         .filter(Boolean)
@@ -230,6 +232,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
       kind: 'event',
       actorId: user.id,
       prefKey: 'notify_event',
+      recipientFilter: wantsInstantEvent, // 『毎日18時にまとめて』の人には、ここではなく /api/cron/event-digest が送る
       title: `新しいイベント「${input.title}」が登録されました`,
       body: [
         list.length > 1 ? `${when} ほか全${list.length}回` : when,

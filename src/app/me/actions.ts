@@ -9,6 +9,7 @@ import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { nameWithSan } from '@/lib/honorific'
 import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
 import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
+import { eventNotifyPrefs, type EventNotifyMode } from '@/lib/event-notify-mode'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -49,7 +50,7 @@ type ProfileUpdate = {
   contact_permission: boolean
   ranking_opt_in: boolean
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
-  notify_event: boolean         // 新着イベントのベル🔔＋Webプッシュ（contact_preferences.notify_event）
+  event_notify_mode: EventNotifyMode // 新着イベントの知らせ方（その都度／毎日18時にまとめて／受け取らない）。notify_event も一緒に保存する
   notify_freefree: boolean      // FreeFree掲示板の新着（contact_preferences.notify_freefree）
   upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
@@ -75,7 +76,7 @@ export async function updateProfile(input: ProfileUpdate) {
   const prefs = {
     ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
     proposal_email: input.proposal_email,
-    notify_event: input.notify_event,
+    ...eventNotifyPrefs(input.event_notify_mode),
     notify_freefree: input.notify_freefree,
   }
 

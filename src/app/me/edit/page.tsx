@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
+import { EVENT_NOTIFY_OPTIONS, eventNotifyMode, isEventNotifyMode } from '@/lib/event-notify-mode'
 import { updateProfile } from '../actions'
 import { claimMemberships, leaveOrg, type OrgClaim } from '../../orgs/actions'
 import OrgClaimPicker, { type OrgOption } from './_components/OrgClaimPicker'
@@ -40,6 +41,7 @@ export default async function EditProfilePage({
     .maybeSingle()
 
   const wasLight = member.tier === 'light'
+  const currentEventMode = eventNotifyMode(member.contact_preferences)
 
   // 所属団体 picker 用データ
   const { data: orgs } = await supabase
@@ -88,7 +90,10 @@ export default async function EditProfilePage({
         contact_permission: formData.get('contact_permission') === 'on',
         ranking_opt_in: formData.get('ranking_opt_in') === 'on',
         proposal_email: formData.get('proposal_email') === 'on',
-        notify_event: formData.get('notify_event') === 'on',
+        // 選択が届かなかったときは、いまの設定のまま（受け取らない人を勝手に戻さない）
+        event_notify_mode: isEventNotifyMode(formData.get('event_notify_mode'))
+          ? (formData.get('event_notify_mode') as 'instant' | 'digest' | 'off')
+          : currentEventMode,
         notify_freefree: formData.get('notify_freefree') === 'on',
         upgradeToEmailOnly: formData.get('upgrade') === 'on',
       })
@@ -303,18 +308,27 @@ export default async function EditProfilePage({
                   <span className="block text-xs text-slate-500">投票開始・締切前・結果確定をメールでお知らせします。メールアドレスを登録した旧アカウントのみが対象で、LINEログインの方には届きません（新しい提案はベル🔔に届きます）</span>
                 </span>
               </label>
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  name="notify_event"
-                  defaultChecked={((member.contact_preferences ?? {}) as Record<string, unknown>).notify_event !== false}
-                  className="mt-1"
-                />
-                <span>
-                  イベント通知を受け取る
-                  <span className="block text-xs text-slate-500">新しいイベントが登録されたとき、そして参加登録したイベントの前日の朝に、ベル🔔でお知らせします（プッシュ通知を許可していればスマホにも届きます）。外すと、どちらも届かなくなります</span>
-                </span>
-              </label>
+              <fieldset className="space-y-1.5">
+                <legend className="font-medium">新しいイベントのお知らせ</legend>
+                <p className="text-xs leading-relaxed text-slate-500">
+                  新しく載ったイベントの知らせ方を選べます。プッシュ通知を許可していれば、スマホにも届きます。
+                </p>
+                {EVENT_NOTIFY_OPTIONS.map((o) => (
+                  <label key={o.value} className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="event_notify_mode"
+                      value={o.value}
+                      defaultChecked={currentEventMode === o.value}
+                      className="mt-1"
+                    />
+                    <span>
+                      {o.label}
+                      <span className="block text-xs text-slate-500">{o.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
               <label className="flex items-start gap-2">
                 <input
                   type="checkbox"
