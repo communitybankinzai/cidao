@@ -146,16 +146,16 @@ export default async function MyPage({
           </div>
         )}
 
-        {/* 保存直後にPR未作成なら、一覧掲載にはPR公開が別途必要なことを明示
+        {/* 保存直後で一覧に載っていなければ、掲載には人材バンクでの公開が別途必要なことを明示
             （「登録したのに登録メンバー一覧に載らない」問い合わせ対策） */}
         {sp.updated && !myPr && (
           <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-4 rounded space-y-2">
             <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">
-              📣 「登録メンバー」一覧に載るには、公開PRの作成が必要です
+              📣 「登録メンバー」一覧に載るには、人材バンクでの公開が必要です
             </p>
             <p className="text-xs text-sky-700 dark:text-sky-300">
               プロフィールの保存だけでは <Link href="/talent" className="underline">登録メンバー一覧</Link> には表示されません。
-              人材バンクで紹介文を作って公開すると一覧に載り、団体から声がかかるようになります。
+              人材バンクで紹介文を作って公開を申請し、運営が確認すると一覧に載り、団体から声がかかるようになります。
             </p>
             <Link href="/me/talent">
               <Button size="sm">人材バンクに紹介文を作る</Button>
@@ -454,7 +454,7 @@ export default async function MyPage({
                 まだ登録メンバーとして掲載されていません
               </p>
               <p className="text-xs text-slate-500">
-                人材バンクで紹介文を公開すると <Link href="/talent" className="underline">登録メンバー一覧</Link> に載り、団体から声がかかる可能性があります。
+                人材バンクで紹介文を作って公開を申請し、運営が確認すると <Link href="/talent" className="underline">登録メンバー一覧</Link> に載り、団体から声がかかる可能性があります。
               </p>
             </div>
           ) : (

@@ -104,24 +104,24 @@ export async function updateProfile(input: ProfileUpdate) {
 
   if (error) throw new Error(`プロフィール更新に失敗: ${error.message}`)
 
-  // 本登録完了の瞬間（light→email_only 昇格）に、公開PR未作成なら
-  // 「一覧掲載には公開PRの作成が必要」をベル通知＋Webプッシュで案内する。
+  // 本登録完了の瞬間（light→email_only 昇格）に、一覧に載っていない人へ
+  // 「一覧に載るには人材バンクでの公開が必要」をベル通知＋Webプッシュで案内する。
   // 登録確認メールが存在しない（LINEログイン一本化）ため、これが全員に届く唯一の案内経路
   if (input.upgradeToEmailOnly && current?.tier === 'light') {
     // 全メンバーへ「新しい仲間が増えた」通知（ベル＋Webプッシュ）。
     // 本登録の瞬間だけ。以後のプロフィール編集では飛ばさない。
     //
     // この時点では「登録メンバー」一覧（/talent）にはまだ載らない。
-    // 一覧は member_profiles_pr（公開PR）を起点にしているため。
+    // 一覧は人材バンクで公開された紹介文（talent_profiles）を起点にしており、運営の承認が要るため。
     // リンクを付けると押しても本人が居ないので付けず、そのことを本文で説明する。
-    // 一覧に載った瞬間の通知は /me/pr（公開PRの初回作成時）から別途出る
+    // 一覧に載った瞬間の通知は、運営の承認時（talent-bank/profile/publish.ts の adminApprove）に本人へ出る
     const newName = input.display_name.trim()
     after(async () => {
       await notifyAllMembers({
         kind: 'member',
         actorId: user.id,
-        title: `${nameWithSan(newName)}が新しくメンバー登録しました`,
-        body: '公開PRが作られると「登録メンバー」一覧にも掲載されます',
+        title: `${nameWithSan(newName)}が新しく本登録しました`,
+        body: '「登録メンバー」一覧に載るのは、人材バンクで紹介文を公開した人です',
       })
     })
 
@@ -134,8 +134,8 @@ export async function updateProfile(input: ProfileUpdate) {
       await insertNotification({
         recipientId: user.id,
         kind: 'system',
-        title: '本登録が完了しました🎉 「登録メンバー」一覧に載るには公開PRの作成が必要です',
-        body: 'できそうな貢献・資格などを公開PRとして登録すると一覧に載り、団体から活動の声がけが届くようになります。',
+        title: '本登録が完了しました🎉 「登録メンバー」一覧に載るには、人材バンクでの公開が必要です',
+        body: '人材バンクで自己紹介を書いて紹介文を作り、公開を申請してください。運営が確認して承認すると一覧に載り、団体から活動の声がけが届くようになります。',
         linkUrl: '/me/talent',
       })
     }

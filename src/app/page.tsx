@@ -273,7 +273,7 @@ export default async function Home() {
             <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
               {isLight
                 ? 'プロフィールを確認して保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。興味分野は選ばなくても進めます。'
-                : 'PR（自己紹介）を公開すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
+                : '人材バンクで紹介文を作って公開を申請し、運営が確認すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
             </p>
             <Link href={isLight ? '/me/edit' : '/me/talent'}>
               <Button size="sm">{isLight ? 'プロフィールを登録する' : 'PR（自己紹介）を作る'}</Button>
