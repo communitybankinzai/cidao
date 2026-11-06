@@ -243,7 +243,7 @@ export async function POST(request: Request) {
   const ref = parseShopRef(field(form, 'shopRef'))
   if (ref?.kind === 'osm') {
     const map = await osmShops()
-    const hit = map?.get(ref.id)
+    const hit = map?.get(ref.ref) // osm-shops.json の id は "osm:n123" の形
     if (map && !hit) return json(request, { error: 'unknown_shop' }, 400)
     if (hit) shop = { ref: ref.ref, name: hit.name, lat: hit.lat, lon: hit.lon }
     else {
