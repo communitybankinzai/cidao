@@ -22,27 +22,32 @@ export function profileDB() {
     talent_profile_version_tags: [], publications: [], work_logs: [], member_profiles_pr: [],
   }
   let fail = false
-  let failUpsert = false
+  let failLegacy = false  // 旧表（member_profiles_pr）への書き込みだけを失敗させる
   let admin = true
   const from = vi.fn((table: string) => {
     const filters: ((row: Row) => boolean)[] = []
     let limit = Infinity
     let orderKey = ''
     let ascending = true
+    let patch: Row | null = null
     const result = () => {
       let rows = (tables[table] ?? []).filter(r => filters.every(f => f(r)))
+      if (patch && failLegacy && table === 'member_profiles_pr') return { data: [] as Row[], error: { code: 'failed' } }
+      if (patch) rows.forEach(r => Object.assign(r, patch))
       if (orderKey) rows = [...rows].sort((a, b) => String(a[orderKey]).localeCompare(String(b[orderKey])) * (ascending ? 1 : -1))
       return { data: structuredClone(rows.slice(0, limit)), error: null }
     }
     const query = {
       select: vi.fn(() => query),
+      update: vi.fn((p: Row) => { patch = p; return query }),
       eq: vi.fn((k: string, v: unknown) => { filters.push(r => r[k] === v); return query }),
+      is: vi.fn((k: string, v: unknown) => { filters.push(r => r[k] === v); return query }),
       in: vi.fn((k: string, vs: unknown[]) => { filters.push(r => vs.includes(r[k])); return query }),
       not: vi.fn((k: string, _op: string, v: unknown) => { filters.push(r => r[k] !== v); return query }),
       order: vi.fn((k: string, options?: { ascending?: boolean }) => { orderKey = k; ascending = options?.ascending ?? true; return query }),
       limit: vi.fn((n: number) => { limit = n; return query }),
       upsert: vi.fn(async (row: Row, options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
-        if (failUpsert) return { data: null, error: { code: 'failed' } }
+        if (failLegacy) return { data: null, error: { code: 'failed' } }
         const key = options?.onConflict ?? 'id'
         const existing = (tables[table] ??= []).find(r => r[key] === row[key])
         if (!existing) tables[table].push({ ...row })
@@ -99,6 +104,6 @@ export function profileDB() {
     }
     return { data: true, error: null }
   })
-  return { tables, from, rpc, fail: () => { fail = true }, failUpsert: () => { failUpsert = true }, denyAdmin: () => { admin = false },
+  return { tables, from, rpc, fail: () => { fail = true }, failLegacy: () => { failLegacy = true }, denyAdmin: () => { admin = false },
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: memberId } }, error: null })) } }
 }

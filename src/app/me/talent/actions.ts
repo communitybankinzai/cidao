@@ -9,7 +9,7 @@ import { generateProfileDraft, generateProfileFromText } from '@/lib/talent-bank
 import { registrationSubject } from '@/lib/talent-bank/interview/access'
 import { createTalentBankServiceClient } from '@/lib/talent-bank/db'
 import { createRevision, updateDraft } from '@/lib/talent-bank/profile/review'
-import { notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
+import { changePublishedScope, notifyAdminsOfApplication, unpublish } from '@/lib/talent-bank/profile/publish'
 import { ProfileError } from '@/lib/talent-bank/profile/validation'
 import { createClient } from '@/lib/supabase/server'
 import { ownerRespondVideo, requestVideo, retireVideo, setFaceMode } from '@/lib/talent-bank/video/jobs'
@@ -99,15 +99,8 @@ export async function settingsAction(_previous: { error: string }, form: FormDat
     if (intent === 'scope') {
       const value = String(form.get('public_scope') ?? '')
       if (value !== 'public' && value !== 'registered_only') throw new ProfileError('invalid_scope')
-      const service = createTalentBankServiceClient()
-      const profile = await service.from('talent_profiles').select('id, current_version_id').eq('member_id', memberId).maybeSingle()
-      if (profile.error || !profile.data?.current_version_id) throw new ProfileError('profile_not_published')
-      const results = await Promise.all([
-        service.from('talent_profiles').update({ public_scope: value }).eq('id', profile.data.id),
-        service.from('talent_profile_versions').update({ public_scope: value }).eq('id', profile.data.current_version_id),
-        service.from('publications').update({ scope: value }).eq('profile_id', profile.data.id).is('unpublished_at', null),
-      ])
-      if (results.some(r => r.error)) throw new ProfileError('storage_unavailable')
+      // 公開中のプロフィールの範囲を変え、旧表（声がけ受付の置き場）の公開範囲も合わせる
+      await changePublishedScope({ memberId, scope: value })
     } else if (intent === 'acceptance') {
       const value = String(form.get('message_acceptance') ?? '')
       if (!['open', 'recommended_only', 'closed'].includes(value)) throw new ProfileError('invalid_scope')

@@ -7,7 +7,7 @@ vi.mock('@/lib/ai/call', () => ({ callAI: mocks.ai }))
 vi.mock('@/lib/notify', () => ({ insertNotification: mocks.notify }))
 import { generateProfileDraft } from '../generate'
 import { createRevision, ownerApprove, updateDraft } from '../review'
-import { adminApprove, adminReject, unpublish } from '../publish'
+import { adminApprove, adminReject, changePublishedScope, unpublish } from '../publish'
 import { getPublicProfile, searchConditions, searchPublicProfiles, withoutPublishedLegacy } from '../read'
 import { applyFieldPatch, groundedFields, profileSchema } from '../validation'
 
@@ -149,11 +149,17 @@ describe('publication contract', () => {
     await approve(); await publish()
     expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'recommended_only', public_scope: 'registered_only' }])
   })
-  it('never overwrites a message-acceptance setting the member already saved', async () => {
+  it('aligns an existing row to the published scope but never touches the setting or text the member already saved', async () => {
     db.tables.talent_profile_versions[0].public_scope = 'public'
-    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'closed', public_scope: 'registered_only' })
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'closed', public_scope: 'registered_only', contributions: '本人の記入' })
     await approve(); await publish()
-    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'closed', public_scope: 'registered_only' }])
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'closed', public_scope: 'public', contributions: '本人の記入' }])
+  })
+  it('hides an existing row from other members when a private version is published', async () => {
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'open', public_scope: 'public' })
+    await approve(); await publish()
+    expect(db.tables.talent_profile_versions[0].public_scope).toBe('private')
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'open', public_scope: 'consent_only' }])
   })
   it('creates no message-acceptance row for a private profile', async () => {
     await approve(); await publish()
@@ -161,10 +167,31 @@ describe('publication contract', () => {
   })
   it('still publishes and notifies when the default row cannot be saved', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-    db.tables.talent_profile_versions[0].public_scope = 'public'; db.failUpsert()
+    db.tables.talent_profile_versions[0].public_scope = 'public'; db.failLegacy()
     await approve(); await publish()
     expect(db.tables.talent_profiles[0].current_version_id).toBe('version-1'); expect(mocks.notify).toHaveBeenCalled()
     expect(db.tables.member_profiles_pr).toEqual([]); log.mockRestore()
+  })
+  it('after an unpublish the legacy row is readable by its owner only; the setting is kept', async () => {
+    db.tables.talent_profile_versions[0].public_scope = 'registered_only'
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'open', public_scope: 'registered_only' })
+    await approve(); await publish(); await unpublish({ memberId, profileId: 'profile-1', reason: '停止' })
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'open', public_scope: 'consent_only' }])
+  })
+  it('an admin unpublish also closes the legacy row, and creates none when there was none', async () => {
+    await approve(); await publish(); await unpublish({ adminId: memberId, profileId: 'profile-1', reason: '運営判断' })
+    expect(db.tables.member_profiles_pr).toEqual([])
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'recommended_only', public_scope: 'public' })
+    db.tables.talent_profiles[0].current_version_id = 'version-1'
+    await unpublish({ adminId: memberId, profileId: 'profile-1', reason: '運営判断' })
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'recommended_only', public_scope: 'consent_only' }])
+  })
+  it('still unpublishes and notifies when the legacy row cannot be updated', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'open', public_scope: 'public' })
+    await approve(); await publish(); mocks.notify.mockClear(); db.failLegacy()
+    await unpublish({ memberId, profileId: 'profile-1', reason: '停止' })
+    expect(db.tables.talent_profiles[0].current_version_id).toBeNull(); expect(mocks.notify).toHaveBeenCalled(); log.mockRestore()
   })
   it('returns rejection to draft with reason', async () => {
     await approve(); await adminReject({ adminId: memberId, versionId: 'version-1', reason: '内容を確認してください' })
@@ -181,6 +208,38 @@ describe('publication contract', () => {
   })
   it('failed publication sends no success notification', async () => {
     await approve(); db.fail(); await expect(publish()).rejects.toThrow('publish_conflict'); expect(mocks.notify).not.toHaveBeenCalled()
+  })
+})
+describe('changing the published scope', () => {
+  const published = (scope: 'public' | 'registered_only') => {
+    Object.assign(db.tables.talent_profiles[0], { current_version_id: 'version-1', draft_version_id: null, public_scope: scope })
+    Object.assign(db.tables.talent_profile_versions[0], { status: 'published', public_scope: scope })
+    db.tables.publications.push({ version_id: 'version-1', profile_id: 'profile-1', scope, unpublished_at: null })
+  }
+  it('updates the profile, the version, the publication and the legacy row together', async () => {
+    published('public')
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'open', public_scope: 'public' })
+    await changePublishedScope({ memberId, scope: 'registered_only' })
+    expect(db.tables.talent_profiles[0].public_scope).toBe('registered_only')
+    expect(db.tables.talent_profile_versions[0].public_scope).toBe('registered_only')
+    expect(db.tables.publications[0].scope).toBe('registered_only')
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'open', public_scope: 'registered_only' }])
+  })
+  it('widening the scope widens the legacy row too, and creates the default row for a member who has none', async () => {
+    published('registered_only')
+    await changePublishedScope({ memberId, scope: 'public' })
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'recommended_only', public_scope: 'public' }])
+  })
+  it('requires a published profile and leaves the legacy row alone', async () => {
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'open', public_scope: 'public' })
+    await expect(changePublishedScope({ memberId, scope: 'registered_only' })).rejects.toThrow('profile_not_published')
+    expect(db.tables.member_profiles_pr[0].public_scope).toBe('public')
+  })
+  it('keeps the scope change when the legacy row cannot be updated', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    published('public'); db.failLegacy()
+    await changePublishedScope({ memberId, scope: 'registered_only' })
+    expect(db.tables.talent_profiles[0].public_scope).toBe('registered_only'); log.mockRestore()
   })
 })
 describe('read and search', () => {
