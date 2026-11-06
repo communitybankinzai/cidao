@@ -8,6 +8,7 @@ import { categoryLabel } from '@/lib/categories'
 import { canUserEditEvent } from '@/lib/event-permissions'
 import { EventViewTracker } from '@/components/EventViewTracker'
 import { EventPushPrompt } from '@/components/EventPushPrompt'
+import { attendanceCopy, capacityLine, isEventFull } from '@/lib/event-attendance-copy'
 import { AnnounceEventButton } from './_components/AnnounceEventButton'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
@@ -52,7 +53,11 @@ export default async function EventDetailPage({
     staff: participants?.filter((p) => p.role === 'staff').length ?? 0,
     participant: participants?.filter((p) => p.role === 'participant').length ?? 0,
   }
-  const isFull = event.capacity != null && counts.participant >= event.capacity
+  // 外部から取り込んだイベント（代理登録）は「行く予定」。文言と定員の扱いは event-attendance-copy にまとめてある
+  const copy = attendanceCopy(event)
+  const isFull = isEventFull(event, counts.participant)
+  const capLine = capacityLine(event, counts.participant)
+  const countLine = copy.countLine(counts)
 
   // 閲覧数は主催者・運営にのみ表示する。
   // 権限がない場合、関数側が0行を返すので viewStats は null のままになる。
@@ -122,7 +127,7 @@ export default async function EventDetailPage({
           <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">{event.description}</p>
           {event.location && <p className="mt-3 text-sm">📍 {event.location}</p>}
           {event.fee != null && <p className="text-sm">参加費: {event.fee} 円</p>}
-          {event.capacity != null && <p className="text-sm">定員: {event.capacity} 名（現在 {counts.participant} 名）</p>}
+          {capLine && <p className="text-sm">{capLine}</p>}
           {(event.website_url || event.form_url) && (
             <div className="mt-3 flex flex-wrap gap-3 text-sm">
               {event.website_url && (
@@ -173,31 +178,29 @@ export default async function EventDetailPage({
         )}
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-3">
-          <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">参加</h2>
+          <h2 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">{copy.heading}</h2>
           {!user ? (
             /* SNSから来た未登録の人が最も離脱しやすい場所。
                「なぜログインが要るのか」「どれだけ手軽か」をこの場で伝える。 */
             <div className="space-y-3">
-              <Link href={`/login?next=/events/${id}`}><Button>ログインして参加</Button></Link>
+              <Link href={`/login?next=/events/${id}`}><Button>{copy.loginButton}</Button></Link>
               <div className="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1">
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">はじめての方へ</p>
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{copy.loginLeadTitle}</p>
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                  参加の申し込みには、印西市の市民参加アプリ「CiDAO（シダオ）」への登録が必要です。
-                  <strong>LINEでワンタップ、登録も利用も無料</strong>。ニックネームで登録でき、
-                  メールアドレスや電話番号の入力もいりません。
+                  {copy.loginLead.before}
+                  <strong>{copy.loginLead.strong}</strong>
+                  {copy.loginLead.after}
                 </p>
-                <p className="text-xs text-slate-500">
-                  イベントを見るだけなら、登録は不要です。
-                </p>
+                <p className="text-xs text-slate-500">{copy.loginNote}</p>
               </div>
             </div>
           ) : myParticipation ? (
             <div className="space-y-3">
               <div className="flex gap-3 items-center">
-                <span className="text-sm">あなたは {myParticipation.role === 'organizer' ? '主催者' : myParticipation.role === 'staff' ? 'スタッフ' : '参加者'} として登録中</span>
+                <span className="text-sm">{copy.statusLine(myParticipation.role)}</span>
                 {!isOrganizer && (
                   <form action={async () => { 'use server'; await leaveEvent(id) }}>
-                    <Button type="submit" variant="outline" size="sm">キャンセル</Button>
+                    <Button type="submit" variant="outline" size="sm">{copy.cancelButton}</Button>
                   </form>
                 )}
               </div>
@@ -207,11 +210,14 @@ export default async function EventDetailPage({
           ) : isFull ? (
             <p className="text-sm text-slate-500">満員のため参加できません</p>
           ) : (
-            <form action={async () => { 'use server'; await joinEvent(id) }}>
-              <Button type="submit">参加する</Button>
-            </form>
+            <div className="space-y-2">
+              <form action={async () => { 'use server'; await joinEvent(id) }}>
+                <Button type="submit">{copy.joinButton}</Button>
+              </form>
+              {copy.joinHint && <p className="text-xs leading-relaxed text-slate-500">{copy.joinHint}</p>}
+            </div>
           )}
-          <p className="text-xs text-slate-500">主催 {counts.organizer} / スタッフ {counts.staff} / 参加 {counts.participant}</p>
+          {countLine && <p className="text-xs text-slate-500">{countLine}</p>}
         </section>
 
         {canEdit && (participants?.length ?? 0) > 0 && (
