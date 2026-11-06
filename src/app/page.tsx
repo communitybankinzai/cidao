@@ -272,7 +272,7 @@ export default async function Home() {
             </p>
             <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
               {isLight
-                ? 'プロフィールで興味分野を選んで保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。'
+                ? 'プロフィールを確認して保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。興味分野は選ばなくても進めます。'
                 : 'PR（自己紹介）を公開すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
             </p>
             <Link href={isLight ? '/me/edit' : '/me/talent'}>

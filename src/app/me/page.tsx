@@ -334,7 +334,7 @@ export default async function MyPage({
               提案・投票・コメントに参加するには本登録（無料）が必要です
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              「プロフィール編集」で興味分野を選んで保存するだけで完了します（投票の重みも上がります）
+              「プロフィール編集」で内容を確認して保存するだけで完了します。興味分野は選ばなくても進めます（投票の重みも上がります）
             </p>
             <Link href="/me/edit">
               <Button size="sm">本登録に進む</Button>

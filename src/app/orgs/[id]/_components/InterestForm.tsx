@@ -58,7 +58,7 @@ export function InterestForm({
           本登録（登録メンバー化）すると、この団体に参加意思を伝えられます
         </p>
         <p className="text-xs text-amber-700 dark:text-amber-300">
-          /me/edit で興味分野と自己紹介を入力すると、応募できるようになります。
+          /me/edit で本登録すると、応募できるようになります。興味分野は選ばなくても進めます。
         </p>
         <a
           href="/me/edit"
