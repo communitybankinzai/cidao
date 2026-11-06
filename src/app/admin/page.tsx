@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createTalentBankClient } from '@/lib/talent-bank/db'
 
 export default async function AdminHomePage() {
   const supabase = await createClient()
@@ -9,6 +10,16 @@ export default async function AdminHomePage() {
 
   const { data: isAdmin, error } = await supabase.rpc('is_admin')
   if (error || !isAdmin) redirect('/')
+
+  // 人材バンクの公開申請の承認待ち件数。承認画面（/admin/talent-bank）と同じく「本人が確認済みで、いま下書きとして残っている版」を数える。
+  // 数えられなくても管理画面トップは開けるよう、失敗時は0件扱い（バッジを出さない）にする
+  const talentDb = await createTalentBankClient()
+  const [profiles, reviewed] = await Promise.all([
+    talentDb.from('talent_profiles').select('draft_version_id'),
+    talentDb.from('talent_profile_versions').select('id').eq('status', 'owner_reviewed'),
+  ])
+  const draftIds = new Set((profiles.data ?? []).map(p => p.draft_version_id))
+  const pendingApplications = profiles.error || reviewed.error ? 0 : (reviewed.data ?? []).filter(v => draftIds.has(v.id)).length
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -20,7 +31,7 @@ export default async function AdminHomePage() {
         </header>
 
         <ul className="grid gap-3 sm:grid-cols-2">
-          <li><Link href="/admin/talent-bank" className="block bg-white dark:bg-slate-900 border rounded-lg p-5 hover:border-slate-400"><h2 className="text-lg font-semibold mb-1">人材バンク・公開承認</h2><p className="text-sm text-slate-500">本人確認済みプロフィールの確認・承認・差し戻し</p></Link></li>
+          <li><Link href="/admin/talent-bank" className="block bg-white dark:bg-slate-900 border rounded-lg p-5 hover:border-slate-400"><h2 className="text-lg font-semibold mb-1">人材バンク・公開承認{pendingApplications > 0 ? <span className="ml-2 inline-block rounded-full bg-rose-600 px-2 py-0.5 align-middle text-xs font-bold text-white">承認待ち {pendingApplications}件</span> : null}</h2><p className="text-sm text-slate-500">本人確認済みプロフィールの確認・承認・差し戻し</p></Link></li>
           <li>
             <Link
               href="/admin/analytics"

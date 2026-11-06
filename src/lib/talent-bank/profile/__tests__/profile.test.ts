@@ -144,6 +144,28 @@ describe('publication contract', () => {
   it('validates minutes', async () => {
     await expect(adminApprove({ adminId: memberId, versionId: 'version-1', minutes: NaN, editCount: 0 })).rejects.toThrow('invalid_work_log')
   })
+  it('creates the default message-acceptance row when none exists, in the scope the member applied for', async () => {
+    db.tables.talent_profile_versions[0].public_scope = 'registered_only'
+    await approve(); await publish()
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'recommended_only', public_scope: 'registered_only' }])
+  })
+  it('never overwrites a message-acceptance setting the member already saved', async () => {
+    db.tables.talent_profile_versions[0].public_scope = 'public'
+    db.tables.member_profiles_pr.push({ member_id: memberId, message_acceptance: 'closed', public_scope: 'registered_only' })
+    await approve(); await publish()
+    expect(db.tables.member_profiles_pr).toEqual([{ member_id: memberId, message_acceptance: 'closed', public_scope: 'registered_only' }])
+  })
+  it('creates no message-acceptance row for a private profile', async () => {
+    await approve(); await publish()
+    expect(db.tables.talent_profile_versions[0].public_scope).toBe('private'); expect(db.tables.member_profiles_pr).toEqual([])
+  })
+  it('still publishes and notifies when the default row cannot be saved', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.tables.talent_profile_versions[0].public_scope = 'public'; db.failUpsert()
+    await approve(); await publish()
+    expect(db.tables.talent_profiles[0].current_version_id).toBe('version-1'); expect(mocks.notify).toHaveBeenCalled()
+    expect(db.tables.member_profiles_pr).toEqual([]); log.mockRestore()
+  })
   it('returns rejection to draft with reason', async () => {
     await approve(); await adminReject({ adminId: memberId, versionId: 'version-1', reason: '内容を確認してください' })
     expect(db.tables.talent_profile_versions[0]).toMatchObject({ status: 'draft', owner_approved_at: null, rejected_reason: '内容を確認してください' })
