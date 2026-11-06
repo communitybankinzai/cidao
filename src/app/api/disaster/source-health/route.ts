@@ -14,6 +14,7 @@
 //    Next のデータキャッシュが共有され、先方への取得は増えない。
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { memoTtl } from '@/lib/memo-ttl'
 
 const KANSUI_SOURCE_URL = 'https://mintsuku-chiba-kansuimap.com/data/hazard_reports.json'
 const KANSUI_CACHE_SECONDS = 600
@@ -111,12 +112,22 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const headers = { ...corsHeaders(request), 'Cache-Control': 'public, max-age=0, s-maxage=60' }
-  const supabase = serviceClient()
-  if (!supabase) {
-    return NextResponse.json({ error: 'not_configured' }, { status: 503, headers })
-  }
+  const headers = { ...corsHeaders(request), 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=300' }
   const showErrors = isModerator(request)
+  try {
+    // 9本の問い合わせと判定（1回 130ms）は、一般向けは 60 秒の間は関数内で使い回す（2026-11-06）
+    const body = showErrors ? await buildSourceHealth(true) : await memoTtl('source-health', 60_000, () => buildSourceHealth(false))
+    return NextResponse.json(body, { headers })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const status = message === 'not_configured' ? 503 : 500
+    return NextResponse.json({ error: message }, { status, headers: { ...corsHeaders(request), 'Cache-Control': 'no-store' } })
+  }
+}
+
+async function buildSourceHealth(showErrors: boolean) {
+  const supabase = serviceClient()
+  if (!supabase) throw new Error('not_configured')
   const rows: Row[] = []
 
   const settingsKeys = ['evac_alert_last', 'shelter_last_open', 'disaster_timeline_state', 'disaster_sns_monitor_state']
@@ -299,13 +310,10 @@ export async function GET(request: Request) {
     })
   }
 
-  return NextResponse.json(
-    {
-      checkedAt: new Date().toISOString(),
-      worst: rows.some((r) => r.level === 'danger') ? 'danger' : rows.some((r) => r.level === 'late') ? 'late' : 'ok',
-      sources: rows,
-      note: '「経過」は最後に新しくなってからの時間、「判断の古さ」はいま出している判断が何時間前のものかです。',
-    },
-    { headers },
-  )
+  return {
+    checkedAt: new Date().toISOString(),
+    worst: rows.some((r) => r.level === 'danger') ? 'danger' : rows.some((r) => r.level === 'late') ? 'late' : 'ok',
+    sources: rows,
+    note: '「経過」は最後に新しくなってからの時間、「判断の古さ」はいま出している判断が何時間前のものかです。',
+  }
 }

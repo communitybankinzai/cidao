@@ -62,10 +62,12 @@ export async function GET(request: Request) {
 
   const raw = (data?.value as { checkedAt?: unknown } | null)?.checkedAt
   const at = typeof raw === 'string' ? Date.parse(raw) : NaN
-  if (!Number.isFinite(at)) return NextResponse.json({ checkedAt: null, ageSeconds: null }, { headers })
+  // 「最終確認 ○分前」の表示用なので 60 秒は配信側で使い回す（2026-11-06）
+  const okHeaders = { ...headers, 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=120' }
+  if (!Number.isFinite(at)) return NextResponse.json({ checkedAt: null, ageSeconds: null }, { headers: okHeaders })
   return NextResponse.json(
     { checkedAt: new Date(at).toISOString(), ageSeconds: Math.max(0, Math.round((Date.now() - at) / 1000)) },
-    { headers },
+    { headers: okHeaders },
   )
 }
 

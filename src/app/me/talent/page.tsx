@@ -73,7 +73,6 @@ export default async function MyTalentPage() {
             <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="consent" value="yes" required className="mt-1" />上の内容に同意します</label>
             <Button type="submit" className="w-full">AI に紹介文の案を作ってもらう</Button>
           </ActionForm>
-          <p className="text-sm text-muted-foreground">文章を書くより質問に答える方が楽な人は <Link href="/talent/interview" className="underline">AI インタビュー</Link> からでも作れます。</p>
         </>}
       </>}
       {version && profile && <>

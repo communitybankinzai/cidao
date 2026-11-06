@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { parse } from 'csv-parse/sync'
 import { NextResponse } from 'next/server'
+import { memoTtl } from '@/lib/memo-ttl'
 import { CITY_PORTAL_URL, fetchOfficialUpdates, type OfficialUpdate } from '@/lib/inzai-city-alerts'
 
 // 【放送が消えたときのために覚えておく（2026-09-24）】
@@ -274,8 +275,7 @@ function classifyOpeningStatus(
   return { openingStatus: 'not-announced' as const, openingEvidence: null }
 }
 
-async function getUncached(request: Request) {
-  try {
+async function buildShelters() {
     const [datasetResults, officialUpdates] = await Promise.all([
       Promise.all(DATASETS.map(fetchShelterDataset)),
       fetchOfficialUpdates(),
@@ -316,7 +316,7 @@ async function getUncached(request: Request) {
       }
     }
 
-    return json(request, {
+    return {
       fetchedAt: new Date().toISOString(),
       shelters,
       officialUpdates,
@@ -339,12 +339,7 @@ async function getUncached(request: Request) {
         resources: DATASETS.map(({ resourceName, url }) => ({ resourceName, url })),
         license: 'CC BY 2.1 JP',
       },
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error('[disaster/inzai-shelters]', message)
-    return json(request, { error: message }, 502)
-  }
+    }
 }
 
 export function OPTIONS(request: Request) {
@@ -355,10 +350,18 @@ export function OPTIONS(request: Request) {
 // 閲覧者が増えても呼び出し回数（無料枠 月100万回）が増えない。台風の日に75%の警告が来たための対策。
 // 運営の一覧（?all=1）や合言葉付きの呼び出し、エラーの応答は保存しない
 export async function GET(request: Request) {
-  const response = await getUncached(request)
-  const url = new URL(request.url)
-  if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
-    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=120, stale-while-revalidate=240')
+  try {
+    // 市のCSVの読み取りと開設状況の照合（1回 40ms）は 60 秒の間は関数内で使い回す（2026-11-06）
+    const body = await memoTtl('inzai-shelters', 60_000, buildShelters)
+    const response = json(request, body)
+    const url = new URL(request.url)
+    if (!url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
+      response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600')
+    }
+    return response
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[disaster/inzai-shelters]', message)
+    return json(request, { error: message }, 502)
   }
-  return response
 }

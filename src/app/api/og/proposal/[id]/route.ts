@@ -172,7 +172,7 @@ async function render(params: Promise<{ id: string }>) {
     headers: {
       'Content-Type': 'image/jpeg',
       // Instagram が取得しに来る一時的な URL。1時間キャッシュで十分
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400',
     },
   })
 }

@@ -161,7 +161,7 @@ export async function GET(request: Request) {
   const response = await getUncached(request)
   const url = new URL(request.url)
   if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
-    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=120')
+    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=120, stale-while-revalidate=240')
   }
   return response
 }

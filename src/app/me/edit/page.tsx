@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { Button } from '@/components/ui/button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { updateProfile } from '../actions'
@@ -22,7 +23,8 @@ export default async function EditProfilePage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/me/edit')
 
-  const { data: member } = await supabase
+  // 本人の行は、会員同士には読ませない列（通知設定など）も要るのでサービスロールで読む（本人確認済み・id を固定）
+  const { data: member } = await (createServiceClient() ?? supabase)
     .from('members')
     .select('*')
     .eq('id', user.id)

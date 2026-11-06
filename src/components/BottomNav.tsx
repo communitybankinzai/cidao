@@ -9,13 +9,11 @@ import {
   Building2,
   CalendarDays,
   CircleHelp,
-  Handshake,
   House,
   Megaphone,
   Menu as MenuIcon,
   PenLine,
   Smartphone,
-  Trophy,
   UserRound,
   Users,
   Vote,
@@ -48,9 +46,7 @@ const MENU_GROUPS: {
     title: 'さがす・参加する',
     items: [
       { href: '/proposals', icon: Vote, label: '提案・投票', note: 'まちへの提案を見る・投票する' },
-      { href: '/match', icon: Handshake, label: 'マッチング相談', note: 'AI と話しながら活動先を探す' },
       { href: '/talent', icon: Users, label: 'メンバー一覧', note: '登録した人のPRを見る' },
-      { href: '/ranking', icon: Trophy, label: 'ランキング', note: '活動の貢献度を見る' },
     ],
   },
   {

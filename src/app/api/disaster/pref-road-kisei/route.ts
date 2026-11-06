@@ -9,6 +9,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { watchPrefRoadKisei } from '@/lib/pref-road-kisei-watch'
+import { isCronAuthorized } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -39,7 +40,9 @@ async function record(value: Record<string, unknown>) {
   if (error) console.error('[disaster/pref-road-kisei] record', error.message)
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  // 見張りの起動は pg_cron（Authorization: Bearer CRON_SECRET）だけ（2026-11-06。それまでは鍵なし）
+  if (!isCronAuthorized(request)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const checkedAt = new Date().toISOString()
   try {
     const result = await watchPrefRoadKisei()
@@ -62,7 +65,7 @@ function corsHeaders(request: Request) {
   return {
     Vary: 'Origin',
     // 確認は30分ごとなので、CDN で1分まとめても十分新しい
-    'Cache-Control': 'public, max-age=60, s-maxage=60',
+    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=300',
     'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : 'https://communitybankinzai.github.io',
   }
 }

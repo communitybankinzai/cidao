@@ -61,13 +61,14 @@ describe('/api/disaster/fire-watch', () => {
     expect((await POST(post(fireNotifyToken(KEY)))).status).toBe(500)
   })
 
-  it('GET: 公開で、確認した時刻と経過秒だけを返す（CORS・キャッシュなし）', async () => {
+  it('GET: 公開で、確認した時刻と経過秒だけを返す（CORS・配信側で60秒だけ使い回す）', async () => {
     const at = new Date(Date.now() - 180_000).toISOString()
     maybeSingle.mockResolvedValueOnce({ data: { value: { checkedAt: at } }, error: null })
     const res = await GET(get())
     expect(res.status).toBe(200)
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://communitybankinzai.github.io')
-    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    // 2026-11-06: 「最終確認 ○分前」の表示用なので 60 秒は配信側で使い回す（使用量削減）
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=0, s-maxage=60, stale-while-revalidate=120')
     const body = await res.json()
     expect(body.checkedAt).toBe(at)
     expect(body.ageSeconds).toBeGreaterThanOrEqual(180)

@@ -21,12 +21,8 @@
       "schedule": "20 21 * * *"
     },
     {
-      "path": "/api/cron/goguynet-cosmos-sync",
-      "schedule": "25 21 * * *"
-    },
-    {
       "path": "/api/cron/inzai-city-sync",
-      "schedule": "30 21 * * *"
+      "schedule": "30 21 * * 0"
     },
     {
       "path": "/api/cron/instagram-accounts-sync",
@@ -34,7 +30,7 @@
     },
     {
       "path": "/api/cron/instagram-events-sync",
-      "schedule": "35 21 * * *"
+      "schedule": "35 21 * * 0"
     }
   ]
 }

@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { memoTtl } from '@/lib/memo-ttl'
 import { distanceM, rainAt, type LatLon, type RainInfo } from '@/lib/disaster-amedas-rain'
 import { RAIN_LOGIC_VERSION } from '@/lib/disaster-rain-logic'
 
@@ -174,7 +175,14 @@ async function getUncached(request: Request) {
     .limit(LIST_LIMIT)
   if (!wantAll) query = query.eq('hidden', false)
   if (KINDS.has(kindParam)) query = query.eq('kind', kindParam)
-  const { data, error } = await query
+  // 一般向けの一覧（1回 100ms・DB 1.3秒）は 60 秒の間は関数内で使い回す。運営の全件表示（all=1）は毎回読む（2026-11-06）
+  const { data, error } = wantAll
+    ? await query
+    : await memoTtl(`passed-roads:rows:${kindParam}`, 60_000, async () => {
+        const result = await query
+        if (result.error) throw result.error
+        return result
+      }).catch((e: unknown) => ({ data: null, error: e as { code?: string; message: string } }))
 
   if (isMissingTable(error)) return json(request, { error: MIGRATION_HINT }, 503)
   if (error) return json(request, { error: error.message }, 500)
@@ -593,7 +601,7 @@ export async function GET(request: Request) {
   const response = await getUncached(request)
   const url = new URL(request.url)
   if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
-    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=30')
+    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=120')
   }
   return response
 }

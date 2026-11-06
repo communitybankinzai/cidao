@@ -2,6 +2,7 @@ import { BackLink } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { summarize, evaluateBadges, ACTION_LABELS } from '@/lib/contribution-summary'
@@ -47,7 +48,8 @@ export default async function MyPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/me')
 
-  const { data: member } = await supabase
+  // 本人の行は、会員同士には読ませない列（通知設定など）も要るのでサービスロールで読む（本人確認済み・id を固定）
+  const { data: member } = await (createServiceClient() ?? supabase)
     .from('members')
     .select('*')
     .eq('id', user.id)
@@ -248,9 +250,6 @@ export default async function MyPage({
             <div className="flex flex-col gap-1.5 shrink-0">
               <Link href="/me/edit">
                 <Button size="sm" variant="outline" className="w-full">編集</Button>
-              </Link>
-              <Link href="/match">
-                <Button size="sm" className="w-full">💬 AI に相談</Button>
               </Link>
             </div>
           </div>

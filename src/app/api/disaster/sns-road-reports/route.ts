@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     note: 'SNSの投稿をAIが読み取った未確認の情報です。点は投稿が指す場所の目安で、いま通れるかどうかを保証しません。',
   })
   // 一般向けだけ配信側で120秒使い回す（無料枠の呼び出し回数対策。sns-monitor と同じ考え）
-  if (!wantAll) response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=120, stale-while-revalidate=240')
+  if (!wantAll) response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600')
   return response
 }
 

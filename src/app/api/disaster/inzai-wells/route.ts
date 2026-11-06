@@ -49,7 +49,9 @@ function corsHeaders(request: Request) {
 }
 
 function json(request: Request, body: unknown, status = 200) {
-  return NextResponse.json(body, { status, headers: corsHeaders(request) })
+  // 市の固定データ（CC BY）は1日、配信側と端末で使い回す。失敗の応答は保存しない（2026-11-06）
+  const headers = status === 200 ? { ...corsHeaders(request), 'Cache-Control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=86400' } : corsHeaders(request)
+  return NextResponse.json(body, { status, headers })
 }
 
 function safeNumber(value: string | undefined) {

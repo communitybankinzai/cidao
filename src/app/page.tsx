@@ -10,14 +10,12 @@ import { PageShell } from '@/components/layout/PageShell'
 import { Tile, TileGrid } from '@/components/Tile'
 import { MemberQr } from '@/components/MemberQr'
 import {
-  Bot,
   Building2,
   CalendarDays,
   CircleHelp,
   LogIn,
   Megaphone,
   Smartphone,
-  Trophy,
   UserRound,
   Users,
   Vote,
@@ -102,8 +100,6 @@ export default async function Home() {
         <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
         <Tile href="/talent" icon={Users} label="メンバー" color="violet" />
         <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
-        <Tile href="/ranking" icon={Trophy} label="ランキング" color="rose" />
-        <Tile href="/match" icon={Bot} label="AIに相談" color="cyan" />
         <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
           <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />

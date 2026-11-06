@@ -21,6 +21,7 @@
 // 取り出しは `?history=1&hours=48`（保存した値を新しい順に返す）。
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { memoTtl } from '@/lib/memo-ttl'
 import { parseStationPage, type Levels } from '@/lib/disaster-river-station-page'
 import { notifyRiverDanger } from '@/lib/disaster-notify'
 
@@ -322,6 +323,18 @@ async function historyResponse(request: Request, url: URL) {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   if (url.searchParams.get('history')) return historyResponse(request, url)
+  // 県のページの読み取り（Shift_JIS の解析・1回 100ms 超）は CACHE_SECONDS の間、関数内でも使い回す（2026-11-06）。
+  // 配信側の保存（s-maxage）は地域ごと・短時間で、利用者がまばらだとほぼ毎回関数が動いていた
+  try {
+    const body = await memoTtl('river-level:current', CACHE_SECONDS * 1000, buildCurrent)
+    return NextResponse.json(body, { headers: { ...corsHeaders(request), 'Cache-Control': `public, max-age=60, s-maxage=${CACHE_SECONDS}` } })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 502, headers: corsHeaders(request) })
+  }
+}
+
+async function buildCurrent() {
   const [tone, area, ...results] = await Promise.allSettled([
     loadToneFloodForecasts(),
     loadAreaStations(),
@@ -359,10 +372,9 @@ export async function GET(request: Request) {
     await notifyRiverDanger(st.name, st.latest != null ? `${st.latest}m` : '最新値は防災MAPで確認').catch(() => undefined)
   }
   if (!stations.length && tone.status === 'rejected') {
-    return NextResponse.json({ error: errors.join(' / ') }, { status: 502, headers: corsHeaders(request) })
+    throw new Error(errors.join(' / '))
   }
-  return NextResponse.json(
-    {
+  return {
       fetchedAt: new Date().toISOString(),
       // 取れた観測所だけ。入口（高崎川・鹿島川）→ 沼（手賀沼・西印旛沼・北印旛沼）→ 出口（長門川・大和田機場）の順
       stations,
@@ -372,7 +384,5 @@ export async function GET(request: Request) {
       source: { name: '千葉県 水防情報（雨量・水位情報）', url: 'http://suibo.bousai.pref.chiba.lg.jp/' },
       floodSource: { name: '気象庁 指定河川洪水予報（国土交通省と気象庁の共同発表）', url: JMA_FEED_URL },
       note: `千葉県の観測値をCBIが読み取って表示しています。0.00と欠測は除いています。沼に入ってくる川（高崎川・鹿島川）と、沼から水を出す先（長門川・大和田機場）も並べています。大和田の内水位・外水位には基準が決められていないため段階は付けていません。印旛沼ははんらん危険水位が無いため、計画高水位の${PLAN_HIGH_MARGIN_M}m手前から「危険」としています（CBIの目安）。避難の判断は市の避難情報に従ってください。`,
-    },
-    { headers: { ...corsHeaders(request), 'Cache-Control': `public, max-age=60, s-maxage=${CACHE_SECONDS}` } },
-  )
+  }
 }

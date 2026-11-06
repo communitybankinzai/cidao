@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { nameWithSan } from '@/lib/honorific'
 import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
@@ -68,7 +69,7 @@ export async function updateProfile(input: ProfileUpdate) {
 
   // contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
   // tier は「本登録完了の瞬間」（light→email_only 昇格）の判定に使う
-  const { data: current } = await supabase
+  const { data: current } = await (createServiceClient() ?? supabase)
     .from('members')
     .select('contact_preferences, tier')
     .eq('id', user.id)
@@ -229,7 +230,7 @@ export async function saveDisasterNotifyPrefs(input: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, message: 'ログインしてください' }
 
-  const { data: current } = await supabase
+  const { data: current } = await (createServiceClient() ?? supabase)
     .from('members')
     .select('contact_preferences')
     .eq('id', user.id)

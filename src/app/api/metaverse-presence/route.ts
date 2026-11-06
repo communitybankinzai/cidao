@@ -20,8 +20,9 @@ const PUBLIC_ORIGINS = new Set([
 // 2026-09-23: Vercel の関数呼び出しが無料枠（100万回/月）に達したため 90→300 秒に延長。
 // 画面側は「この半分以下の間隔」で合図を送る決まりなので、合図の回数が 1/6 になる。
 // 人数の反映は最大5分遅れるが、同時利用者数の目安としては足りる。
-const ACTIVE_SEC = 300     // これ以内に合図があれば「参加中」
-const STALE_MINUTES = 10   // これを過ぎた行は削除
+// 2026-11-06: 使用量削減のため 300→600 秒（防災MAPの合図は 150→300 秒に）。人数の反映は最大10分遅れる
+const ACTIVE_SEC = 600     // これ以内に合図があれば「参加中」
+const STALE_MINUTES = 15   // これを過ぎた行は削除
 
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''

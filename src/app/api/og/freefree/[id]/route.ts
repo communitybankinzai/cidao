@@ -51,7 +51,7 @@ export async function GET(
       })
       if (!jpeg) return NextResponse.json({ error: 'font fetch failed' }, { status: 503 })
       return new NextResponse(new Uint8Array(jpeg), {
-        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300, s-maxage=3600' },
+        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400' },
       })
     } catch (e) {
       console.error('[og/freefree] import card failed:', e instanceof Error ? e.message : e)
@@ -88,7 +88,7 @@ export async function GET(
           .toBuffer()
       : await photo.jpeg({ quality: 85 }).toBuffer()
     return new NextResponse(new Uint8Array(jpeg), {
-      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },
+      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400' },
     })
   } catch (e) {
     console.error('[og/freefree] failed:', e instanceof Error ? e.message : e)

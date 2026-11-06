@@ -10,6 +10,7 @@
 // 内容は市民の投稿であり、公式に確認された通行止めではない。
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { memoTtl } from '@/lib/memo-ttl'
 import { isOnLand } from '@/lib/land-mask-chiba'
 import { isInsideInzai } from '@/lib/inzai-city-boundary'
 
@@ -113,6 +114,29 @@ function insideArea(coordinates: unknown): boolean {
   return false
 }
 
+async function loadInzaiRoads(bucket: number) {
+  const response = await fetch(`${SOURCE_URL}?cbi=${bucket}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
+    // 10分間は先方へ取りに行かない（鍵が変わるまでは保存した中身を使う）
+    next: { revalidate: CACHE_SECONDS },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const payload = (await response.json()) as { generated_at?: string; roads?: Road[] }
+  const inzai = (payload.roads ?? [])
+    .filter((road) => road.status !== 'pending_delete')
+    .filter((road) => insideArea(road.geometry?.coordinates))
+    .map((road) => ({
+      id: road.id,
+      createdAt: road.created_at ?? '',
+      // Leaflet は [緯度, 経度] の順なので、ここで並べ替えて渡す
+      path: ((road.geometry?.coordinates as [number, number][]) ?? [])
+        .filter((p) => Array.isArray(p) && p.length >= 2)
+        .map(([lon, lat]) => [lat, lon] as [number, number]),
+    }))
+    .filter((road) => road.path.length > 0)
+  return { generatedAt: payload.generated_at ?? '', inzai }
+}
+
 export async function GET(request: Request) {
   try {
     // ⚠ next.revalidate だけに任せると、いちど保存した中身が居座り続けることがある。
@@ -121,40 +145,24 @@ export async function GET(request: Request) {
     // そこで URL の末尾に「10分ごとに変わる印」を付け、保存の鍵そのものを入れ替える。
     // 先方へ取りに行く回数は従来どおり10分に1回のまま（規約の「大量リクエスト」に当たらない）。
     const bucket = Math.floor(Date.now() / (CACHE_SECONDS * 1000))
-    const response = await fetch(`${SOURCE_URL}?cbi=${bucket}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'cbi-inzai-disaster-map/1.0 (+https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/)' },
-      // 10分間は先方へ取りに行かない（鍵が変わるまでは保存した中身を使う）
-      next: { revalidate: CACHE_SECONDS },
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const payload = (await response.json()) as { generated_at?: string; roads?: Road[] }
+    // 全県 5,000件超の市域での絞り込み（1回 200ms）は、同じ10分の間は関数内でも使い回す（2026-11-06）
+    const { generatedAt, inzai } = await memoTtl(`kansui:inzai:${bucket}`, CACHE_SECONDS * 1000, () => loadInzaiRoads(bucket))
 
     const { searchParams } = new URL(request.url)
     const wantAll = searchParams.get('all') === '1' && isModerator(request)
     const hidden = await readHidden()
     const hiddenIds = new Set(hidden.map((entry) => Number(entry.id)))
 
-    const roads = (payload.roads ?? [])
-      .filter((road) => road.status !== 'pending_delete')
-      .filter((road) => insideArea(road.geometry?.coordinates))
+    const roads = inzai
       .filter((road) => wantAll || !hiddenIds.has(Number(road.id)))
-      .map((road) => ({
-        hidden: hiddenIds.has(Number(road.id)),
-        id: road.id,
-        createdAt: road.created_at ?? '',
-        // Leaflet は [緯度, 経度] の順なので、ここで並べ替えて渡す
-        path: ((road.geometry?.coordinates as [number, number][]) ?? [])
-          .filter((p) => Array.isArray(p) && p.length >= 2)
-          .map(([lon, lat]) => [lat, lon] as [number, number]),
-      }))
-      .filter((road) => road.path.length > 0)
+      .map((road) => ({ hidden: hiddenIds.has(Number(road.id)), ...road }))
 
     return NextResponse.json(
       {
-        generatedAt: payload.generated_at ?? '',
+        generatedAt,
         // 本家が作ってから何分たっているか。大きいままなら取り込みが止まっている（2026-09-24 追加）
-        generatedAgeMinutes: payload.generated_at
-          ? Math.round((Date.now() - new Date(payload.generated_at).getTime()) / 60000)
+        generatedAgeMinutes: generatedAt
+          ? Math.round((Date.now() - new Date(generatedAt).getTime()) / 60000)
           : null,
         fetchedAt: new Date().toISOString(),
         count: roads.length,

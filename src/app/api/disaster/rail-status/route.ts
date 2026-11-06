@@ -96,5 +96,6 @@ export async function GET(request: Request) {
     buses,
     cleared,
     cityPage: { readAt: pageAt, available: Boolean(pageText) },
-  }, { headers })
+    // 60 秒は配信側で使い回す（防災MAPが10分ごとに読む。解除の自動判定は巡回でも走る・2026-11-06）
+  }, { headers: { ...headers, 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=120' } })
 }

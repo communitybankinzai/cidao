@@ -55,7 +55,7 @@ export async function GET(
           .toBuffer()
       : await photo.jpeg({ quality: 85 }).toBuffer()
     return new NextResponse(new Uint8Array(jpeg), {
-      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },
+      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400' },
     })
   } catch (e) {
     console.error('[og/event] failed:', e instanceof Error ? e.message : e)

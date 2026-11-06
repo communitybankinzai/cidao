@@ -8,6 +8,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { ROAD_CLOSURE_KINDS } from '@/lib/disaster-road-closures'
 import { runRoadClosures } from '@/lib/disaster-timeline'
+import { isCronAuthorized } from '@/lib/cron-auth'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
@@ -66,6 +67,8 @@ type Row = {
 
 // 役所のページを読み直す（pg_cron が毎時呼ぶ）。情報源ごとに前回から50分空けるので、何度呼ばれても役所への取得は増えない
 export async function POST(request: Request) {
+  // 巡回の起動は pg_cron（Authorization: Bearer CRON_SECRET）だけ（2026-11-06）
+  if (!isCronAuthorized(request)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const supabase = serviceClient()
   if (!supabase) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 })
   try {

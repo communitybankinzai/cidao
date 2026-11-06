@@ -2,6 +2,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { runDisasterSnsMonitor } from '@/lib/disaster-sns-monitor'
 import { processSnsRoadCandidates } from '@/lib/disaster-sns-road-ai'
+import { isCronAuthorized } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -138,6 +139,8 @@ async function getUncached(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // 巡回の起動は pg_cron（Authorization: Bearer CRON_SECRET）だけ（2026-11-06）
+  if (!isCronAuthorized(request)) return json(request, { error: 'unauthorized' }, 401)
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
   try {
@@ -169,7 +172,7 @@ export async function GET(request: Request) {
   const response = await getUncached(request)
   const url = new URL(request.url)
   if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
-    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=120, stale-while-revalidate=240')
+    response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600')
   }
   return response
 }
