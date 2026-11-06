@@ -64,9 +64,8 @@ export default async function EditProfilePage({
     'use server'
 
     // 1. プロフィール更新
+    // 興味分野は任意（2026-11-06）。0件のままでも保存する
     const interests = formData.getAll('interests').map(String)
-    // JavaScript が効かない環境の保険。0件のまま updateProfile へ進むと本番では原因不明の汎用エラー画面になる
-    if (interests.length === 0) redirect('/me/edit?error=interests')
 
     // 保存の失敗は汎用エラー画面にせず、失敗した箇所と原因を画面に出してログにも残す
     // （本番では例外の文面が隠れ、本登録できない苦情の原因を追えなかったため）
@@ -143,18 +142,10 @@ export default async function EditProfilePage({
           </h1>
           <p className="text-sm text-slate-500 mt-2">
             {wasLight
-              ? '興味分野を選んで保存すると本登録が完了し、提案・投票・コメントに参加できるようになります'
+              ? '表示名などを確認して「本登録する」を押すと本登録が完了し、提案・投票・コメントに参加できるようになります。興味分野は選ばなくても進めます'
               : '表示名・興味分野など、会員としての基本情報を設定するページです'}
           </p>
         </header>
-
-        {error === 'interests' && (
-          <div role="alert" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
-            <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-              保存できませんでした。「興味分野」を1つ以上選んでから、もう一度押してください
-            </p>
-          </div>
-        )}
 
         {(error === 'profile' || error === 'org') && (
           <div role="alert" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4 space-y-1">
@@ -239,11 +230,14 @@ export default async function EditProfilePage({
             />
           </Field>
 
-          <Field label="興味分野（複数選択可、最低1つ）" required>
+          <Field label="興味分野（複数選択可・任意）">
             <InterestsField
               categories={PROPOSAL_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
               defaultSelected={member.interests ?? []}
             />
+            <p className="text-xs text-slate-500 mt-1.5">
+              選んでおくと、あなたに合う団体や活動を見つけやすくなります。選ばなくても本登録できます。あとからいつでも選べます。
+            </p>
           </Field>
 
           <Field label="自己紹介（400字以内）">
@@ -328,7 +322,7 @@ export default async function EditProfilePage({
                   <span>
                     <strong className="text-emerald-900 dark:text-emerald-100">本登録に昇格</strong>
                     <span className="block text-xs text-emerald-700 dark:text-emerald-300">
-                      興味分野と上記設定で本登録完了。投票重みが上がり、提案・拘束的投票・コメントが可能になります
+                      上記の設定で本登録完了。投票重みが上がり、提案・拘束的投票・コメントが可能になります
                     </span>
                   </span>
                 </label>

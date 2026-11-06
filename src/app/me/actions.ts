@@ -59,10 +59,8 @@ export async function updateProfile(input: ProfileUpdate) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // 興味分野は最低1件必須
-  if (!input.interests || input.interests.length === 0) {
-    throw new Error('興味分野を1つ以上選択してください')
-  }
+  // 興味分野は任意（2026-11-06）。空のままでも本登録できる。
+  // 本登録の目印は興味分野ではなく tier（light→email_only）。判定は lib/member-onboarding.ts
   if (input.display_name.trim().length === 0) {
     throw new Error('表示名を入力してください')
   }

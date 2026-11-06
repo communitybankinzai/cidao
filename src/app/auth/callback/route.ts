@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { SIGNUP_SOURCE_COOKIE, isValidSignupSource } from '@/lib/signup-source'
+import { needsProfileSetup } from '@/lib/member-onboarding'
 
 // 新規登録とみなす猶予：auth.users の作成（＝members の自動作成）からこの時間内の初回ログインだけ signup_source を書く。
 // 既存会員が登録QRを読んでログインし直しても「新規登録」に数えない
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
       if (user) {
         const { data: member } = await supabase
           .from('members')
-          .select('interests, deleted_at, created_at, signup_source')
+          .select('interests, tier, deleted_at, created_at, signup_source')
           .eq('id', user.id)
           .single()
         // 登録経路の記録：作成直後の会員（＝いま初めて登録した人）で未記録なら、/login が Cookie に覚えた utm を残す
@@ -54,7 +55,9 @@ export async function GET(request: Request) {
           await supabase.from('members').update({ deleted_at: null }).eq('id', user.id)
           return go(mvReturn ? '/api/metaverse-auth' : '/me?restored=1')
         }
-        if (member && (member.interests ?? []).length === 0) {
+        // 本登録がまだの人（仮登録のまま興味分野も未選択）だけ本登録画面へ。
+        // 興味分野は任意になったので、本登録を終えた人が空でも毎回戻したりしない
+        if (member && needsProfileSetup(member)) {
           return go('/me/edit?welcome=1')
         }
       }
