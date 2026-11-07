@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import DirectNoticeButton from './_components/DirectNoticeButton'
+import DirectNoticeHistory from './_components/DirectNoticeHistory'
 
 const RESIDENCY_LABEL: Record<string, string> = {
   citizen: '市民',
@@ -17,7 +19,7 @@ export default async function AdminMembersPage() {
 
   const { data: members } = await supabase
     .from('members')
-    .select('id, display_name, tier, residency_type, admin_role, created_at, last_active_at, member_private(real_name)')
+    .select('id, display_name, tier, residency_type, admin_role, created_at, last_active_at, contact_permission, member_private(real_name)')
     .in('tier', ['email_only', 'verified'])
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -30,13 +32,14 @@ export default async function AdminMembersPage() {
     admin_role: string | null
     created_at: string
     last_active_at: string | null
+    contact_permission: boolean | null
     member_private: { real_name: string | null } | { real_name: string | null }[] | null
   }
   const rows = (members ?? []) as Row[]
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <nav className="text-xs text-slate-500 flex gap-3">
           <Link href="/" className="hover:underline">← ホーム</Link>
           <Link href="/admin" className="hover:underline">管理</Link>
@@ -48,6 +51,9 @@ export default async function AdminMembersPage() {
           <h1 className="text-3xl font-serif font-bold">メンバー一覧（本登録済み）</h1>
           <p className="text-xs text-slate-500">
             メール確認済み・住所確認済み（本登録）の会員 {rows.length} 名。LINE登録のみの「ライト」会員は別画面。
+          </p>
+          <p className="text-xs text-slate-500">
+            各行の「お知らせを送る」から、その方だけに個別のお知らせを送れます（表示名で見つからないときは実名の列も確認してください）。
           </p>
         </header>
 
@@ -65,6 +71,8 @@ export default async function AdminMembersPage() {
                   <th className="p-3">権限</th>
                   <th className="p-3">登録日</th>
                   <th className="p-3">最終アクティブ</th>
+                  <th className="p-3">連絡許可</th>
+                  <th className="p-3">個別お知らせ</th>
                 </tr>
               </thead>
               <tbody>
@@ -88,6 +96,15 @@ export default async function AdminMembersPage() {
                       <td className="p-3 text-slate-500">{m.admin_role ?? '—'}</td>
                       <td className="p-3 text-slate-500">{new Date(m.created_at).toLocaleDateString('ja-JP')}</td>
                       <td className="p-3 text-slate-500">{m.last_active_at ? new Date(m.last_active_at).toLocaleDateString('ja-JP') : '—'}</td>
+                      <td className="p-3 text-slate-500">{m.contact_permission ? 'あり' : 'なし'}</td>
+                      <td className="p-3">
+                        <DirectNoticeButton
+                          memberId={m.id}
+                          displayName={m.display_name}
+                          realName={priv?.real_name ?? null}
+                          contactPermission={m.contact_permission}
+                        />
+                      </td>
                     </tr>
                   )
                 })}
@@ -95,6 +112,8 @@ export default async function AdminMembersPage() {
             </table>
           </div>
         )}
+
+        <DirectNoticeHistory />
       </div>
     </div>
   )

@@ -31,6 +31,7 @@ function adminClient() {
  * - best-effort：通知の失敗は呼び出し元のアクション（コメント投稿等）を失敗させない
  * - recipient と actor が同一人物の場合はスキップ（自分のアクションは通知しない）
  * - 戻り値で保存・プッシュの成否を返す（呼び出し側は無視してよい。試験通知の結果表示に使う）
+ * - notificationId は作った通知の行ID。運営の個別お知らせ（direct_notices）が「読まれたか」を引くために使う
  */
 export async function insertNotification(input: {
   recipientId: string
@@ -39,21 +40,25 @@ export async function insertNotification(input: {
   title: string
   body?: string
   linkUrl?: string
-}): Promise<{ inserted: boolean; pushed: number; error?: string }> {
+}): Promise<{ inserted: boolean; pushed: number; error?: string; notificationId?: string }> {
   try {
     if (input.actorId && input.actorId === input.recipientId) return { inserted: false, pushed: 0 }
 
     const admin = adminClient()
     if (!admin) return { inserted: false, pushed: 0, error: 'サーバーの設定（SUPABASE_SERVICE_ROLE_KEY）がありません' }
 
-    const { error } = await admin.from('notifications').insert({
-      recipient_id: input.recipientId,
-      actor_id: input.actorId ?? null,
-      kind: input.kind,
-      title: input.title.slice(0, 200),
-      body: input.body ?? null,
-      link_url: input.linkUrl ?? null,
-    })
+    const { data: created, error } = await admin
+      .from('notifications')
+      .insert({
+        recipient_id: input.recipientId,
+        actor_id: input.actorId ?? null,
+        kind: input.kind,
+        title: input.title.slice(0, 200),
+        body: input.body ?? null,
+        link_url: input.linkUrl ?? null,
+      })
+      .select('id')
+      .single()
 
     // Webプッシュ（購読者のみ・best-effort）。スリープ中の端末にも届く
     const pushed = await sendWebPush({
@@ -62,7 +67,7 @@ export async function insertNotification(input: {
       body: input.body,
       url: input.linkUrl,
     })
-    return { inserted: !error, pushed, error: error?.message }
+    return { inserted: !error, pushed, error: error?.message, notificationId: created?.id as string | undefined }
   } catch {
     // best-effort：通知失敗は本体処理に影響させない
     return { inserted: false, pushed: 0, error: '予期しないエラー' }

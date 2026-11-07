@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import DirectNoticeButton from '../_components/DirectNoticeButton'
+import DirectNoticeHistory from '../_components/DirectNoticeHistory'
 
 const RESIDENCY_LABEL: Record<string, string> = {
   citizen: '市民',
@@ -17,7 +19,7 @@ export default async function AdminMembersLightPage() {
 
   const { data: members } = await supabase
     .from('members')
-    .select('id, display_name, residency_type, created_at, last_active_at')
+    .select('id, display_name, residency_type, created_at, last_active_at, contact_permission')
     .eq('tier', 'light')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -28,6 +30,7 @@ export default async function AdminMembersLightPage() {
     residency_type: string | null
     created_at: string
     last_active_at: string | null
+    contact_permission: boolean | null
   }
   const rows = (members ?? []) as Row[]
 
@@ -59,6 +62,8 @@ export default async function AdminMembersLightPage() {
                   <th className="p-3">居住区分</th>
                   <th className="p-3">登録日</th>
                   <th className="p-3">最終アクティブ</th>
+                  <th className="p-3">連絡許可</th>
+                  <th className="p-3">個別お知らせ</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,12 +73,23 @@ export default async function AdminMembersLightPage() {
                     <td className="p-3 text-slate-500">{RESIDENCY_LABEL[m.residency_type ?? ''] ?? '—'}</td>
                     <td className="p-3 text-slate-500">{new Date(m.created_at).toLocaleDateString('ja-JP')}</td>
                     <td className="p-3 text-slate-500">{m.last_active_at ? new Date(m.last_active_at).toLocaleDateString('ja-JP') : '—'}</td>
+                    <td className="p-3 text-slate-500">{m.contact_permission ? 'あり' : 'なし'}</td>
+                    <td className="p-3">
+                      <DirectNoticeButton
+                        memberId={m.id}
+                        displayName={m.display_name}
+                        realName={null}
+                        contactPermission={m.contact_permission}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        <DirectNoticeHistory />
       </div>
     </div>
   )
