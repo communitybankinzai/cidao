@@ -9,6 +9,10 @@
       "schedule": "12 23 * * *"
     },
     {
+      "path": "/api/cron/attendance-ask",
+      "schedule": "30 1 * * *"
+    },
+    {
       "path": "/api/cron/event-digest",
       "schedule": "0 9 * * *"
     },

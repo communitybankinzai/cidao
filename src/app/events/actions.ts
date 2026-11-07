@@ -465,3 +465,40 @@ export async function markAttendance(eventId: string, memberId: string, attended
   if (error) throw new Error(`出欠記録失敗: ${error.message}`)
   revalidatePath(`/events/${eventId}`)
 }
+
+// 開催後の参加者数だけを保存する（「人数のお願い」ページと、運営の根拠一覧の入力欄から呼ぶ）。
+// 編集してよい人かどうかは DB（RLS・can_edit_event）が決める。更新できた行が0なら権限なし。
+// 返す値は画面に出す文言だけで、会員の情報は含まない。
+export async function reportAttendance(
+  eventId: string,
+  count: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!UUID_RE.test(eventId)) return { ok: false, error: 'イベントの指定が正しくありません' }
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { ok: false, error: 'ログインが必要です' }
+
+    const { data: ev } = await supabase.from('events').select('start_at, attendee_count').eq('id', eventId).maybeSingle()
+    if (!ev) return { ok: false, error: 'イベントが見つかりません' }
+    const { data: isAdmin } = await supabase.rpc('is_admin')
+
+    const columns = decideAttendeeColumns({
+      count,
+      startMs: new Date(ev.start_at).getTime(),
+      nowMs: Date.now(),
+      currentCount: ev.attendee_count ?? null,
+      isAdmin: !!isAdmin,
+    })
+    if (Object.keys(columns).length > 0) {
+      const { data: updated, error } = await supabase.from('events').update(columns).eq('id', eventId).select('id')
+      if (error) return { ok: false, error: '保存できませんでした。時間をおいてもう一度お試しください' }
+      if (!updated || updated.length === 0) return { ok: false, error: 'この催しの人数を入れる権限がありません' }
+    }
+    revalidatePath('/events/kodomo')
+    revalidatePath('/me/attendance')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : '保存できませんでした' }
+  }
+}

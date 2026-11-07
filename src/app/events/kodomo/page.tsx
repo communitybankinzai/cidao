@@ -9,6 +9,7 @@ import { loadChildPlaceReport } from '@/lib/child-place-data'
 import type { EvidenceRow } from '@/lib/child-place-evidence'
 import EventsBrowser, { type EventRow, type OrgInfo } from '../_components/EventsBrowser'
 import { PrintButton } from './_components/PrintButton'
+import { AttendanceQuickForm } from '../_components/AttendanceQuickForm'
 
 const DESCRIPTION =
   '印西市内で開かれている、子どもや親子が安心して過ごせる場（子ども食堂・プレーパーク・おやこカフェ・図書館のおはなし会など）をまとめたカレンダーです。'
@@ -92,7 +93,7 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
         主催の方へ：イベントの{' '}
         <Link href="/events/new" className="underline">登録</Link>
         {' '}・編集の画面にある「子どもの居場所」の欄で、このカレンダーに載せるかどうかを選べます。分からなければ「自動」のままで構いません。
-        開催後は、編集の画面で参加者数を入れていただくと、この実績に反映されます。
+        開催後は、<Link href="/me/attendance" className="underline">参加者数のお願いのページ</Link>で人数を入れていただくと、この実績に反映されます。
       </p>
     </PageShell>
   )
@@ -284,6 +285,12 @@ function EvidenceSection({ evidence, isAdmin }: { evidence: EvidenceRow[]; isAdm
         上の数字は、ここに並べた1件ずつを数えたものです。催しの名前から CiDAO のページへ、「出典」から元の情報（主催者の投稿・市のカレンダーなど）へ移れます。
       </p>
 
+      {isAdmin && (
+        <p className="text-xs text-amber-800 dark:text-amber-300 print:hidden">
+          運営の方へ：開催済みの催しは「参加者数」の欄から人数を入れられます（主催団体から聞き取った人数など）。空にして保存すると「不明」に戻ります。
+        </p>
+      )}
+
       <div className="overflow-x-auto rounded-lg border bg-white dark:bg-slate-900">
         <table className="w-full min-w-[40rem] text-xs">
           <thead className="bg-slate-50 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -308,13 +315,20 @@ function EvidenceSection({ evidence, isAdmin }: { evidence: EvidenceRow[]; isAdm
                 <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                   {!r.held ? (
                     <span className="text-slate-400">これから</span>
+                  ) : isAdmin ? (
+                    <>
+                      {/* 印刷では入力欄でなく数字を出す */}
+                      <span className="hidden print:inline">{r.attendee !== null ? `${r.attendee}人` : '不明'}</span>
+                      <span className="print:hidden">
+                        <AttendanceQuickForm eventId={r.id} initial={r.attendee} title={r.title} />
+                        {r.attendee !== null && r.attendeeSource && <span className="ml-1 text-[10px] text-slate-400">（{r.attendeeSource}）</span>}
+                      </span>
+                    </>
                   ) : r.attendee !== null ? (
                     <>
                       {r.attendee}人
                       {r.attendeeSource && <span className="ml-1 text-[10px] text-slate-400">（{r.attendeeSource}）</span>}
                     </>
-                  ) : isAdmin ? (
-                    <Link href={`/events/${r.id}/edit`} className="text-amber-700 underline print:hidden dark:text-amber-300">人数を入れる</Link>
                   ) : (
                     <span className="text-slate-400">不明</span>
                   )}
