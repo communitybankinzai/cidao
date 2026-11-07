@@ -1,5 +1,6 @@
 import { FeatureEyebrow } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createProposal } from '../actions'
@@ -69,6 +70,14 @@ export default async function NewProposalPage() {
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">新しい提案</h1>
           <p className="text-sm text-slate-500 mt-2">
             投稿後 48 時間の議論期間を経て、自動的に投票期間へ移行します。投票の締切は四半期の末日が既定です
+          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+            書き方に迷ったら、
+            <Link href="/bug-report?source=cidao_app&category=question&about=proposal" className="text-blue-600 hover:underline mx-1">運営に相談</Link>
+            してください（返事はベル🔔に届きます。考えていることをそのまま送ってもらえば、運営が文を整えてあなたの名前で載せることもできます）。
+            書き方の説明は
+            <Link href="/help#proposals" className="text-blue-600 hover:underline mx-1">使い方ヘルプ</Link>
+            にあります。
           </p>
         </header>
 

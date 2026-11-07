@@ -13,6 +13,7 @@ const STATUS_LABEL: Record<string, string> = {
 const CATEGORY_LABEL: Record<string, string> = {
   bug: '不具合',
   feature_request: '要望',
+  question: '質問・相談',
   other: 'その他',
 }
 const SOURCE_LABEL: Record<string, string> = {

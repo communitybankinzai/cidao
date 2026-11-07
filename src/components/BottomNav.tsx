@@ -62,7 +62,7 @@ const MENU_GROUPS: {
     items: [
       { href: '/help', icon: CircleHelp, label: '使い方ヘルプ', note: '通知の受け取り方・止め方' },
       { href: '/install', icon: Smartphone, label: 'ホーム画面に追加', note: 'アプリのように使う' },
-      { href: '/bug-report', icon: Bug, label: '不具合を知らせる', note: 'おかしい動きを報告する' },
+      { href: '/bug-report', icon: Bug, label: '運営に相談・不具合を知らせる', note: '使い方の質問・おかしい動きの報告' },
     ],
   },
 ]

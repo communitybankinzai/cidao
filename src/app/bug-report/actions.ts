@@ -17,13 +17,15 @@ import { insertNotification } from '@/lib/notify'
 const ADMIN_NOTIFY_EMAIL = process.env.ADMIN_NOTIFY_EMAIL ?? 'communitybankinzai@gmail.com'
 
 const SOURCES = ['cbi_site', 'cidao_app'] as const
-const CATEGORIES = ['bug', 'feature_request', 'other'] as const
+// question＝使い方の質問・相談（提案の書き方など。2026-11-07 事業主決定A。DB の check 制約も同じ4つ）
+const CATEGORIES = ['bug', 'feature_request', 'question', 'other'] as const
 type Source = (typeof SOURCES)[number]
 type Category = (typeof CATEGORIES)[number]
 
 const CATEGORY_LABEL: Record<Category, string> = {
   bug: '不具合',
   feature_request: '要望',
+  question: '使い方の質問・相談',
   other: 'その他',
 }
 const SOURCE_LABEL: Record<Source, string> = {
@@ -89,7 +91,7 @@ export async function submitBugReport(input: {
       const { error: sendErr } = await resend.emails.send({
         from,
         to: ADMIN_NOTIFY_EMAIL,
-        subject: `【${SOURCE_LABEL[input.source]}】${CATEGORY_LABEL[input.category]}の報告が届きました`,
+        subject: `【${SOURCE_LABEL[input.source]}】${CATEGORY_LABEL[input.category]}${input.category === 'question' ? '' : 'の報告'}が届きました`,
         text: [
           `${SOURCE_LABEL[input.source]} から新しい報告が届きました。`,
           ``,
@@ -136,7 +138,7 @@ export async function submitBugReport(input: {
       await Promise.allSettled((admins ?? []).filter(a => !a.deleted_at).map(a =>
         insertNotification({
           recipientId: a.id, actorId: user?.id ?? null, kind: 'system',
-          title: `【${SOURCE_LABEL[input.source]}】${CATEGORY_LABEL[input.category]}の報告が届きました`,
+          title: `【${SOURCE_LABEL[input.source]}】${CATEGORY_LABEL[input.category]}${input.category === 'question' ? '' : 'の報告'}が届きました`,
           linkUrl: '/admin/bug-reports',
         })))
     }

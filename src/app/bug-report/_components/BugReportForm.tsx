@@ -5,16 +5,27 @@ import { Button } from '@/components/ui/button'
 import { submitBugReport } from '../actions'
 
 const CATEGORIES = [
+  { value: 'question', label: '使い方の質問・相談（提案の書き方など）' },
   { value: 'bug', label: '不具合（動かない・表示がおかしい）' },
   { value: 'feature_request', label: '要望（こうしてほしい）' },
   { value: 'other', label: 'その他' },
 ] as const
+export type BugReportCategory = (typeof CATEGORIES)[number]['value']
+
+const PLACEHOLDER: Record<BugReportCategory, string> = {
+  question: '例: 提案を出してみたいのですが、何をどう書けばよいかわかりません。考えていることは「○○」です。',
+  bug: '例: スマホでログインボタンを押すと画面が白くなって何も表示されません。機種はiPhone、ブラウザはSafariです。',
+  feature_request: '例: イベント一覧を地図でも見られるようにしてほしいです。',
+  other: '',
+}
 
 export function BugReportForm({
   source,
   isLoggedIn,
   defaultEmail,
   contextLabel,
+  topicLabel,
+  defaultCategory,
   defaultPageUrl = '',
 }: {
   source: 'cbi_site' | 'cidao_app'
@@ -22,10 +33,14 @@ export function BugReportForm({
   defaultEmail: string
   /** 通知から来た場合の件名（「〇〇について」と画面に出し、本文の先頭にも入れる） */
   contextLabel?: string
+  /** 相談の入口から来た場合の話題（例「提案の書き方」。画面に出し、本文の先頭にも入れる） */
+  topicLabel?: string
+  /** 最初に選んでおく種別（相談の入口からは question） */
+  defaultCategory?: BugReportCategory
   defaultPageUrl?: string
 }) {
-  const [category, setCategory] = useState<'bug' | 'feature_request' | 'other'>(
-    contextLabel ? 'other' : 'bug',
+  const [category, setCategory] = useState<BugReportCategory>(
+    defaultCategory ?? (contextLabel ? 'other' : 'bug'),
   )
   const [description, setDescription] = useState('')
   const [pageUrl, setPageUrl] = useState(defaultPageUrl)
@@ -38,9 +53,10 @@ export function BugReportForm({
   if (result) {
     return (
       <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm space-y-2">
-        <p className="font-semibold text-emerald-900 dark:text-emerald-100">✓ 報告を送信しました</p>
+        <p className="font-semibold text-emerald-900 dark:text-emerald-100">✓ 送信しました</p>
         <p className="text-xs text-emerald-700 dark:text-emerald-300">
-          ご協力ありがとうございます。運営が確認のうえ対応します。
+          ありがとうございます。運営が確認のうえ対応します。
+          {isLoggedIn ? '返事は画面右上のベル🔔に届きます。' : '返事が必要な場合は、メールアドレスの入力があれば運営から連絡します。'}
         </p>
         <button
           type="button"
@@ -51,7 +67,7 @@ export function BugReportForm({
           }}
           className="text-xs text-emerald-700 dark:text-emerald-300 underline hover:no-underline"
         >
-          もう一件報告する
+          もう一件送る
         </button>
       </div>
     )
@@ -63,6 +79,15 @@ export function BugReportForm({
         <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded p-3">
           <p className="text-[10px] text-slate-500">この通知についてのご意見・ご報告</p>
           <p className="text-sm font-medium mt-0.5">{contextLabel}</p>
+        </div>
+      )}
+      {topicLabel && (
+        <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded p-3">
+          <p className="text-[10px] text-slate-500">相談したいこと</p>
+          <p className="text-sm font-medium mt-0.5">{topicLabel}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+            考えていることを、そのままの言葉で書いてください。運営が文を整えて、あなたの名前で提案として載せることもできます。
+          </p>
         </div>
       )}
 
@@ -91,7 +116,7 @@ export function BugReportForm({
           onChange={(e) => setDescription(e.target.value)}
           rows={6}
           maxLength={2000}
-          placeholder="例: スマホでログインボタンを押すと画面が白くなって何も表示されません。機種はiPhone、ブラウザはSafariです。"
+          placeholder={PLACEHOLDER[category]}
           className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
         />
         <p className="text-[10px] text-slate-400 text-right">{description.trim().length} / 2000 字</p>
@@ -149,10 +174,12 @@ export function BugReportForm({
                 const r = await submitBugReport({
                   source,
                   category,
-                  // どの通知についての意見かを運営側で分かるように先頭へ付ける
+                  // どの通知・どの話題についての連絡かを運営側で分かるように先頭へ付ける
                   description: contextLabel
                     ? `【通知「${contextLabel}」について】\n${description}`
-                    : description,
+                    : topicLabel
+                      ? `【${topicLabel}について】\n${description}`
+                      : description,
                   pageUrl: pageUrl.trim() || undefined,
                   reporterEmail: reporterEmail.trim() || undefined,
                   reporterName: reporterName.trim() || undefined,

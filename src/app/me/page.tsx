@@ -515,11 +515,11 @@ export default async function MyPage({
           )}
         </section>
 
-        {/* 不具合・要望の報告 */}
+        {/* 運営への相談・不具合の報告（返事はベルに届く） */}
         <section className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
-          <span className="text-sm">不具合・ご要望の報告</span>
+          <span className="text-sm">運営に相談・不具合を知らせる</span>
           <Link href="/bug-report?source=cidao_app">
-            <Button variant="outline" size="sm">報告する</Button>
+            <Button variant="outline" size="sm">相談・報告する</Button>
           </Link>
         </section>
 

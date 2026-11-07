@@ -59,7 +59,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/help': 'ヘルプ',
   '/install': 'アプリ追加',
   '/login': 'ログイン',
-  '/bug-report': '不具合報告',
+  '/bug-report': '相談・不具合報告',
 }
 
 function pct(current: number, prev: number): string {

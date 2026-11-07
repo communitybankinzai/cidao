@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 // 目次。項目が増えたらここに追記する
 const TOC = [
   { id: 'notifications', label: '通知について（届くもの・止め方）' },
+  { id: 'proposals', label: '提案の出し方（迷ったら運営に相談）' },
 ]
 
 export default function HelpPage() {
@@ -21,8 +22,8 @@ export default function HelpPage() {
         description={
           <>
             CiDAOの使い方を説明します。わからないことや困ったことがあれば
-            <Link href="/bug-report" className="mx-1 text-blue-600 hover:underline">不具合・ご要望の報告</Link>
-            からお知らせください。
+            <Link href="/bug-report?source=cidao_app&category=question" className="mx-1 text-blue-600 hover:underline">運営に相談・不具合を知らせる</Link>
+            からお知らせください。返事は画面右上のベル🔔に届きます。
           </>
         }
       />
@@ -130,8 +131,47 @@ export default function HelpPage() {
         </div>
       </section>
 
+      <section
+        id="proposals"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-5 scroll-mt-16"
+      >
+        <div>
+          <h2 className="text-lg font-semibold">📮 提案の出し方</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+            「こんなことをやってみたい」「こうなったらいいのに」を、みんなに聞いてみる仕組みです。
+            まず気軽に出して、反応を見るための場なので、完成した企画書である必要はありません。
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">手順</h3>
+          <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-decimal pl-5">
+            <li>
+              ログインして
+              <Link href="/proposals" className="text-blue-600 hover:underline mx-1">提案一覧</Link>
+              を開き、「提案する」を押す
+            </li>
+            <li>タイトル（60字まで）と本文（2000字まで）を書く。本文は「なぜやりたいか」「何をするか」「費用の目安」があれば十分です</li>
+            <li>カテゴリ・予算規模・拘束力の種類・実施予定日を選ぶ。関連するページがあればリンクを3つまで添える</li>
+            <li>投稿すると、48時間の議論期間のあと自動で投票が始まります。投票の締切は四半期の末日（自分で日付を指定することもできます）</li>
+          </ol>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">書き方に迷ったら</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            <Link href="/bug-report?source=cidao_app&category=question&about=proposal" className="text-blue-600 hover:underline">運営に相談する</Link>
+            から、考えていることをそのままの言葉で送ってください。運営が文を整えて、あなたの名前で提案として載せることもできます。
+            返事は画面右上のベル🔔に届きます。
+          </p>
+          <p className="text-xs text-slate-500">
+            ※ 道路の修繕など市に直接届けたほうが早いものは、提案を書く画面の「市の制度との使い分け」に窓口をまとめています。
+          </p>
+        </div>
+      </section>
+
       <p className="text-xs text-slate-500 text-center">
-        この先、提案の出し方やFreeFree掲示板の使い方も順次ここに追加していきます。
+        この先、FreeFree掲示板の使い方も順次ここに追加していきます。
       </p>
     </PageShell>
   )
