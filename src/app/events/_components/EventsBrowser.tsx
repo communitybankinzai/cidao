@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { categoryLabel } from '@/lib/categories'
 import { TYPE_LABEL } from '@/lib/org-labels'
+import { CHILD_PLACE_KINDS, childPlaceLabel, tagLabel, type ChildPlaceTag } from '@/lib/child-place'
 
 const JST = 'Asia/Tokyo'
 const hmFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -30,6 +31,7 @@ export type EventRow = {
   organizer_id: string
   organizer_name_text: string | null
   flyer_image_url: string | null
+  child_place?: 'ibasho' | 'oyako' | null
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
@@ -53,11 +55,15 @@ type Props = {
   view: 'calendar' | 'list'
   currentUserId?: string | null
   isAdmin?: boolean
+  // 子どもの居場所での絞り込み（URL の ?tag=。null＝絞り込みなし）。events は絞り込み済みで届く
+  tag?: ChildPlaceTag | null
+  // 月送り・ビュー切替のリンクの土台（既定は /events。専用ページでは /events/kodomo）
+  basePath?: string
 }
 
 const TYPE_ORDER: Array<'civic_group' | 'business' | 'government'> = ['civic_group', 'business', 'government']
 
-export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false }: Props) {
+export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false, tag = null, basePath = '/events' }: Props) {
   const [query, setQuery] = useState('')
   const [orgFilter, setOrgFilter] = useState<string>('all')  // 'all' | 'member_only' | orgId
   const [typeFilter, setTypeFilter] = useState<string | null>(null)  // null | 'civic_group' | 'business' | 'government'
@@ -156,13 +162,20 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const prevYm = (() => { const total = year * 12 + (month - 1) - 1; return `${Math.floor(total / 12)}-${String((total % 12 + 12) % 12 + 1).padStart(2, '0')}` })()
   const nextYm = (() => { const total = year * 12 + (month - 1) + 1; return `${Math.floor(total / 12)}-${String((total % 12 + 12) % 12 + 1).padStart(2, '0')}` })()
   const thisYm = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  const viewSuffix = view === 'list' ? '&view=list' : ''
+  // 月送り・ビュー切替でも ?tag= を引き継ぐ（共有したURLのまま月をめくれるように）
+  const tagSuffix = tag ? `&tag=${tag}` : ''
+  const viewSuffix = (view === 'list' ? '&view=list' : '') + tagSuffix
+  const calendarSuffix = tagSuffix
 
   const selectedYm = `${year}-${String(month).padStart(2, '0')}`
 
+  function tagHref(t: ChildPlaceTag): string {
+    return `${basePath}?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}&tag=${t}`
+  }
+
   function jumpToYm(ym: string) {
     if (ym === selectedYm) return
-    startNav(() => router.push(`/events?ym=${ym}${viewSuffix}`))
+    startNav(() => router.push(`${basePath}?ym=${ym}${viewSuffix}`))
   }
 
   // 日付ごと集約（フィルタ後のもの）
@@ -207,17 +220,17 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
       {/* 月送り + ビュー切替 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
-          <Link href={`/events?ym=${prevYm}${viewSuffix}`}>
+          <Link href={`${basePath}?ym=${prevYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="前の月">‹</Button>
           </Link>
           <span className="mx-1 flex items-center gap-1">
             <YearPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
             <MonthPicker year={year} month={month} today={today} disabled={navPending} onPick={jumpToYm} />
           </span>
-          <Link href={`/events?ym=${nextYm}${viewSuffix}`}>
+          <Link href={`${basePath}?ym=${nextYm}${viewSuffix}`}>
             <Button variant="outline" size="sm" aria-label="次の月">›</Button>
           </Link>
-          <Link href={`/events?ym=${thisYm}${viewSuffix}`}>
+          <Link href={`${basePath}?ym=${thisYm}${viewSuffix}`}>
             <Button variant="ghost" size="sm">今月</Button>
           </Link>
           {navPending && (
@@ -228,10 +241,10 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           )}
         </div>
         <div className="flex items-center gap-1 text-xs">
-          <Link href={`/events?ym=${year}-${String(month).padStart(2, '0')}`}>
+          <Link href={`${basePath}?ym=${year}-${String(month).padStart(2, '0')}${calendarSuffix}`}>
             <Button variant={view === 'calendar' ? 'default' : 'outline'} size="sm">カレンダー</Button>
           </Link>
-          <Link href={`/events?ym=${year}-${String(month).padStart(2, '0')}&view=list`}>
+          <Link href={`${basePath}?ym=${year}-${String(month).padStart(2, '0')}&view=list${tagSuffix}`}>
             <Button variant={view === 'list' ? 'default' : 'outline'} size="sm">リスト</Button>
           </Link>
         </div>
@@ -246,6 +259,27 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           placeholder="イベント名・場所・主催団体・説明で検索"
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
+
+        {/* 子どもの居場所での絞り込み（URL の ?tag=。押すとページを読み直す＝そのまま共有・埋め込みできる） */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-500 mr-0.5">🧒 子どもの居場所:</span>
+          <TagChip href={`/events?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}`} active={!tag}>
+            すべてのイベント
+          </TagChip>
+          <TagChip href={tagHref('kodomo')} active={tag === 'kodomo'}>
+            子どもの居場所（すべて）
+          </TagChip>
+          {CHILD_PLACE_KINDS.map((k) => (
+            <TagChip key={k.key} href={tagHref(k.key)} active={tag === k.key} title={k.desc}>
+              {k.label}
+            </TagChip>
+          ))}
+        </div>
+        {tag && (
+          <p className="text-xs text-slate-500">
+            「{tagLabel(tag)}」の催しだけを表示しています。目印は、題名・主催名からの自動判定と、主催者・運営の確認で付けています。付いていない催しは載りません。
+          </p>
+        )}
 
         {/* 種別フィルタ */}
         <div className="flex flex-wrap gap-1.5">
@@ -517,6 +551,24 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
     >
       {children}
     </button>
+  )
+}
+
+// 子どもの居場所の絞り込みチップ（リンク。サーバー側で絞って読み直す）
+function TagChip({ href, active, title, children }: { href: string; active: boolean; title?: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      title={title}
+      aria-current={active ? 'true' : undefined}
+      className={`px-2.5 py-1 rounded-full text-xs border transition ${
+        active
+          ? 'bg-accent-strong text-accent-strong-fg border-accent-strong'
+          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-slate-400'
+      }`}
+    >
+      {children}
+    </Link>
   )
 }
 
@@ -853,6 +905,9 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
                       </div>
                       <div className="flex gap-2 text-xs flex-wrap items-center">
                         <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(e.category)}</span>
+                        {e.child_place && (
+                          <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 rounded">🧒 {childPlaceLabel(e.child_place)}</span>
+                        )}
                         <span className="text-slate-500">主催: {organizerLabel(e)}</span>
                         {info && info.type !== 'civic_group' && (
                           <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">{TYPE_LABEL[info.type] ?? info.type}</span>

@@ -10,6 +10,8 @@ import { updateEvent, deleteEvent } from '../../actions'
 import { ImageScanField } from '../../new/_components/ImageScanField'
 import { OrganizerPicker, ORGANIZER_EXTERNAL, ORGANIZER_MEMBER } from '../../new/_components/OrganizerPicker'
 import { DeleteEventButton } from './_components/DeleteEventButton'
+import { ChildPlaceField } from '../../_components/ChildPlaceField'
+import { childPlaceInitialInput } from '@/lib/child-place'
 
 // JST datetime-local 用の文字列（YYYY-MM-DDTHH:MM）に変換
 function toLocalDatetime(iso: string): string {
@@ -112,6 +114,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       flyer_image_url,
       website_url: (formData.get('website_url') as string | null) || undefined,
       form_url: (formData.get('form_url') as string | null) || undefined,
+      child_place: String(formData.get('child_place') ?? ''),
     })
   }
 
@@ -139,6 +142,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
               {PROPOSAL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </L>
+          <ChildPlaceField
+            defaultValue={childPlaceInitialInput(event)}
+            autoValue={event.child_place_checked ? null : event.child_place}
+          />
           <OrganizerPicker
             memberOrgs={memberOrgs}
             allOrgs={allOrgs}

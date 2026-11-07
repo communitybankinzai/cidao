@@ -9,6 +9,7 @@ import { notifyAllMembers } from '@/lib/notify'
 import { wantsInstantEvent } from '@/lib/event-notify-mode'
 import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
+import { childPlaceColumns } from '@/lib/child-place'
 
 type CreateInput = {
   title: string
@@ -26,6 +27,8 @@ type CreateInput = {
   flyer_image_url?: string
   website_url?: string
   form_url?: string
+  // 子どもの居場所の目印。'' | 'ibasho' | 'oyako' | 'none'（'' は自動判定にまかせる）
+  child_place?: string
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -131,6 +134,7 @@ export async function createEvent(input: CreateInput) {
       flyer_image_url: input.flyer_image_url?.trim() || null,
       website_url: input.website_url?.trim() || null,
       form_url: input.form_url?.trim() || null,
+      ...childPlaceColumns(input.child_place),
       status: 'open',
     })
     .select('id')
@@ -207,6 +211,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
         proxy_registration: isProxy,
         proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
         flyer_image_url: input.flyer_image_url?.trim() || null,
+        ...childPlaceColumns(input.child_place),
         status: 'open',
       })
       .select('id')
@@ -273,6 +278,8 @@ type UpdateInput = {
   flyer_image_url?: string | null
   website_url?: string
   form_url?: string
+  // 子どもの居場所の目印。'' のときは今の値を触らない
+  child_place?: string
 }
 
 export async function updateEvent(input: UpdateInput) {
@@ -303,6 +310,7 @@ export async function updateEvent(input: UpdateInput) {
       proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
       website_url: input.website_url?.trim() || null,
       form_url: input.form_url?.trim() || null,
+      ...childPlaceColumns(input.child_place),
       // input.flyer_image_url が undefined のときは触らない（"" の場合のみ NULL クリア）
       ...(input.flyer_image_url === undefined
         ? {}

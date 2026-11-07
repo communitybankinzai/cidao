@@ -3,49 +3,16 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
+import { buildCells, fetchWindow, parseYm, ymdInJst } from '@/lib/events-calendar'
+import { parseChildPlaceTag, tagKinds } from '@/lib/child-place'
 import EventsBrowser, { type EventRow, type OrgInfo } from './_components/EventsBrowser'
 
-const JST = 'Asia/Tokyo'
-const ymdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit', day: '2-digit' })
-function ymdInJst(date: Date): string { return ymdFmt.format(date) }
-
-// JST 基準の月初/月末の UTC 境界
-function monthRangeUtc(year: number, month: number): { startUtc: Date; endUtc: Date } {
-  const startUtc = new Date(Date.UTC(year, month - 1, 1, -9, 0, 0))
-  const endUtc = new Date(Date.UTC(year, month, 1, -9, 0, 0))
-  return { startUtc, endUtc }
-}
-
-function parseYm(raw: string | undefined): { y: number; m: number } {
-  if (raw && /^\d{4}-\d{2}$/.test(raw)) {
-    const [y, m] = raw.split('-').map(Number)
-    if (m >= 1 && m <= 12) return { y, m }
-  }
-  const now = new Date()
-  return {
-    y: Number(new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric' }).format(now)),
-    m: Number(new Intl.DateTimeFormat('en-CA', { timeZone: JST, month: '2-digit' }).format(now)),
-  }
-}
-
-// JST 基準で月の前後余白を含む42日（6週）のカレンダーセル
-function buildCells(year: number, month: number): string[] {
-  const firstUtc = new Date(Date.UTC(year, month - 1, 1, -9, 0, 0))
-  const wdFmt = new Intl.DateTimeFormat('en-US', { timeZone: JST, weekday: 'short' })
-  const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const firstWd = WD.indexOf(wdFmt.format(firstUtc))
-  const startMs = firstUtc.getTime() - firstWd * 86_400_000
-  const cells: string[] = []
-  for (let i = 0; i < 42; i++) {
-    cells.push(ymdInJst(new Date(startMs + i * 86_400_000)))
-  }
-  return cells
-}
-
-export default async function EventsPage({ searchParams }: { searchParams: Promise<{ ym?: string; view?: string }> }) {
+export default async function EventsPage({ searchParams }: { searchParams: Promise<{ ym?: string; view?: string; tag?: string }> }) {
   const sp = await searchParams
   const { y, m } = parseYm(sp.ym)
   const view: 'calendar' | 'list' = sp.view === 'list' ? 'list' : 'calendar'
+  // 子どもの居場所での絞り込み（?tag=kodomo|ibasho|oyako）。知らない値は絞り込みなし
+  const tag = parseChildPlaceTag(sp.tag)
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -54,22 +21,17 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   // 編集ページ側で判定されるため、ここでは1件ずつ RPC を呼ばずに済む条件だけを見る。
   const { data: isAdmin } = user ? await supabase.rpc('is_admin') : { data: false }
 
-  const { startUtc, endUtc } = monthRangeUtc(y, m)
-  const fetchStart = new Date(startUtc.getTime() - 7 * 86_400_000)
   // リスト表示は「選択月から6ヶ月先」まで連続表示するため取得範囲を広げる。カレンダー表示は単月のまま。
-  const listEndUtc = monthRangeUtc(...(() => {
-    const total = y * 12 + (m - 1) + 6
-    return [Math.floor(total / 12), (total % 12) + 1] as [number, number]
-  })()).startUtc
-  const fetchEnd = new Date((view === 'list' ? listEndUtc : endUtc).getTime() + 7 * 86_400_000)
+  const { fetchStart, fetchEnd } = fetchWindow(y, m, view)
 
-  const { data: events } = await supabase
+  let eventsQuery = supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())
-    .order('start_at', { ascending: true })
+  if (tag) eventsQuery = eventsQuery.in('child_place', tagKinds(tag))
+  const { data: events } = await eventsQuery.order('start_at', { ascending: true })
 
   const rows: EventRow[] = (events ?? []) as EventRow[]
 
@@ -122,6 +84,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         view={view}
         currentUserId={user?.id ?? null}
         isAdmin={!!isAdmin}
+        tag={tag}
       />
     </PageShell>
   )

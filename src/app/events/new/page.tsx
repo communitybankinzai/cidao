@@ -8,6 +8,7 @@ import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { createEvent, createEventBulk } from '../actions'
 import { ImageScanField } from './_components/ImageScanField'
 import { OrganizerPicker } from './_components/OrganizerPicker'
+import { ChildPlaceField } from '../_components/ChildPlaceField'
 
 export default async function NewEventPage({ searchParams }: { searchParams: Promise<{ date?: string; error?: string }> }) {
   const sp = await searchParams
@@ -63,6 +64,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       flyer_image_url: (formData.get('flyer_image_url') as string | null) || undefined,
       website_url: (formData.get('website_url') as string | null) || undefined,
       form_url: (formData.get('form_url') as string | null) || undefined,
+      child_place: String(formData.get('child_place') ?? ''),
     }
     try {
       // チラシから複数日程を検出してチェックした場合は一括登録
@@ -110,6 +112,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
               {PROPOSAL_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </L>
+          <ChildPlaceField />
           <OrganizerPicker memberOrgs={memberOrgs} allOrgs={allOrgs} />
           <div className="grid md:grid-cols-2 gap-3">
             <L label="開始" req><input type="datetime-local" name="start_at" required className={inp} defaultValue={initialStart} /></L>
