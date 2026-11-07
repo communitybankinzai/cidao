@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { PushHowtoVideo } from '@/components/PushHowtoVideo'
 
 type Device = 'ios' | 'android' | 'other'
 
@@ -90,6 +91,15 @@ export default function InstallPage() {
           <li>アドレスバーのない、アプリと同じ画面表示</li>
           <li>声がけ・コメントなどのプッシュ通知を待機画面に受け取れる（iPhoneはホーム画面追加が通知の前提条件）</li>
         </ul>
+      </section>
+
+      {/* 動画（通知の受け取り方） */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-2">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">動画で見る（約40秒）</h2>
+        <p className="text-xs text-slate-500">
+          ホーム画面への追加から、通知を受け取る設定までを通しで見られます。
+        </p>
+        <PushHowtoVideo />
       </section>
 
       {/* iPhone */}

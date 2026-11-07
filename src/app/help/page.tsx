@@ -1,5 +1,6 @@
 import { PageShell } from '@/components/layout/PageShell'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { PushHowtoVideo } from '@/components/PushHowtoVideo'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
@@ -78,11 +79,12 @@ export default function HelpPage() {
           </p>
         </div>
 
-        <div className="space-y-2">
+        <div id="push-howto" className="space-y-2 scroll-mt-20">
           <h3 className="text-sm font-semibold">スマホにも通知を出したい</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             設定すると、CiDAOを開いていないときでもスマホの画面にお知らせが出ます。
           </p>
+          <PushHowtoVideo className="py-1" />
           <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-decimal pl-5">
             <li>
               <Link href="/me" className="text-blue-600 hover:underline">マイページ</Link>
