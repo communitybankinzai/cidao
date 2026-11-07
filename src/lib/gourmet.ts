@@ -97,14 +97,17 @@ export function roundCoord(v: number) {
   return Math.round(v * 1e6) / 1e6
 }
 
-// お店の参照：osm:n123 / osm:w123 / osm:r123（OpenStreetMap）・shop:<uuid>（市民の登録）・ff:<uuid>（FreeFreeの掲載）
+// お店の参照：osm:n123 / osm:w123 / osm:r123（OpenStreetMap）・poi:<12桁の16進>（OpenPOI API 由来・osm と同じ一覧ファイル）
+// ・shop:<uuid>（市民の登録）・ff:<uuid>（FreeFreeの掲載）
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-export type ShopRef = { kind: 'osm' | 'shop' | 'ff'; ref: string; id: string }
+export type ShopRef = { kind: 'osm' | 'poi' | 'shop' | 'ff'; ref: string; id: string }
 export function parseShopRef(raw: unknown): ShopRef | null {
   if (typeof raw !== 'string') return null
   const v = raw.trim().toLowerCase()
   let m = /^osm:([nwr]\d{1,12})$/.exec(v)
   if (m) return { kind: 'osm', ref: v, id: m[1] }
+  m = /^poi:([0-9a-f]{12})$/.exec(v)
+  if (m) return { kind: 'poi', ref: v, id: m[1] }
   m = new RegExp(`^(shop|ff):(${UUID})$`).exec(v)
   if (m) return { kind: m[1] as 'shop' | 'ff', ref: v, id: m[2] }
   return null

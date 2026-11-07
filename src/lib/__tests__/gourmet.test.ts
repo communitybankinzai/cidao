@@ -43,8 +43,12 @@ describe('入力の整え方', () => {
     expect(insideGourmetArea(35.8, 140.15)).toBe(true)
     expect(insideGourmetArea(35.68, 139.76)).toBe(false) // 東京駅
   })
-  it('お店の参照は osm・shop・ff の3種類', () => {
+  it('お店の参照は osm・poi・shop・ff の4種類', () => {
     expect(parseShopRef('osm:n123')).toEqual({ kind: 'osm', ref: 'osm:n123', id: 'n123' })
+    expect(parseShopRef('poi:0123abcd4567')).toEqual({ kind: 'poi', ref: 'poi:0123abcd4567', id: '0123abcd4567' })
+    expect(parseShopRef('POI:0123ABCD4567')?.ref).toBe('poi:0123abcd4567')
+    expect(parseShopRef('poi:0123abcd456')).toBeNull()
+    expect(parseShopRef('poi:0123abcd4567g')).toBeNull()
     expect(parseShopRef('shop:6f9619ff-8b86-d011-b42d-00c04fc964ff')?.kind).toBe('shop')
     expect(parseShopRef('ff:6F9619FF-8B86-D011-B42D-00C04FC964FF')?.id).toBe('6f9619ff-8b86-d011-b42d-00c04fc964ff')
     expect(parseShopRef('osm:x1')).toBeNull()

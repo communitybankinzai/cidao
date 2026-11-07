@@ -241,9 +241,9 @@ export async function POST(request: Request) {
   let shop: { ref: string; name: string; lat: number; lon: number } | null = null
   let newShopRow: ShopRow | null = null
   const ref = parseShopRef(field(form, 'shopRef'))
-  if (ref?.kind === 'osm') {
+  if (ref?.kind === 'osm' || ref?.kind === 'poi') {
     const map = await osmShops()
-    const hit = map?.get(ref.ref) // osm-shops.json の id は "osm:n123" の形
+    const hit = map?.get(ref.ref) // osm-shops.json の id は "osm:n123"（OpenStreetMap）か "poi:0123abcd4567"（OpenPOI API）の形
     if (map && !hit) return json(request, { error: 'unknown_shop' }, 400)
     if (hit) shop = { ref: ref.ref, name: hit.name, lat: hit.lat, lon: hit.lon }
     else {
