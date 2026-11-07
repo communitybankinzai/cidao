@@ -11,7 +11,9 @@
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { signupSourceLabel } from '@/lib/signup-source'
 import { AnalyzeButton } from './_components/AnalyzeButton'
 import { MapTilesUsageSection } from './_components/MapTilesUsageSection'
 import {
@@ -66,6 +68,10 @@ function pct(current: number, prev: number): string {
   return p >= 0 ? `+${p}%` : `${p}%`
 }
 
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86400_000).toISOString()
+}
+
 function jstNow(): string {
   return new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -91,6 +97,22 @@ export default async function AdminAnalyticsPage() {
   const byPath: PathRow[] = byPathRes.data ?? []
   const sources: SourceRow[] = sourcesRes.data ?? []
   const loadError = dailyRes.error?.message ?? byPathRes.error?.message ?? null
+
+  // SNS 告知リンク（utm 付き）から来て初めて登録した会員（2026-11-07）。members.signup_source は
+  // PageViewTracker／login が Cookie に覚えた utm を、初回ログインで auth/callback が書く。退会者は除く。
+  // members は RLS で他人の行が見えないため service_role で数える（人数と経路だけ。名前は出さない）
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const since90 = isoDaysAgo(90)
+  const signupRes = serviceUrl && serviceKey
+    ? await createSupabaseAdmin(serviceUrl, serviceKey, { auth: { persistSession: false } })
+        .from('members').select('signup_source, created_at').not('signup_source', 'is', null).is('deleted_at', null)
+        .gte('created_at', since90).order('created_at', { ascending: false }).limit(500)
+    : { data: null, error: null }
+  const signupRows = (signupRes.data ?? []) as { signup_source: string; created_at: string }[]
+  const signupBySource = Object.entries(
+    signupRows.reduce<Record<string, number>>((acc, r) => { acc[r.signup_source] = (acc[r.signup_source] ?? 0) + 1; return acc }, {}),
+  ).sort((a, b) => b[1] - a[1])
 
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date())
   const byDay = new Map(daily.map((r) => [r.day, r]))
@@ -221,6 +243,28 @@ export default async function AdminAnalyticsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-3">
+          <h2 className="text-lg font-semibold">経路つきの新規登録（直近90日）：{signupRows.length} 人</h2>
+          <p className="text-sm text-slate-500">
+            SNS の告知リンク（utm 付き）や３次元MAPの受付から来て、初めて CiDAO に登録した人数。初回ログインの時点で記録され、退会者は除いています。
+            リンクを踏んだだけの人は上の「SNS流入元別」に、登録まで進んだ人がここに出ます。
+          </p>
+          {signupRows.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">
+              経路つきの新規登録はまだありません（SNS の告知リンクは 2026-11-07 から utm 付きです）
+            </p>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {signupBySource.map(([k, n]) => (
+                <li key={k} className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800/60 py-1">
+                  <span>{signupSourceLabel(k)}</span>
+                  <span className="tabular-nums">{n} 人</span>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
 

@@ -8,7 +8,6 @@ import { daysBetweenYmd, jstToday } from '@/lib/freefree-dates'
 import { FOR_SHOPS_PATH, areaLabelFromLocation, gsiCreditLine, introOfBody } from '@/lib/freefree-import-core'
 
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
-const BOARD_URL = `${SITE_BASE}/freefree`
 
 export type SnsTarget = {
   target_type: 'freefree' | 'event' | 'org' | 'proposal'
@@ -43,14 +42,21 @@ const EVENT_HASHTAGS = ['#印西市', '#イベント情報']
 const ORG_HASHTAGS = ['#印西市', '#市民活動']
 const PROPOSAL_HASHTAGS = ['#印西市', '#CiDAO']
 
+// SNS に載せる CiDAO のリンクには媒体別の UTM を付ける（2026-11-07・事業主指示「改善提案実施」）。
+// 閲覧は /admin/analytics の「SNS流入元別」（PageViewTracker → page_views.source）、
+// 新規登録は members.signup_source（PageViewTracker・/login が Cookie に覚え、初回ログインで auth/callback が書く）で数える。
+// utm の各値は signup-source.ts の PART（英数字・-_・20文字まで）に収めること。
+// utm_medium は付けない（Threads の500字に収めるため。signup_source は「媒体:告知の種類」の2つ組になる）
+export function withUtm(path: string, medium: SnsMedium | undefined, campaign: string): string {
+  return `${SITE_BASE}${path}?utm_source=${medium ?? 'sns'}&utm_campaign=${campaign}`
+}
+
 function url(target: SnsTarget, medium?: SnsMedium): string {
   switch (target.target_type) {
-    case 'freefree': return `${SITE_BASE}/freefree/${target.target_id}`
-    case 'event':    return `${SITE_BASE}/events/${target.target_id}`
-    case 'org':      return `${SITE_BASE}/orgs/${target.target_id}`
-    case 'proposal':
-      // 提案告知は SNS からの流入を媒体別に測りたいので UTM を付ける
-      return `${SITE_BASE}/proposals/${target.target_id}?utm_source=${medium ?? 'sns'}&utm_medium=social&utm_campaign=proposal_announce`
+    case 'freefree': return withUtm(`/freefree/${target.target_id}`, medium, 'freefree_announce')
+    case 'event':    return withUtm(`/events/${target.target_id}`, medium, 'event_announce')
+    case 'org':      return withUtm(`/orgs/${target.target_id}`, medium, 'org_announce')
+    case 'proposal': return withUtm(`/proposals/${target.target_id}`, medium, 'proposal_announce')
   }
 }
 
@@ -127,7 +133,7 @@ export function freefreeCountdown(target: SnsTarget, today: string): string | nu
  */
 export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): string {
   const link = url(target, medium)
-  const forShops = `${SITE_BASE}${FOR_SHOPS_PATH}`
+  const forShops = withUtm(FOR_SHOPS_PATH, medium, 'freefree_forshops')
   const area = areaLabelFromLocation(target.location)
   const name = `${truncate(target.title, 40)}${area ? `（${area}）` : ''}`
   const intro = introOfBody(target.body)
@@ -143,7 +149,8 @@ export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): 
     // Instagram はキャプション内の URL を押せないため、プロフィールのリンクへ誘導する（提案告知と同じ運用）
     return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。検索なら「CiDAO 印西」で。${credit}\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
   }
-  return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\n▶ 掲載ページ\n${link}\n▶ お店の方へ\n${forShops}${credit}\n\n#印西市 #FreeFree #印西応援`
+  // 紹介文は 65 字まで（リンク2本の utm の分を含めて Threads の500字に収める・2026-11-07）
+  return `${prefix}\n${name}${intro ? `\n${truncate(intro, 65)}` : ''}\n\n${made}\n${ask}\n\n▶ 掲載ページ\n${link}\n▶ お店の方へ\n${forShops}${credit}\n\n#印西市 #FreeFree #印西応援`
 }
 
 export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = Date.now()): string {
@@ -169,8 +176,9 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
       // サーバーはUTCで動くため timeZone 指定必須（指定なしだと「8/15 01:00」のようにUTC時刻が出る）
       const when = target.start_at ? new Date(target.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
       // タイトル・場所・主催者名は自由入力。長いと Threads の500字で末尾の登録導線が切れるため上限をかける
-      const loc = target.location ? ` @ ${truncate(target.location, 40)}` : ''
-      body = `${truncate(target.title, 80)}${loc}\n${when}${target.organizer_name ? ` / ${truncate(target.organizer_name, 40)}` : ''}\n${truncate(target.body ?? '', 80)}`
+      // 上限は、リンク2本に utm が付いた分（2026-11-07）を含めて Threads の500字に収まる値
+      const loc = target.location ? ` @ ${truncate(target.location, 30)}` : ''
+      body = `${truncate(target.title, 60)}${loc}\n${when}${target.organizer_name ? ` / ${truncate(target.organizer_name, 30)}` : ''}\n${truncate(target.body ?? '', 50)}`
       hashtags = EVENT_HASHTAGS
       break
     }
@@ -215,7 +223,7 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
     if (medium === 'instagram') {
       return `${head}${prefix}\n${body}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
     }
-    return `${head}${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${BOARD_URL}\n${tagLine}`
+    return `${head}${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${withUtm('/freefree', medium, 'freefree_board')}\n${tagLine}`
   }
   if (target.target_type === 'proposal') {
     // Instagram はキャプション内のURLがクリックできないため、URL文字列は載せず
@@ -235,7 +243,7 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
     if (medium === 'instagram') {
       return `${lead}${prefix}\n${body}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、プロフィールのリンクからCiDAOへご登録ください（無料）。\n\n#印西市 #イベント情報 #CiDAO #印西`
     }
-    return `${lead}${prefix}\n${body}\n\n▶ ${link}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、CiDAOへご登録ください（無料）\n${SITE_BASE}/login\n${tagLine}`
+    return `${lead}${prefix}\n${body}\n\n▶ ${link}\n\nCBIの活動に協力してくださる印西市民の方・団体・企業の方は、CiDAOへご登録ください（無料）\n${withUtm('/login', medium, 'event_announce')}\n${tagLine}`
   }
   return `${prefix}\n${body}\n\n▶ ${link}\n${tagLine}`
 }

@@ -15,6 +15,8 @@ export function comparableSnsContent(text: string | null | undefined): string {
   return (text ?? '')
     .replace(/\r\n?/g, '\n')
     .replace(/^⏳[^\n]*\n/, '')
+    // リンクの utm（媒体別の計測用・2026-11-07 に付け始めた）は中身の違いではないので除いて比べる
+    .replace(/\?utm_[^\s]*/g, '')
     .split('\n')
     .map((line) => line.replace(/[ \t　]+$/g, ''))
     .join('\n')

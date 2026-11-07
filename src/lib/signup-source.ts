@@ -24,3 +24,24 @@ export const SIGNUP_SOURCE_LABEL: Record<string, string> = {
   'metaverse:reception:entry': '３次元MAP 受付画面の登録QR',
   'metaverse:auth:line': '３次元MAP 受付の LINE ボタン',
 }
+
+// SNS 告知リンク（sns-template.ts の withUtm）由来の経路の表示名：媒体と告知の種類に分けて読める形にする
+const MEDIUM_NAME: Record<string, string> = {
+  threads: 'Threads', 'threads-profile': 'Threads（プロフィール）', instagram: 'Instagram', facebook: 'Facebook', line: 'LINE', x: 'X', sns: 'SNS',
+}
+const CAMPAIGN_NAME: Record<string, string> = {
+  freefree_announce: 'FreeFree の告知', freefree_board: 'FreeFree 掲示板トップ', freefree_forshops: 'お店の方へ',
+  event_announce: 'イベントの告知', org_announce: '団体の紹介', proposal_announce: '提案の告知', daily_events: '毎朝のイベントまとめ',
+}
+
+export function signupSourceLabel(value: string | null | undefined): string {
+  if (!value) return '（記録なし）'
+  const fixed = SIGNUP_SOURCE_LABEL[value]
+  if (fixed) return fixed
+  // 形は「媒体:告知の種類」（utm_medium を付けない現在の形）か「媒体:social:告知の種類」（提案告知の旧形）
+  const [source, ...rest] = value.split(':')
+  const m = MEDIUM_NAME[source]
+  if (!m) return value
+  const campaign = rest.filter((p) => p !== 'social').pop()
+  return `${m} の ${CAMPAIGN_NAME[campaign ?? ''] ?? (campaign ?? '告知リンク')}`
+}

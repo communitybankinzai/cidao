@@ -19,6 +19,13 @@ describe('isSameSnsContent', () => {
   it('タイトル・ハッシュタグ・リンクが違えば別', () => {
     expect(isSameSnsContent('A\n#印西市', 'A\n#印西市 #FreeFree')).toBe(false)
   })
+  it('リンクの utm（有無・媒体）が違うだけなら同じ（2026-11-07 に utm を付け始めたため、前の配信と比べても出し直しにならない）', () => {
+    const before = '本文\n\n▶ くわしくはこちら\nhttps://cidao.vercel.app/freefree/abc\n\n掲示板\nhttps://cidao.vercel.app/freefree\n#印西市'
+    const after = '本文\n\n▶ くわしくはこちら\nhttps://cidao.vercel.app/freefree/abc?utm_source=threads&utm_medium=social&utm_campaign=freefree_announce\n\n掲示板\nhttps://cidao.vercel.app/freefree?utm_source=threads&utm_medium=social&utm_campaign=freefree_board\n#印西市'
+    expect(isSameSnsContent(before, after)).toBe(true)
+    expect(isSameSnsContent(after.replace(/threads/g, 'facebook'), after)).toBe(true)
+    expect(isSameSnsContent(after, after.replace('/freefree/abc', '/freefree/xyz'))).toBe(false)
+  })
   it('文の途中にある ⏳ は消さない', () => {
     expect(comparableSnsContent('本文 ⏳ 途中\n続き')).toBe('本文 ⏳ 途中\n続き')
   })

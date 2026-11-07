@@ -10,6 +10,7 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
+import { SIGNUP_SOURCE_COOKIE, SIGNUP_SOURCE_MAX_AGE, buildSignupSource } from '@/lib/signup-source'
 
 const VISITOR_KEY = 'cidao_visitor_id'
 const COOLDOWN_MS = 30 * 60 * 1000
@@ -70,7 +71,15 @@ export function PageViewTracker() {
     // usePathname にはクエリが含まれないため location.search から読む
     let source: string | null = null
     try {
-      source = new URLSearchParams(window.location.search).get('utm_source')
+      const q = new URLSearchParams(window.location.search)
+      source = q.get('utm_source')
+      // 登録経路も覚える（2026-11-07）：SNS の告知リンクはイベント・掲示板などのページに着くので、
+      // /login だけで覚える仕組みでは数えられなかった。/login と同じ Cookie に入れ、初回ログインで auth/callback が members.signup_source に残す
+      const src = buildSignupSource(source, q.get('utm_medium'), q.get('utm_campaign'))
+      if (src) {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `${SIGNUP_SOURCE_COOKIE}=${encodeURIComponent(src)}; Max-Age=${SIGNUP_SOURCE_MAX_AGE}; Path=/; SameSite=Lax${secure}`
+      }
     } catch { /* 読めなければ流入元なし扱い */ }
 
     void fetch('/api/track/view', {

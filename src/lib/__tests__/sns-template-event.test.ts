@@ -15,10 +15,15 @@ describe('イベント紹介の本文', () => {
   it('Threads は協力団体・企業向けのCiDAO登録導線で終わり、500字以内', () => {
     const t = generateSnsContent(target, 'threads')
     expect(t.startsWith('イベント告知は、毎朝、その日開催の分をまとめて行っています。主催者から依頼があった場合は、当日以外にも単独でのイベント告知に協力しています。')).toBe(true)
-    expect(t).toContain('/events/e1')
-    expect(t).toContain('/login')
+    // リンクには媒体別の utm（閲覧と新規登録を媒体ごとに数えるため・2026-11-07）
+    expect(t).toContain('/events/e1?utm_source=threads&utm_campaign=event_announce')
+    expect(t).toContain('/login?utm_source=threads&utm_campaign=event_announce')
     expect(t).toContain('協力してくださる印西市民の方・団体・企業')
     expect(t.length).toBeLessThanOrEqual(500)
+  })
+  it('Facebook のリンクは utm_source=facebook', () => {
+    const t = generateSnsContent(target, 'facebook')
+    expect(t).toContain('/events/e1?utm_source=facebook&utm_campaign=event_announce')
   })
   it('Instagram はURLを載せずプロフィールのリンクへ誘導する', () => {
     const t = generateSnsContent(target, 'instagram')
