@@ -9,7 +9,7 @@ import { notifyAllMembers } from '@/lib/notify'
 import { wantsInstantEvent } from '@/lib/event-notify-mode'
 import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
-import { childPlaceColumns } from '@/lib/child-place'
+import { childPlaceColumns, decideAttendeeColumns, type AttendeeColumns } from '@/lib/child-place'
 
 type CreateInput = {
   title: string
@@ -289,18 +289,20 @@ type UpdateInput = {
 async function resolveAttendee(
   supabase: SupabaseServerClient,
   input: { id: string; start_at: string; attendee_count?: number | null },
-): Promise<{ attendee_count?: number | null; attendee_count_source?: 'organizer' | 'operator' | null }> {
-  if (input.attendee_count === undefined) return {}
-  if (input.attendee_count === null) return { attendee_count: null, attendee_count_source: null }
-  const n = input.attendee_count
-  if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error('参加者数は0〜100000の整数で入力してください')
-  if (new Date(jstLocalToUtcIso(input.start_at)).getTime() > Date.now()) {
-    throw new Error('参加者数は、開始時刻を過ぎたイベントにだけ入力できます')
+): Promise<AttendeeColumns> {
+  // 人数を触らない・消すときは、問い合わせなしで決まる
+  if (input.attendee_count === undefined || input.attendee_count === null) {
+    return decideAttendeeColumns({ count: input.attendee_count, startMs: 0, nowMs: 0, currentCount: null, isAdmin: false })
   }
   const { data: cur } = await supabase.from('events').select('attendee_count').eq('id', input.id).maybeSingle()
-  if (cur && cur.attendee_count === n) return {}
   const { data: isAdmin } = await supabase.rpc('is_admin')
-  return { attendee_count: n, attendee_count_source: isAdmin ? 'operator' : 'organizer' }
+  return decideAttendeeColumns({
+    count: input.attendee_count,
+    startMs: new Date(jstLocalToUtcIso(input.start_at)).getTime(),
+    nowMs: Date.now(),
+    currentCount: cur?.attendee_count ?? null,
+    isAdmin: !!isAdmin,
+  })
 }
 
 export async function updateEvent(input: UpdateInput) {

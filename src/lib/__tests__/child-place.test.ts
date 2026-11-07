@@ -3,6 +3,7 @@ import {
   childPlaceColumns,
   childPlaceInitialInput,
   childPlaceLabel,
+  decideAttendeeColumns,
   isChildPlaceKey,
   normalizeOrganizerName,
   parseChildPlaceTag,
@@ -205,5 +206,47 @@ describe('参加者数の集計（報告のあった回だけ）', () => {
   it('負の数・数でない値は報告として数えない', () => {
     const s = summarizeChildPlace([r('2026-09-01T01:00:00Z', -3), r('2026-09-02T01:00:00Z', Number.NaN)], NOW)
     expect(s.attendance.reported).toBe(0)
+  })
+})
+
+describe('参加者数を保存するときの決まり（decideAttendeeColumns）', () => {
+  const NOW = new Date('2026-11-08T03:00:00Z').getTime()
+  const PAST = new Date('2026-09-20T02:00:00Z').getTime()
+  const FUTURE = new Date('2026-12-01T02:00:00Z').getTime()
+  const base = { startMs: PAST, nowMs: NOW, currentCount: null as number | null, isAdmin: false }
+
+  it('入力欄がなかった（undefined）なら何も書かない', () => {
+    expect(decideAttendeeColumns({ ...base, count: undefined })).toEqual({})
+  })
+
+  it('空にして保存（null）すると未報告に戻す（出どころも消す）', () => {
+    expect(decideAttendeeColumns({ ...base, count: null, currentCount: 12 })).toEqual({ attendee_count: null, attendee_count_source: null })
+  })
+
+  it('主催者・登録者が入れたら organizer、運営が入れたら operator', () => {
+    expect(decideAttendeeColumns({ ...base, count: 25 })).toEqual({ attendee_count: 25, attendee_count_source: 'organizer' })
+    expect(decideAttendeeColumns({ ...base, count: 25, isAdmin: true })).toEqual({ attendee_count: 25, attendee_count_source: 'operator' })
+  })
+
+  it('0人も報告として保存できる', () => {
+    expect(decideAttendeeColumns({ ...base, count: 0 })).toEqual({ attendee_count: 0, attendee_count_source: 'organizer' })
+  })
+
+  it('今と同じ人数なら出どころを変えない（運営が編集画面を開いて保存しただけでは『運営』にならない）', () => {
+    expect(decideAttendeeColumns({ ...base, count: 25, currentCount: 25, isAdmin: true })).toEqual({})
+  })
+
+  it('人数が変わったら、そのときの入力者に出どころを付け替える', () => {
+    expect(decideAttendeeColumns({ ...base, count: 30, currentCount: 25, isAdmin: true })).toEqual({ attendee_count: 30, attendee_count_source: 'operator' })
+  })
+
+  it('開始時刻の前のイベントには入れられない', () => {
+    expect(() => decideAttendeeColumns({ ...base, count: 10, startMs: FUTURE })).toThrow('開始時刻を過ぎた')
+  })
+
+  it('整数でない・負・大きすぎる値は断る', () => {
+    for (const bad of [1.5, -1, 100001, Number.NaN]) {
+      expect(() => decideAttendeeColumns({ ...base, count: bad })).toThrow('0〜100000の整数')
+    }
   })
 })

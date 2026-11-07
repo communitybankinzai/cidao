@@ -57,6 +57,32 @@ export function childPlaceInitialInput(event: { child_place?: string | null; chi
 }
 
 // ===========================
+// 開催後の参加者数（events.attendee_count）を保存するときの決まり
+//   undefined＝触らない／null＝消して未報告に戻す／数＝報告された人数（開始時刻を過ぎたイベントだけ）
+//   今と同じ人数なら出どころ（主催者・運営）は変えない（編集画面を開いて保存しただけで『運営』に変わらないように）
+// ===========================
+export type AttendeeColumns = {
+  attendee_count?: number | null
+  attendee_count_source?: 'organizer' | 'operator' | null
+}
+
+export function decideAttendeeColumns(args: {
+  count: number | null | undefined
+  startMs: number
+  nowMs: number
+  currentCount: number | null | undefined
+  isAdmin: boolean
+}): AttendeeColumns {
+  const { count } = args
+  if (count === undefined) return {}
+  if (count === null) return { attendee_count: null, attendee_count_source: null }
+  if (!Number.isInteger(count) || count < 0 || count > 100000) throw new Error('参加者数は0〜100000の整数で入力してください')
+  if (args.startMs > args.nowMs) throw new Error('参加者数は、開始時刻を過ぎたイベントにだけ入力できます')
+  if (args.currentCount === count) return {}
+  return { attendee_count: count, attendee_count_source: args.isAdmin ? 'operator' : 'organizer' }
+}
+
+// ===========================
 // 団体名の名寄せ（主催名は自由入力なので、表記ゆれを同じ団体として数える）
 // ===========================
 const LEGAL_FORM_WORDS = [
