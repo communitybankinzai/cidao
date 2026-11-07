@@ -213,7 +213,7 @@ function SummaryCard({ summary }: { summary: ChildPlaceSummary }) {
       )}
 
       <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        数えているのは「CiDAO に掲載された開催日」です。実際に開催された回数や参加者数を確かめた数字ではありません（中止・延期を含む可能性があります）。
+        数えているのは「CiDAO に掲載された開催日」です。実際に開催された回数や参加者数を確かめた数字ではありません（中止・延期を含む可能性があります。同じ催しが別の情報源から重複して載っている場合は、二重に数えています）。
         目印は、題名・主催名からの自動判定と、人が確認したもの（{summary.checked}／{summary.total}回）からなります。
       </p>
     </section>
