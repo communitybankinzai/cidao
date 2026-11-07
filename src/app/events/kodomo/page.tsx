@@ -4,16 +4,11 @@ import { PageShell } from '@/components/layout/PageShell'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { createClient } from '@/lib/supabase/server'
 import { buildCells, fetchWindow, parseYm, ymdInJst } from '@/lib/events-calendar'
-import {
-  CHILD_PLACE_KINDS,
-  parseChildPlaceTag,
-  summarizeChildPlace,
-  tagKinds,
-  type ChildPlaceEventRow,
-  type ChildPlaceKey,
-  type ChildPlaceSummary,
-} from '@/lib/child-place'
+import { CHILD_PLACE_KINDS, parseChildPlaceTag, tagKinds, type ChildPlaceSummary } from '@/lib/child-place'
+import { loadChildPlaceReport } from '@/lib/child-place-data'
+import type { EvidenceRow } from '@/lib/child-place-evidence'
 import EventsBrowser, { type EventRow, type OrgInfo } from '../_components/EventsBrowser'
+import { PrintButton } from './_components/PrintButton'
 
 const DESCRIPTION =
   '印西市内で開かれている、子どもや親子が安心して過ごせる場（子ども食堂・プレーパーク・おやこカフェ・図書館のおはなし会など）をまとめたカレンダーです。'
@@ -46,54 +41,24 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
     .order('start_at', { ascending: true })
   const rows: EventRow[] = (events ?? []) as EventRow[]
 
-  // ---- 実績サマリー（期間で区切らず、公開中の目印つきをすべて数える。中止・下書きは数えない）
-  const { data: allRaw } = await supabase
-    .from('events')
-    .select('start_at, child_place, child_place_checked, organizer_type, organizer_id, organizer_name_text')
-    .eq('status', 'open')
-    .not('child_place', 'is', null)
-    .order('start_at', { ascending: true })
-    .limit(5000)
-  const all = (allRaw ?? []) as {
-    start_at: string
-    child_place: ChildPlaceKey
-    child_place_checked: boolean
-    organizer_type: 'member' | 'org'
-    organizer_id: string
-    organizer_name_text: string | null
-  }[]
-
-  // 主催団体情報（カレンダー用とサマリー用をまとめて解決）
-  const orgIds = Array.from(new Set([...rows, ...all].filter((r) => r.organizer_type === 'org').map((r) => r.organizer_id)))
+  const orgIds = Array.from(new Set(rows.filter((r) => r.organizer_type === 'org').map((r) => r.organizer_id)))
   const { data: orgList } = orgIds.length
     ? await supabase.from('organizations').select('id, name, type, legal_form, logo_url').in('id', orgIds)
     : { data: [] as OrgInfo[] }
   const orgInfo: Record<string, OrgInfo> = {}
   for (const o of (orgList ?? []) as OrgInfo[]) orgInfo[o.id] = o
 
-  const summaryRows: ChildPlaceEventRow[] = all.map((r) => ({
-    start_at: r.start_at,
-    child_place: r.child_place,
-    child_place_checked: r.child_place_checked,
-    organizer_name: r.organizer_type === 'org' ? (orgInfo[r.organizer_id]?.name ?? r.organizer_name_text) : r.organizer_name_text,
-  }))
-  const now = new Date()
-  const summary = summarizeChildPlace(summaryRows, now.getTime())
-
+  // ---- 実績（掲載の状況・根拠の一覧）。CSV と同じ元データ
+  const report = await loadChildPlaceReport(supabase)
   const cells = buildCells(y, m)
-  const today = ymdInJst(now)
+  const today = ymdInJst(report.generatedAt)
 
   return (
     <PageShell feature="events" width="default">
       <PageHeader
         feature="events"
         title="こどもの居場所カレンダー"
-        description={
-          <>
-            {DESCRIPTION}
-            CiDAO に載っているイベントのうち、題名・主催名からの自動判定と、主催者・運営の確認で目印を付けたものだけを集めています。
-          </>
-        }
+        description={DESCRIPTION}
         actions={
           <Link href="/events" className="text-sm underline text-slate-600 dark:text-slate-300 print:hidden">
             すべてのイベントを見る →
@@ -101,29 +66,58 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
         }
       />
 
-      <SummaryCard summary={summary} />
+      <PurposeCard />
+      <SummaryCard summary={report.summary} evidenceCount={report.evidence.length} generatedAt={report.generatedAt} />
 
-      <EventsBrowser
-        events={rows}
-        orgInfo={orgInfo}
-        cells={cells}
-        year={y}
-        month={m}
-        today={today}
-        isLoggedIn={!!user}
-        view={view}
-        currentUserId={user?.id ?? null}
-        isAdmin={!!isAdmin}
-        tag={tag}
-        basePath="/events/kodomo"
-      />
+      <div className="print:hidden">
+        <EventsBrowser
+          events={rows}
+          orgInfo={orgInfo}
+          cells={cells}
+          year={y}
+          month={m}
+          today={today}
+          isLoggedIn={!!user}
+          view={view}
+          currentUserId={user?.id ?? null}
+          isAdmin={!!isAdmin}
+          tag={tag}
+          basePath="/events/kodomo"
+        />
+      </div>
+
+      <EvidenceSection evidence={report.evidence} isAdmin={!!isAdmin} />
 
       <p className="mt-6 text-xs text-slate-500 dark:text-slate-400 print:hidden">
         主催の方へ：イベントの{' '}
         <Link href="/events/new" className="underline">登録</Link>
         {' '}・編集の画面にある「子どもの居場所」の欄で、このカレンダーに載せるかどうかを選べます。分からなければ「自動」のままで構いません。
+        開催後は、編集の画面で参加者数を入れていただくと、この実績に反映されます。
       </p>
     </PageShell>
+  )
+}
+
+// ===========================
+// 趣旨：居場所の見える化
+// ===========================
+function PurposeCard() {
+  return (
+    <section aria-labelledby="kodomo-purpose" className="mb-6 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed dark:border-amber-900 dark:bg-amber-950/30 print:break-inside-avoid">
+      <h2 id="kodomo-purpose" className="text-base font-semibold">居場所の見える化</h2>
+      <p>
+        子どもや親子が安心して過ごせる場（子ども食堂・プレーパーク・おやこカフェ・図書館のおはなし会など）は、
+        開く団体や場所ごとに情報が分かれていて、必要な人に届きにくいことがあります。
+      </p>
+      <p>
+        このページは、CiDAO に載っている印西市内の催しのうち、子どもの居場所にあたるものを1つのカレンダーに集め、
+        <strong>いつ・どこで・だれが開いているか</strong>が見えるようにするものです。あわせて、催しの回数・団体の数・参加者数を、
+        <strong>1件ずつの根拠つき</strong>で公開します（下の「根拠の一覧」。CSV で保存、印刷もできます）。
+      </p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">
+        運営：Community Bank Inzai（印西市市民活動団体・登録番号 08-001）。市民が運営する情報提供で、印西市の公式情報ではありません。
+      </p>
+    </section>
   )
 }
 
@@ -132,27 +126,45 @@ function ymLabel(ym: string): string {
   return `${y}年${Number(m)}月`
 }
 
-function SummaryCard({ summary }: { summary: ChildPlaceSummary }) {
+// ===========================
+// 掲載の状況（実績の数字）と、その数え方
+// ===========================
+function SummaryCard({ summary, evidenceCount, generatedAt }: { summary: ChildPlaceSummary; evidenceCount: number; generatedAt: Date }) {
   const maxMonth = Math.max(1, ...summary.months.map((mo) => mo.ibasho + mo.oyako))
   const top = summary.organizerList.slice(0, 10)
-  const tiles: { label: string; value: number; unit: string; note?: string }[] = [
-    { label: '掲載された開催', value: summary.total, unit: '回', note: summary.firstYm && summary.lastYm ? `${ymLabel(summary.firstYm)}〜${ymLabel(summary.lastYm)}` : undefined },
-    { label: 'うち開催日が過ぎたもの', value: summary.past, unit: '回' },
-    { label: 'これから', value: summary.upcoming, unit: '回' },
-    { label: '主催団体', value: summary.organizers, unit: '団体', note: '表記ゆれは同じ団体として数えています' },
+  const a = summary.attendance
+  const range = summary.firstYm && summary.lastYm ? `${ymLabel(summary.firstYm)}〜${ymLabel(summary.lastYm)}` : undefined
+
+  const tiles: { label: string; value: string; unit: string; note?: string }[] = [
+    { label: '掲載された開催', value: String(summary.total), unit: '回', note: range },
+    { label: 'うち開催日が過ぎたもの', value: String(summary.past), unit: '回' },
+    { label: 'これから', value: String(summary.upcoming), unit: '回' },
+    { label: '主催団体', value: String(summary.organizers), unit: '団体', note: '表記ゆれは同じ団体として数えています' },
+    {
+      label: '参加者数（報告のあった回の合計）',
+      value: a.reported > 0 ? String(a.total) : '—',
+      unit: a.reported > 0 ? '人' : '',
+      note:
+        a.reported > 0
+          ? `報告 ${a.reported}回／開催済み ${a.past}回・1回あたり平均 ${a.average}人`
+          : `まだ報告がありません（開催済み ${a.past}回）`,
+    },
   ]
 
   return (
     <section aria-labelledby="kodomo-summary" className="mb-6 space-y-4 rounded-lg border bg-white p-4 dark:bg-slate-900 print:break-inside-avoid">
-      <h2 id="kodomo-summary" className="text-base font-semibold">掲載の状況</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="kodomo-summary" className="text-base font-semibold">掲載の状況</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{ymdInJst(generatedAt)} 時点</p>
+      </div>
 
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {tiles.map((t) => (
           <div key={t.label} className="rounded border border-slate-200 p-3 dark:border-slate-700">
             <dt className="text-xs text-slate-500 dark:text-slate-400">{t.label}</dt>
             <dd className="mt-1 text-2xl font-bold tabular-nums">
               {t.value}
-              <span className="ml-1 text-sm font-normal text-slate-500">{t.unit}</span>
+              {t.unit && <span className="ml-1 text-sm font-normal text-slate-500">{t.unit}</span>}
             </dd>
             {t.note && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t.note}</p>}
           </div>
@@ -212,10 +224,122 @@ function SummaryCard({ summary }: { summary: ChildPlaceSummary }) {
         </div>
       )}
 
-      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        数えているのは「CiDAO に掲載された開催日」です。実際に開催された回数や参加者数を確かめた数字ではありません（中止・延期を含む可能性があります。同じ催しが別の情報源から重複して載っている場合は、二重に数えています）。
-        目印は、題名・主催名からの自動判定と、人が確認したもの（{summary.checked}／{summary.total}回）からなります。
+      <div>
+        <h3 className="mb-1.5 text-sm font-medium">数字の数え方</h3>
+        <dl className="space-y-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+          <div>
+            <dt className="inline font-medium text-slate-700 dark:text-slate-200">開催：</dt>
+            <dd className="inline">
+              CiDAO に載っている開催日の数です（1日の催しを1回と数えます）。実際に開催されたことを確かめた数字ではなく、
+              中止・延期を含む可能性があります。同じ催しが別の情報源から重複して載っている場合は、二重に数えています。
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-medium text-slate-700 dark:text-slate-200">主催団体：</dt>
+            <dd className="inline">主催名の表記ゆれ（「NPO法人」の有無・空白など）を同じ団体として数えた数です。</dd>
+          </div>
+          <div>
+            <dt className="inline font-medium text-slate-700 dark:text-slate-200">参加者数：</dt>
+            <dd className="inline">
+              開催後に主催者または運営が報告した人数で、「報告のあった回」だけを足しています。報告のない回は
+              <strong>「不明」</strong>で、0人とは数えていません。
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-medium text-slate-700 dark:text-slate-200">目印：</dt>
+            <dd className="inline">
+              題名・主催名からの自動判定と、人が確認したもの（{summary.checked}／{summary.total}回）からなります。
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-2 text-xs print:hidden">
+          <a href="#evidence" className="underline">1件ずつの根拠（{evidenceCount}件）を見る ↓</a>
+        </p>
+      </div>
+    </section>
+  )
+}
+
+// ===========================
+// 根拠の一覧（1件ずつ）。数字を確かめられるようにする
+// ===========================
+function EvidenceSection({ evidence, isAdmin }: { evidence: EvidenceRow[]; isAdmin: boolean }) {
+  return (
+    <section id="evidence" aria-labelledby="kodomo-evidence" className="mt-8 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="kodomo-evidence" className="text-base font-semibold">根拠の一覧（{evidence.length}件）</h2>
+        <div className="flex gap-2">
+          {/* ファイルのダウンロード（route handler）なので、画面遷移の Link ではなく通常のリンクにする */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a
+            href="/events/kodomo/csv"
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 print:hidden"
+          >
+            CSV で保存
+          </a>
+          <PrintButton />
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        上の数字は、ここに並べた1件ずつを数えたものです。催しの名前から CiDAO のページへ、「出典」から元の情報（主催者の投稿・市のカレンダーなど）へ移れます。
       </p>
+
+      <div className="overflow-x-auto rounded-lg border bg-white dark:bg-slate-900">
+        <table className="w-full min-w-[40rem] text-xs">
+          <thead className="bg-slate-50 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <tr>
+              <th scope="col" className="px-2 py-2 font-medium">日時</th>
+              <th scope="col" className="px-2 py-2 font-medium">催し</th>
+              <th scope="col" className="px-2 py-2 font-medium">主催</th>
+              <th scope="col" className="px-2 py-2 font-medium">目印</th>
+              <th scope="col" className="px-2 py-2 text-right font-medium">参加者数</th>
+              <th scope="col" className="px-2 py-2 font-medium">出典</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {evidence.map((r) => (
+              <tr key={r.id} className={r.held ? '' : 'text-slate-500 dark:text-slate-400'}>
+                <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{r.date} {r.time}</td>
+                <td className="px-2 py-1.5">
+                  <Link href={r.pagePath} className="underline-offset-2 hover:underline">{r.title}</Link>
+                </td>
+                <td className="px-2 py-1.5">{r.organizer}</td>
+                <td className="whitespace-nowrap px-2 py-1.5">{r.kindLabel}</td>
+                <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  {!r.held ? (
+                    <span className="text-slate-400">これから</span>
+                  ) : r.attendee !== null ? (
+                    <>
+                      {r.attendee}人
+                      {r.attendeeSource && <span className="ml-1 text-[10px] text-slate-400">（{r.attendeeSource}）</span>}
+                    </>
+                  ) : isAdmin ? (
+                    <Link href={`/events/${r.id}/edit`} className="text-amber-700 underline print:hidden dark:text-amber-300">人数を入れる</Link>
+                  ) : (
+                    <span className="text-slate-400">不明</span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5">
+                  <span className="text-slate-500 dark:text-slate-400">{r.sourceKind}</span>
+                  {r.sourceUrl ? (
+                    <>
+                      {' '}
+                      <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">出典を見る</a>
+                    </>
+                  ) : (
+                    <span className="ml-1 text-[10px] text-slate-400">（出典の記載なし）</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {evidence.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-2 py-6 text-center text-slate-500">まだ目印のついた催しがありません。</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }

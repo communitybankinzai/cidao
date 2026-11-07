@@ -91,6 +91,8 @@ export type ChildPlaceEventRow = {
   child_place: ChildPlaceKey | null
   organizer_name: string | null
   child_place_checked?: boolean | null
+  // 開催後に報告された参加者数。null・未指定＝未報告（0人ではなく『不明』）
+  attendee_count?: number | null
 }
 
 export type ChildPlaceSummary = {
@@ -99,6 +101,8 @@ export type ChildPlaceSummary = {
   upcoming: number
   checked: number
   organizers: number
+  // 参加者数：開催日が過ぎた回のうち、人数の報告があった回だけを数える（未報告は含めない）
+  attendance: { past: number; reported: number; total: number; average: number | null }
   byKind: Record<ChildPlaceKey, { count: number; past: number; upcoming: number; organizers: number }>
   organizerList: { name: string; count: number }[]
   months: { ym: string; ibasho: number; oyako: number }[]
@@ -129,6 +133,8 @@ export function summarizeChildPlace(rows: ChildPlaceEventRow[], nowMs: number): 
   let total = 0
   let past = 0
   let checked = 0
+  let reported = 0
+  let attendeeTotal = 0
 
   for (const r of rows) {
     if (!r.child_place || !kinds.includes(r.child_place)) continue
@@ -141,6 +147,10 @@ export function summarizeChildPlace(rows: ChildPlaceEventRow[], nowMs: number): 
     if (isPast) {
       past++
       byKind[k].past++
+      if (typeof r.attendee_count === 'number' && Number.isFinite(r.attendee_count) && r.attendee_count >= 0) {
+        reported++
+        attendeeTotal += r.attendee_count
+      }
     } else {
       byKind[k].upcoming++
     }
@@ -187,6 +197,12 @@ export function summarizeChildPlace(rows: ChildPlaceEventRow[], nowMs: number): 
     upcoming: total - past,
     checked,
     organizers: orgAll.size,
+    attendance: {
+      past,
+      reported,
+      total: attendeeTotal,
+      average: reported > 0 ? Math.round((attendeeTotal / reported) * 10) / 10 : null,
+    },
     byKind,
     organizerList,
     months,

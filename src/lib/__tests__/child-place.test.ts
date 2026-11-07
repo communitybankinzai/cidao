@@ -172,3 +172,38 @@ describe('実績サマリー', () => {
     expect(summarizeChildPlace([row('not-a-date', 'ibasho', 'a')], NOW).total).toBe(0)
   })
 })
+
+describe('参加者数の集計（報告のあった回だけ）', () => {
+  const NOW = new Date('2026-11-08T03:00:00Z').getTime()
+  const r = (start: string, n: number | null | undefined): ChildPlaceEventRow => ({
+    start_at: start,
+    child_place: 'ibasho',
+    organizer_name: 'a',
+    attendee_count: n,
+  })
+
+  it('開催日が過ぎた回で報告のあったものだけを合計し、平均は報告のあった回で割る', () => {
+    const s = summarizeChildPlace([r('2026-09-01T01:00:00Z', 10), r('2026-09-08T01:00:00Z', 5), r('2026-09-15T01:00:00Z', null)], NOW)
+    expect(s.attendance).toEqual({ past: 3, reported: 2, total: 15, average: 7.5 })
+  })
+
+  it('0人と報告された回は報告ありとして数える（未報告とは別）', () => {
+    const s = summarizeChildPlace([r('2026-09-01T01:00:00Z', 0), r('2026-09-08T01:00:00Z', undefined)], NOW)
+    expect(s.attendance).toEqual({ past: 2, reported: 1, total: 0, average: 0 })
+  })
+
+  it('これから開かれる回に入っている人数は数えない', () => {
+    const s = summarizeChildPlace([r('2026-12-01T01:00:00Z', 30), r('2026-09-01T01:00:00Z', 4)], NOW)
+    expect(s.attendance).toEqual({ past: 1, reported: 1, total: 4, average: 4 })
+  })
+
+  it('報告が1件もなければ平均は null（0にしない）', () => {
+    const s = summarizeChildPlace([r('2026-09-01T01:00:00Z', null)], NOW)
+    expect(s.attendance).toEqual({ past: 1, reported: 0, total: 0, average: null })
+  })
+
+  it('負の数・数でない値は報告として数えない', () => {
+    const s = summarizeChildPlace([r('2026-09-01T01:00:00Z', -3), r('2026-09-02T01:00:00Z', Number.NaN)], NOW)
+    expect(s.attendance.reported).toBe(0)
+  })
+})

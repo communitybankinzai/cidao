@@ -280,6 +280,27 @@ type UpdateInput = {
   form_url?: string
   // 子どもの居場所の目印。'' のときは今の値を触らない
   child_place?: string
+  // 開催後の参加者数。undefined＝触らない／null＝消す（未報告に戻す）／数＝報告された人数
+  attendee_count?: number | null
+}
+
+// 参加者数の列の値を決める。開始時刻を過ぎたイベントにだけ入れられる。
+// 人数が今と同じなら出どころは変えない（運営が編集画面を開いて保存しただけで『主催者の報告』が『運営』に変わらないように）。
+async function resolveAttendee(
+  supabase: SupabaseServerClient,
+  input: { id: string; start_at: string; attendee_count?: number | null },
+): Promise<{ attendee_count?: number | null; attendee_count_source?: 'organizer' | 'operator' | null }> {
+  if (input.attendee_count === undefined) return {}
+  if (input.attendee_count === null) return { attendee_count: null, attendee_count_source: null }
+  const n = input.attendee_count
+  if (!Number.isInteger(n) || n < 0 || n > 100000) throw new Error('参加者数は0〜100000の整数で入力してください')
+  if (new Date(jstLocalToUtcIso(input.start_at)).getTime() > Date.now()) {
+    throw new Error('参加者数は、開始時刻を過ぎたイベントにだけ入力できます')
+  }
+  const { data: cur } = await supabase.from('events').select('attendee_count').eq('id', input.id).maybeSingle()
+  if (cur && cur.attendee_count === n) return {}
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  return { attendee_count: n, attendee_count_source: isAdmin ? 'operator' : 'organizer' }
 }
 
 export async function updateEvent(input: UpdateInput) {
@@ -290,6 +311,8 @@ export async function updateEvent(input: UpdateInput) {
   // organizer 関連の解釈は createEvent と共通のヘルパーを使う
   const { organizer_type, organizer_id, name_text, isProxy, isUnknownOrganizer } =
     await resolveOrganizer(supabase, user, input.organizer_choice, input.organizer_name_text)
+
+  const attendeeColumns = await resolveAttendee(supabase, input)
 
   const { error } = await supabase
     .from('events')
@@ -311,6 +334,7 @@ export async function updateEvent(input: UpdateInput) {
       website_url: input.website_url?.trim() || null,
       form_url: input.form_url?.trim() || null,
       ...childPlaceColumns(input.child_place),
+      ...attendeeColumns,
       // input.flyer_image_url が undefined のときは触らない（"" の場合のみ NULL クリア）
       ...(input.flyer_image_url === undefined
         ? {}

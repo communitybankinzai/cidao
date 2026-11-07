@@ -83,6 +83,9 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     initialChoice = ORGANIZER_MEMBER
   }
 
+  // 開始時刻を過ぎたイベントにだけ参加者数を入れられる
+  const isPast = new Date(event.start_at) < new Date()
+
   async function handleDelete() {
     'use server'
     await deleteEvent(id)
@@ -98,6 +101,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     // フィールド自体が無い場合のみ undefined（＝触らない）。
     const flyerRaw = formData.get('flyer_image_url')
     const flyer_image_url = flyerRaw === null ? undefined : String(flyerRaw)
+    const attendeeRaw = formData.get('attendee_count')
     await updateEvent({
       id,
       title: String(formData.get('title') ?? ''),
@@ -115,6 +119,8 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       website_url: (formData.get('website_url') as string | null) || undefined,
       form_url: (formData.get('form_url') as string | null) || undefined,
       child_place: String(formData.get('child_place') ?? ''),
+      // 開催前は欄が無効（送られない）＝触らない。空にして保存すると未報告に戻る
+      attendee_count: attendeeRaw === null ? undefined : String(attendeeRaw).trim() === '' ? null : Number(attendeeRaw),
     })
   }
 
@@ -184,6 +190,26 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
               <input type="number" name="fee" min="0" defaultValue={event.fee ?? ''} className={inp} />
             </L>
           </div>
+          <L label="参加者数（開催後・任意）">
+            <input
+              type="number"
+              name="attendee_count"
+              min="0"
+              max="100000"
+              step="1"
+              disabled={!isPast}
+              defaultValue={event.attendee_count ?? ''}
+              placeholder={isPast ? '例: 25' : '開始時刻を過ぎると入力できます'}
+              className={inp}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              実際に来た人数を入れてください。「こどもの居場所カレンダー」の実績の根拠に使います。
+              分からなければ空のままで構いません（空は「0人」ではなく「不明」と数えます）。
+              {event.attendee_count != null && event.attendee_count_source && (
+                <> いまの人数は{event.attendee_count_source === 'operator' ? '運営' : '主催者・登録者'}が入力したものです。</>
+              )}
+            </p>
+          </L>
         </div>
         <div className="flex justify-between gap-2">
           <DeleteEventButton action={handleDelete} />
