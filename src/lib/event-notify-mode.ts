@@ -34,7 +34,7 @@ export const EVENT_NOTIFY_OPTIONS: readonly { value: EventNotifyMode; label: str
   {
     value: 'instant',
     label: 'その都度',
-    hint: '会員が新しいイベントを登録するたびに、すぐお知らせします（これまでと同じ）。印西市のカレンダーやSNSなどから集めたイベントは含みません',
+    hint: '新しいイベントが載るたびに、すぐお知らせします。会員の登録に加えて、印西市のカレンダーやSNSなどから集めて公開したイベントも含みます。多い日は数通届くので、静かに受け取りたい方は「毎日18時にまとめて」が向いています',
   },
   {
     value: 'digest',

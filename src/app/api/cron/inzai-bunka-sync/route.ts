@@ -11,9 +11,10 @@
 // 環境変数: CRON_SECRET / NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY /
 //           INGEST_BOT_MEMBER_ID（取り込みイベントの organizer_id。COCoLa ingest と同じ bot）
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { emptyFailedResult, recordSyncRun } from '@/lib/event-sync/record-run'
+import { notifyPublishedExternalEvents, type PublishedEvent } from '@/lib/event-external-notify'
 import { INZAI_BUNKA_SOURCE } from '@/lib/inzai-bunka/calendar'
 import { syncInzaiBunka, type EventRow, type ExistingEventRow, type OtherEventRow, type SyncDb, type SyncResult } from '@/lib/inzai-bunka/sync'
 
@@ -48,6 +49,9 @@ async function handle(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
+  // 会員に見える（open）状態で新しく入ったイベント。同期のあとで『その都度』の人へ知らせる
+  const published: PublishedEvent[] = []
+
   const db: SyncDb = {
     async listExisting() {
       const { data, error } = await supabase
@@ -68,8 +72,11 @@ async function handle(request: Request) {
       return (data ?? []) as OtherEventRow[]
     },
     async insert(row: EventRow) {
-      const { error } = await supabase.from('events').insert(row)
+      const { data, error } = await supabase.from('events').insert(row).select('id').single()
       if (error) throw new Error(`insert: ${error.message}`)
+      if (row.status === 'open' && data) {
+        published.push({ id: data.id, title: row.title, start_at: row.start_at, location: row.location })
+      }
     },
     async update(id: string, patch: Partial<EventRow>) {
       const { error } = await supabase.from('events').update(patch).eq('id', id)
@@ -89,6 +96,13 @@ async function handle(request: Request) {
 
   const dryRun = new URL(request.url).searchParams.get('dry') === '1'
   const startedAt = new Date()
+  // 途中で失敗しても、そこまでに入ったイベントは知らせる（dry の時は何も入れていないので送らない）
+  const notifyPublished = () => {
+    if (dryRun || published.length === 0) return
+    after(async () => {
+      await notifyPublishedExternalEvents(published)
+    })
+  }
   let result: SyncResult
   try {
     result = await syncInzaiBunka(db, {
@@ -100,10 +114,12 @@ async function handle(request: Request) {
     // 一覧の取得失敗など、同期本体が例外で落ちた場合も「動いたが失敗」として記録を残す
     const message = err instanceof Error ? err.message : String(err)
     await recordSyncRun(supabase, INZAI_BUNKA_SOURCE, startedAt, emptyFailedResult(message, dryRun))
+    notifyPublished()
     console.error('[inzai-bunka-sync] failed:', message)
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
   await recordSyncRun(supabase, INZAI_BUNKA_SOURCE, startedAt, result)
+  notifyPublished()
   console.log(
     `[inzai-bunka-sync] ${dryRun ? '(dry) ' : ''}list=${result.fetched.list} details=${result.fetched.details}/${result.fetched.detailFailed}fail calendar=${result.fetched.calendar} merged=${result.fetched.merged} future=${result.fetched.future} inserted=${result.inserted.length} updated=${result.updated.length} unchanged=${result.unchanged} duplicates=${result.duplicates.length} errors=${result.errors.length}`,
   )

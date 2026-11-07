@@ -13,10 +13,12 @@
 //   同じチラシ・同じ号を再取り込みしても二重登録にならない（GAS が Drive fileId で行っていたのと同じ役割）。
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { readPauseState, writePauseState, type PauseState } from '@/lib/instagram-events/pause'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
+import { notifyPublishedExternalEvents, type PublishedEvent } from '@/lib/event-external-notify'
 
 // 取り込み元ごとの external_source。クライアントから任意の値を入れられないよう列挙で固定する。
 const EXTERNAL_SOURCES = {
@@ -134,9 +136,21 @@ export async function importScannedEvents(items: ImportItem[]): Promise<ImportRe
   if (items.length > MAX_ITEMS) throw new Error(`一度に登録できるのは${MAX_ITEMS}件までです`)
 
   const results: ImportResult[] = []
+  // 今回新しく入ったイベント（公開中）。『その都度』の人へ、1回の取り込みにつき最大でも数通にまとめて知らせる
+  const created: PublishedEvent[] = []
   for (const item of items) {
     try {
-      results.push(await importOne(supabase, user.id, item))
+      const r = await importOne(supabase, user.id, item)
+      results.push(r)
+      if (r.status === 'created' && r.event_id) {
+        created.push({
+          id: r.event_id,
+          title: item.title.trim().slice(0, 80),
+          start_at: jstLocalToUtcIso(item.start_at),
+          location: item.location?.trim() || null,
+          online_flag: item.online_flag,
+        })
+      }
     } catch (e) {
       results.push({
         dedupe_key: item.dedupe_key,
@@ -144,6 +158,12 @@ export async function importScannedEvents(items: ImportItem[]): Promise<ImportRe
         message: e instanceof Error ? e.message : String(e),
       })
     }
+  }
+
+  if (created.length > 0) {
+    after(async () => {
+      await notifyPublishedExternalEvents(created, { actorId: user.id })
+    })
   }
 
   revalidatePath('/events')
@@ -206,7 +226,7 @@ export async function listCosmosCandidates(): Promise<CosmosCandidateRow[]> {
 
 async function setCosmosCandidateStatus(id: string, status: 'open' | 'cancelled'): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    await requireAdmin()
+    const adminId = await requireAdmin()
     const service = serviceClient()
     const { data, error } = await service
       .from('events')
@@ -214,9 +234,16 @@ async function setCosmosCandidateStatus(id: string, status: 'open' | 'cancelled'
       .eq('id', id)
       .in('external_source', [...CANDIDATE_SOURCES])
       .eq('status', 'draft')
-      .select('id')
+      .select('id, title, start_at, location')
     if (error) return { ok: false, error: error.message }
     if (!data || data.length === 0) return { ok: false, error: 'この候補はすでに処理済みです（画面を更新してください）' }
+    // 下書きは会員に見えない。公開した（open にした）時に、はじめて『その都度』の人へ知らせる
+    if (status === 'open') {
+      const published = data as PublishedEvent[]
+      after(async () => {
+        await notifyPublishedExternalEvents(published, { actorId: adminId })
+      })
+    }
     revalidatePath('/events')
     revalidatePath('/admin/events')
     revalidatePath('/admin/events/import')

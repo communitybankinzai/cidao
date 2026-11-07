@@ -42,7 +42,7 @@ export type DigestEvent = {
 }
 
 /** 同じ題名のイベント（複数日程の登録など）は1つにまとめ、開始が早い順に並べる */
-function groupByTitle(events: DigestEvent[]): DigestEvent[][] {
+export function groupByTitle(events: DigestEvent[]): DigestEvent[][] {
   const byTitle = new Map<string, DigestEvent[]>()
   for (const e of events) {
     const key = e.title.trim()
@@ -55,12 +55,12 @@ function groupByTitle(events: DigestEvent[]): DigestEvent[][] {
   return groups
 }
 
-function shortTitle(t: string): string {
+export function shortTitle(t: string): string {
   const s = t.trim()
   return s.length > 24 ? `${s.slice(0, 23)}…` : s
 }
 
-const LIST_MAX = 3 // 本文に題名を並べる最大数（残りは「ほかN件」）
+export const LIST_MAX = 3 // 本文に題名を並べる最大数（残りは「ほかN件」）
 
 /**
  * まとめ通知の文面。

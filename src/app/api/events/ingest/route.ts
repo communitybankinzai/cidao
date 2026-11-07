@@ -12,10 +12,11 @@
 //
 // dedupe: (external_source, external_source_id) で既存チェック。重複時は既存 event_id を返すのみ。
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { jstLocalToUtcIso } from '@/lib/datetime'
+import { notifyPublishedExternalEvents, type PublishedEvent } from '@/lib/event-external-notify'
 
 type Occurrence = {
   start_at: string             // YYYY-MM-DDTHH:MM（JST ローカル想定）
@@ -143,10 +144,19 @@ export async function POST(request: Request) {
   // 6. events insert（occurrences が複数ある場合は日程ごとに1行ずつ）
   const isProxy = !!body.organizer_name
   const results: { event_id: string; deduped: boolean }[] = []
+  // 今回新しく入ったイベント。会員に見える（open）ので、『その都度』の人へ知らせる（途中で失敗しても、そこまでの分は知らせる）
+  const created: PublishedEvent[] = []
+  const notifyCreated = () => {
+    if (created.length === 0) return
+    after(async () => {
+      await notifyPublishedExternalEvents(created)
+    })
+  }
 
   for (let i = 0; i < occList.length; i++) {
     const occ = occList[i]
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(occ.start_at)) {
+      notifyCreated()
       return NextResponse.json({ error: `occurrences[${i}].start_at must be YYYY-MM-DDTHH:MM` }, { status: 400 })
     }
     const occEnd = occ.end_at && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(occ.end_at)
@@ -191,10 +201,18 @@ export async function POST(request: Request) {
       .single()
 
     if (insErr) {
+      notifyCreated()
       return NextResponse.json({ error: `insert failed: ${insErr.message}` }, { status: 500 })
     }
     results.push({ event_id: inserted.id, deduped: false })
+    created.push({
+      id: inserted.id,
+      title: body.title.slice(0, 80),
+      start_at: jstLocalToUtcIso(occ.start_at),
+      location: body.location ?? null,
+    })
   }
+  notifyCreated()
 
   // 単発登録は従来どおり単一オブジェクトのレスポンス（後方互換）。
   // 複数日程登録時は events 配列で全件返す。
