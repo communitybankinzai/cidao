@@ -7,7 +7,7 @@ import { estimateCost, unavailableCost } from '@/lib/ai/pricing'
 import { recordApiUsage } from '@/lib/talent-bank/usage'
 import type { EventRow, OtherEventRow } from '@/lib/inzai-bunka/sync'
 import { INSTAGRAM_HASHTAG_SOURCE } from './hashtag'
-import { INSTAGRAM_ACCOUNT_SOURCE, parseInstagramUsername, type MonitorAccount } from './accounts'
+import { INSTAGRAM_ACCOUNT_SOURCE, isAccountChildPlace, parseInstagramUsername, type MonitorAccount } from './accounts'
 import { INSTAGRAM_SCAN_PURPOSE, type IgAccountSyncDb } from './sync'
 
 export const INSTAGRAM_SOURCES = [INSTAGRAM_HASHTAG_SOURCE, INSTAGRAM_ACCOUNT_SOURCE] as const
@@ -39,6 +39,8 @@ type AccountRow = {
   label: string
   kind: MonitorAccount['kind']
   org_id: string | null
+  child_place: string | null
+  child_place_keywords: string[] | null
 }
 
 /** 団体の sns_links.instagram を sns_monitor_accounts に写す（無い行だけ追加。運営が付けた label／enabled は触らない） */
@@ -130,13 +132,17 @@ export function makeIgSyncDb(supabase: SupabaseClient, botMemberId: string): IgA
       await syncOrgAccountsIntoList(supabase)
       const { data, error } = await supabase
         .from('sns_monitor_accounts')
-        .select('id, username, label, kind, org_id')
+        .select('id, username, label, kind, org_id, child_place, child_place_keywords')
         .eq('platform', 'instagram')
         .eq('enabled', true)
         .order('created_at', { ascending: true })
         .limit(500)
       if (error) throw new Error(`listMonitorAccounts: ${error.message}`)
-      return ((data ?? []) as AccountRow[]).map((a) => ({ id: a.id, username: a.username, label: a.label, kind: a.kind, orgId: a.org_id }))
+      return ((data ?? []) as AccountRow[]).map((a) => ({
+        id: a.id, username: a.username, label: a.label, kind: a.kind, orgId: a.org_id,
+        childPlace: isAccountChildPlace(a.child_place) ? a.child_place : null,
+        keywords: Array.isArray(a.child_place_keywords) ? a.child_place_keywords : [],
+      }))
     },
     async updateAccountStatus(id, patch) {
       const { error } = await supabase.from('sns_monitor_accounts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)

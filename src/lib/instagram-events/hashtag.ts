@@ -28,7 +28,12 @@ export type IgMedia = {
   timestamp: string
   children: IgMediaChild[]
   /** アカウント経由で集めた投稿だけ持つ（出典の表記と external_source の判定に使う） */
-  account?: { id: string | null; username: string; label: string; kind: '団体' | '企業' | '行政' | 'その他'; orgId: string | null }
+  account?: {
+    id: string | null; username: string; label: string; kind: '団体' | '企業' | '行政' | 'その他'; orgId: string | null
+    /** 居場所系アカウントの設定（取り込む催しの目印の固定・取り込む投稿の条件語）。accounts.ts の MonitorAccount と同じ */
+    childPlace?: 'ibasho' | 'oyako' | null
+    keywords?: string[]
+  }
 }
 
 type FetchFn = typeof fetch

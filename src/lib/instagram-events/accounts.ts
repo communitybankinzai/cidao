@@ -12,12 +12,18 @@ export const INSTAGRAM_ACCOUNT_SOURCE = 'instagram-account'
 const GRAPH_BASE = 'https://graph.facebook.com/v22.0'
 const MEDIA_FIELDS = 'id,caption,media_type,media_url,permalink,timestamp'
 
+export type AccountChildPlace = 'ibasho' | 'oyako'
+
 export type MonitorAccount = {
   id: string | null          // sns_monitor_accounts.id（団体の sns_links 由来で行が無いときは null）
   username: string
   label: string
   kind: '団体' | '企業' | '行政' | 'その他'
   orgId: string | null
+  /** 取り込む催しに付ける子どもの居場所の目印。あれば種別を『子ども』、目印をこの値に固定する（無ければ従来どおり） */
+  childPlace?: AccountChildPlace | null
+  /** 空＝全投稿。入っていれば、本文にどれか1つ含まれる投稿だけを取り込む（食堂以外の投稿も混じるアカウント用） */
+  keywords?: string[]
 }
 
 export type AccountFetchResult =
@@ -97,5 +103,42 @@ export function mediaSince(media: IgMedia[], since: Date): IgMedia[] {
   return media.filter((m) => {
     const t = Date.parse(m.timestamp.replace(/(\d{2})(\d{2})$/, '$1:$2'))
     return Number.isFinite(t) ? t >= since.getTime() : true
+  })
+}
+
+// ===========================
+// 居場所系アカウントの設定（目印の固定・取り込む投稿の絞り込み）
+// ===========================
+
+export const MAX_ACCOUNT_KEYWORDS = 12
+export const MAX_KEYWORD_LENGTH = 30
+
+export function isAccountChildPlace(v: unknown): v is AccountChildPlace {
+  return v === 'ibasho' || v === 'oyako'
+}
+
+/** 管理画面の入力（カンマ・読点・改行・セミコロン区切り）を条件語の配列にする。重複と空は除き、長すぎるものは切る */
+export function parseAccountKeywords(raw: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of raw.split(/[,、，;；\n\r]+/)) {
+    const w = part.trim().slice(0, MAX_KEYWORD_LENGTH)
+    if (!w) continue
+    const key = w.normalize('NFKC').toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(w)
+    if (out.length >= MAX_ACCOUNT_KEYWORDS) break
+  }
+  return out
+}
+
+/** 条件語が空なら全部通す。あれば本文（NFKC・大文字小文字を区別しない）にどれか1つ含まれる投稿だけ通す */
+export function matchesAccountKeywords(caption: string | null | undefined, keywords: readonly string[] | null | undefined): boolean {
+  if (!keywords || keywords.length === 0) return true
+  const text = (caption ?? '').normalize('NFKC').toLowerCase()
+  return keywords.some((k) => {
+    const w = k.normalize('NFKC').toLowerCase().trim()
+    return w.length > 0 && text.includes(w)
   })
 }

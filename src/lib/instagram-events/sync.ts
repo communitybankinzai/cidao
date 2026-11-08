@@ -28,7 +28,7 @@ import {
   pickImageUrl,
   type IgMedia,
 } from './hashtag'
-import { INSTAGRAM_ACCOUNT_SOURCE, fetchAccountMedia, mediaSince, type MonitorAccount } from './accounts'
+import { INSTAGRAM_ACCOUNT_SOURCE, fetchAccountMedia, matchesAccountKeywords, mediaSince, type MonitorAccount } from './accounts'
 
 /** api_usage の purpose。管理画面の費用表示とここの予算判定が同じ値を見る */
 export const INSTAGRAM_SCAN_PURPOSE = 'event_scan_instagram'
@@ -95,6 +95,8 @@ export type AccountReport = {
   posts: number
   /** そのうち新しくて未読み取りだった数 */
   fresh: number
+  /** 条件語（アカウントの設定）に当たらず、読み取りの対象にしなかった新しい投稿の数 */
+  skippedByKeyword?: number
   error: string | null
 }
 
@@ -243,10 +245,12 @@ export function toCandidateDescription(d: FlyerExtract, media: IgMedia, hashtag:
 
 export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia, botMemberId: string, hashtag: string): EventRow {
   const organizer = d.organizer_name?.trim() || media.account?.label?.trim() || '主催者不明'
+  // 居場所系のアカウントは、種別を『子ども・教育・若者支援』、目印をアカウントの設定に固定する（題名の判定に頼らない）
+  const fixedPlace = media.account?.childPlace ?? null
   return {
     title: clip(d.title || '（題名なし）', TITLE_MAX),
     description: toCandidateDescription(d, media, hashtag, occ.timeAssumed),
-    category: 'machizukuri',
+    category: fixedPlace ? 'kodomo' : 'machizukuri',
     start_at: jstLocalToUtcIso(occ.start_at),
     end_at: jstLocalToUtcIso(occ.end_at),
     location: d.location?.trim() || '',
@@ -262,6 +266,7 @@ export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia,
     external_source_id: `ig:${media.id}:${occ.start_at.slice(0, 10)}`,
     flyer_image_url: null,
     status: 'draft',
+    ...(fixedPlace ? { child_place: fixedPlace, child_place_checked: true } : {}),
   }
 }
 
@@ -539,7 +544,10 @@ export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOpt
       return
     }
     report.posts = fetched.media.length
-    const fresh = mediaSince(fetched.media, since).filter((m) => !known.knownPosts.has(m.id))
+    const newPosts = mediaSince(fetched.media, since).filter((m) => !known.knownPosts.has(m.id))
+    // 食堂以外の投稿も混じるアカウントは、条件語に当たる投稿だけを読む（読み取りの費用も減る）
+    const fresh = newPosts.filter((m) => matchesAccountKeywords(m.caption, account.keywords))
+    if (fresh.length !== newPosts.length) report.skippedByKeyword = newPosts.length - fresh.length
     report.fresh = fresh.length
     posts.push(...fresh)
     const newest = fetched.media[0]?.timestamp

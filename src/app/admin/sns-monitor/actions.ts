@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { instagramProfileUrl, parseInstagramUsername, type MonitorAccount } from '@/lib/instagram-events/accounts'
+import { instagramProfileUrl, isAccountChildPlace, parseAccountKeywords, parseInstagramUsername, type AccountChildPlace, type MonitorAccount } from '@/lib/instagram-events/accounts'
 import { syncOrgAccountsIntoList } from '@/lib/instagram-events/db-supabase'
 
 const PAGE = '/admin/sns-monitor'
@@ -44,6 +44,8 @@ export type MonitorAccountRow = {
   last_post_at: string | null
   created_at: string
   profile_url: string
+  child_place: AccountChildPlace | null
+  child_place_keywords: string[]
 }
 
 /** 一覧（団体の分を先に写してから返す） */
@@ -57,7 +59,7 @@ export async function listMonitorAccounts(): Promise<MonitorAccountRow[]> {
   }
   const { data, error } = await service
     .from('sns_monitor_accounts')
-    .select('id, username, label, kind, org_id, enabled, note, last_checked_at, last_error, last_post_at, created_at, organizations(name)')
+    .select('id, username, label, kind, org_id, enabled, note, last_checked_at, last_error, last_post_at, created_at, child_place, child_place_keywords, organizations(name)')
     .eq('platform', 'instagram')
     .order('kind', { ascending: true })
     .order('created_at', { ascending: true })
@@ -81,17 +83,35 @@ export async function addMonitorAccount(formData: FormData): Promise<void> {
   const kindRaw = String(formData.get('kind') ?? 'その他')
   const kind = (KINDS as string[]).includes(kindRaw) ? (kindRaw as MonitorAccount['kind']) : 'その他'
   const note = String(formData.get('note') ?? '').trim().slice(0, 500)
+  const childPlaceRaw = String(formData.get('child_place') ?? '')
+  const childPlace = isAccountChildPlace(childPlaceRaw) ? childPlaceRaw : null
+  const keywords = parseAccountKeywords(String(formData.get('keywords') ?? ''))
   const username = parseInstagramUsername(input)
   if (!username) back('Instagram の URL（https://www.instagram.com/xxx/）か @ユーザー名を入れてください', 'error')
   const { error } = await serviceClient()
     .from('sns_monitor_accounts')
-    .insert({ platform: 'instagram', username, label: label || username, kind, note, created_by: userId })
+    .insert({ platform: 'instagram', username, label: label || username, kind, note, created_by: userId, child_place: childPlace, child_place_keywords: keywords })
   if (error) {
     if (/duplicate|unique/i.test(error.message)) back(`@${username} は登録済みです`, 'error')
     back(`追加に失敗しました：${error.message}`, 'error')
   }
   revalidatePath(PAGE)
   back(`@${username} を追加しました。明朝 06:32 から投稿を読みます（ビジネス／クリエイターアカウントのみ読めます）`)
+}
+
+/** 取り込む催しの目印と、取り込む投稿の条件語を変える（form action）。目印が空＝固定しない、条件語が空＝全投稿 */
+export async function updateMonitorAccountPlace(id: string, formData: FormData): Promise<void> {
+  await requireAdmin()
+  const childPlaceRaw = String(formData.get('child_place') ?? '')
+  const childPlace = isAccountChildPlace(childPlaceRaw) ? childPlaceRaw : null
+  const keywords = parseAccountKeywords(String(formData.get('keywords') ?? ''))
+  const { error } = await serviceClient()
+    .from('sns_monitor_accounts')
+    .update({ child_place: childPlace, child_place_keywords: keywords, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) back(`変更に失敗しました：${error.message}`, 'error')
+  revalidatePath(PAGE)
+  back('取り込む催しの設定を保存しました（次の朝6:32の読み取りから反映）')
 }
 
 export async function setMonitorAccountEnabled(id: string, enabled: boolean): Promise<void> {

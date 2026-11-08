@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { addMonitorAccount, deleteMonitorAccount, listMonitorAccounts, setMonitorAccountEnabled } from './actions'
+import { addMonitorAccount, deleteMonitorAccount, listMonitorAccounts, setMonitorAccountEnabled, updateMonitorAccountPlace } from './actions'
+import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 
 // 管理画面「SNS モニタ対象」：Instagram のイベント告知を自動で候補にするアカウントの一覧。
 // 団体は団体編集の SNS 欄（Instagram URL）で入れると自動でここに載る（種別「団体」・団体名つき）。
@@ -69,6 +70,25 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
               <input name="note" placeholder="例：セミナー・相談会の告知が多い" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
             </label>
             <button type="submit" className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">追加</button>
+            <div className="grid gap-3 md:col-span-5 md:grid-cols-[14rem_1fr]">
+              <label className="text-xs text-slate-600 dark:text-slate-300">
+                取り込む催しの目印（子どもの居場所）
+                <select name="child_place" defaultValue="" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950">
+                  <option value="">固定しない（従来どおり）</option>
+                  {CHILD_PLACE_KINDS.map((k) => (
+                    <option key={k.key} value={k.key}>{k.label}（{k.desc}）</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-slate-600 dark:text-slate-300">
+                取り込む投稿の条件語（任意・カンマか改行で区切る）
+                <input name="keywords" placeholder="例：あめちゃんしょくどう、地域食堂（空なら全投稿）" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
+              </label>
+              <p className="text-[11px] text-slate-500 md:col-span-2">
+                目印を選ぶと、そのアカウントから取り込む催しは、種別を「子ども・教育・若者支援」、目印をここの値に固定します（題名の自動判定に頼りません）。
+                食堂以外の投稿も混じるアカウントは条件語を入れると、本文にどれか1語を含む投稿だけを読みます（読み取りの費用も減ります）。
+              </p>
+            </div>
           </form>
         </section>
 
@@ -84,6 +104,7 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
                     <th className="px-3 py-2 text-left">アカウント</th>
                     <th className="px-3 py-2 text-left">種別</th>
                     <th className="px-3 py-2 text-left">団体</th>
+                    <th className="px-3 py-2 text-left">取り込む催し</th>
                     <th className="px-3 py-2 text-left">直近の確認</th>
                     <th className="px-3 py-2 text-left">状態</th>
                     <th className="px-3 py-2 text-left">操作</th>
@@ -100,6 +121,24 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
                       <td className="px-3 py-2 whitespace-nowrap">{r.kind}</td>
                       <td className="px-3 py-2">
                         {r.org_id ? <Link href={`/orgs/${r.org_id}`} className="text-blue-700 hover:underline dark:text-blue-300">{r.org_name ?? '団体ページ'}</Link> : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <details>
+                          <summary className="cursor-pointer">
+                            {r.child_place ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">🧒 {childPlaceLabel(r.child_place)}に固定</span> : <span className="text-slate-400">固定しない</span>}
+                            {r.child_place_keywords.length > 0 && <div className="mt-0.5 text-slate-500">条件語：{r.child_place_keywords.join('・')}</div>}
+                          </summary>
+                          <form action={updateMonitorAccountPlace.bind(null, r.id)} className="mt-2 space-y-1.5">
+                            <select name="child_place" defaultValue={r.child_place ?? ''} className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-950">
+                              <option value="">固定しない（従来どおり）</option>
+                              {CHILD_PLACE_KINDS.map((k) => (
+                                <option key={k.key} value={k.key}>{k.label}</option>
+                              ))}
+                            </select>
+                            <input name="keywords" defaultValue={r.child_place_keywords.join('、')} placeholder="条件語（空なら全投稿）" className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-950" />
+                            <button type="submit" className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">保存</button>
+                          </form>
+                        </details>
                       </td>
                       <td className="px-3 py-2 text-xs whitespace-nowrap">
                         {r.last_checked_at ? fmt.format(new Date(r.last_checked_at)) : <span className="text-slate-400">まだ</span>}

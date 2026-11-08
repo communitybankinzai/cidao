@@ -64,6 +64,9 @@ export type EventRow = {
   flyer_image_url: string | null
   /** 文化ホール同期は即公開（open）。号外NET の候補は運営確認待ち（draft） */
   status: 'open' | 'draft'
+  /** 居場所系アカウントから取り込むときの目印の固定（運営がアカウントに設定した値。人が決めた扱い）。無ければ DB が題名から推測する */
+  child_place?: 'ibasho' | 'oyako'
+  child_place_checked?: boolean
 }
 
 export type OtherEventRow = {

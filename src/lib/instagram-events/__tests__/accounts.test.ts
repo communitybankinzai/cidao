@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchAccountMedia, instagramProfileUrl, mediaSince, parseInstagramUsername, type MonitorAccount } from '../accounts'
+import { fetchAccountMedia, instagramProfileUrl, matchesAccountKeywords, mediaSince, parseAccountKeywords, parseInstagramUsername, type MonitorAccount } from '../accounts'
 import { syncInstagramAccounts, type IgAccountSyncDb } from '../sync'
 import type { FlyerExtract } from '@/lib/event-flyer-extract'
 import type { EventRow } from '@/lib/inzai-bunka/sync'
@@ -18,6 +18,41 @@ describe('parseInstagramUsername', () => {
     expect(parseInstagramUsername('https://x.com/foo')).toBeNull()
     expect(parseInstagramUsername('')).toBeNull()
     expect(instagramProfileUrl('a_b')).toBe('https://www.instagram.com/a_b/')
+  })
+})
+
+describe('parseAccountKeywords', () => {
+  it('カンマ・読点・セミコロン・改行で分け、空と重複を除く（全角半角・大文字小文字は同じ語）', () => {
+    expect(parseAccountKeywords('あめちゃんしょくどう、地域食堂, 地域の居場所\n地域食堂;ＡＢＣ,abc')).toEqual(['あめちゃんしょくどう', '地域食堂', '地域の居場所', 'ＡＢＣ'])
+    expect(parseAccountKeywords('  ,、 \n ')).toEqual([])
+    expect(parseAccountKeywords('')).toEqual([])
+  })
+
+  it('長い語は切り、数は最大12語まで', () => {
+    expect(parseAccountKeywords('あ'.repeat(50))[0].length).toBe(30)
+    const many = Array.from({ length: 20 }, (_, i) => `語${i}`).join(',')
+    expect(parseAccountKeywords(many)).toHaveLength(12)
+  })
+})
+
+describe('matchesAccountKeywords', () => {
+  it('条件語が空（未設定）なら全部通す', () => {
+    expect(matchesAccountKeywords('なんでも', [])).toBe(true)
+    expect(matchesAccountKeywords('なんでも', undefined)).toBe(true)
+    expect(matchesAccountKeywords(null, null)).toBe(true)
+  })
+
+  it('どれか1つ本文に含まれれば通す（全角半角・大文字小文字は区別しない）', () => {
+    const kw = ['あめちゃんしょくどう', 'ＡＢＣ']
+    expect(matchesAccountKeywords('今月のあめちゃんしょくどう、17時から', kw)).toBe(true)
+    expect(matchesAccountKeywords('abc kids', kw)).toBe(true)
+    expect(matchesAccountKeywords('光るうちわワークショップ', kw)).toBe(false)
+    expect(matchesAccountKeywords('', kw)).toBe(false)
+    expect(matchesAccountKeywords(undefined, kw)).toBe(false)
+  })
+
+  it('空の語だけの設定は、絞り込みにならず全部落ちることはない（空語は一致しない）', () => {
+    expect(matchesAccountKeywords('本文', [' '])).toBe(false)
   })
 })
 
@@ -131,6 +166,41 @@ describe('syncInstagramAccounts', () => {
     expect(r.errors[0]).toContain('instagram_manage_insights')
     expect(r.accounts?.every((a) => a.error)).toBe(true)
     expect(db.status.some((s) => typeof s.last_error === 'string' && String(s.last_error).includes('instagram_manage_insights'))).toBe(true)
+  })
+
+  it('居場所系アカウントは、条件語に当たる投稿だけを読み、取り込む催しの種別と目印を固定する', async () => {
+    const amechan: MonitorAccount = {
+      id: 'acc-3', username: 'dagashiya.amechan', label: 'だがしや あめちゃん', kind: '企業', orgId: null,
+      childPlace: 'ibasho', keywords: ['あめちゃんしょくどう', '地域食堂'],
+    }
+    const db = fakeDb([amechan])
+    const extract = vi.fn(async () => ({ ok: true as const, data: extracted({ title: 'あめちゃんしょくどう', organizer_name: 'だがしや あめちゃん' }), usage: null as never }))
+    const r = await syncInstagramAccounts(db, {
+      apiKey: 'k', botMemberId: BOT, now: NOW, extract: extract as never,
+      fetchFn: graphFetch([
+        { id: 'a1', caption: '日時：2026年11月16日（月）17:00 今月のあめちゃんしょくどう開催 #地域食堂', media_type: 'IMAGE', media_url: 'https://cdn/a1.jpg', permalink: 'https://www.instagram.com/p/a1/', timestamp: '2026-09-27T01:00:00+0000' },
+        { id: 'a2', caption: '日時：2026年11月20日（金）15:00 光るうちわワークショップ開催', media_type: 'IMAGE', media_url: 'https://cdn/a2.jpg', permalink: 'https://www.instagram.com/p/a2/', timestamp: '2026-09-27T02:00:00+0000' },
+      ]),
+    })
+    expect(r.ok).toBe(true)
+    expect(r.accounts?.[0]).toMatchObject({ posts: 2, fresh: 1, skippedByKeyword: 1 })
+    expect(extract).toHaveBeenCalledTimes(1) // 食堂以外の投稿は AI に読ませない（費用も出さない）
+    expect(db.rows).toHaveLength(1)
+    expect(db.rows[0]).toMatchObject({ category: 'kodomo', child_place: 'ibasho', child_place_checked: true, status: 'draft', external_source: 'instagram-account' })
+  })
+
+  it('目印を設定していないアカウントは、種別も目印も固定しない（従来どおり）', async () => {
+    const db = fakeDb([shokokai])
+    const extract = vi.fn(async () => ({ ok: true as const, data: extracted({}), usage: null as never }))
+    await syncInstagramAccounts(db, {
+      apiKey: 'k', botMemberId: BOT, now: NOW, extract: extract as never,
+      fetchFn: graphFetch([
+        { id: 'm1', caption: '日時：2026年11月9日（月）14:30 AI活用セミナー開催', media_type: 'IMAGE', media_url: 'https://cdn/m1.jpg', permalink: 'https://www.instagram.com/p/m1/', timestamp: '2026-09-27T01:00:00+0000' },
+      ]),
+    })
+    expect(db.rows[0].category).toBe('machizukuri')
+    expect(db.rows[0]).not.toHaveProperty('child_place')
+    expect(db.rows[0]).not.toHaveProperty('child_place_checked')
   })
 
   it('対象が無ければ何もしない', async () => {
