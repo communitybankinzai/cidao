@@ -70,6 +70,15 @@ export async function createProposal(input: CreateInput) {
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。議論期間に参加してもらうための入口
   after(async () => {
+    // 提案者本人へ「このあとの流れ」を返す（actorId を付けない：付けると自分宛が除外される）。
+    // 運営の承認は不要で投稿と同時に公開される。承認が入るのは SNS 告知の下書きだけ
+    await insertNotification({
+      recipientId: user.id,
+      kind: 'proposal',
+      title: `提案「${input.title}」を公開しました`,
+      body: '約48時間の議論期間のあと、自動で投票期間に移ります。運営が各SNSでも告知します',
+      linkUrl: `/proposals/${data.id}`,
+    })
     await notifyAllMembers({
       kind: 'proposal',
       actorId: user.id,

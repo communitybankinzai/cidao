@@ -218,6 +218,18 @@ export default async function ProposalDetailPage({
               : `${formatJstDate(quarterEndAt(new Date(discussionEndsAt ?? now)))} 23:59（四半期末）`}
           </div>
         )}
+        {/* 提案者だけに見せる「このあとの流れ」。運営の承認は不要で、投稿と同時に公開済み */}
+        {isProposer && proposal.status === 'discussion' && (
+          <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-400 p-4 rounded text-sm space-y-1">
+            <div className="font-semibold">この提案は公開されました。このあとの流れ</div>
+            <ol className="list-decimal pl-5 space-y-0.5">
+              <li>議論期間（約48時間）：メンバーがコメント・質問で意見を寄せます</li>
+              <li>自動で投票期間へ：締切日まで、CiDAOの登録メンバーが投票します</li>
+              <li>SNS告知：運営が内容を確認のうえ、各SNSで告知し、投票への参加を呼びかけます（配信は少し遅れることがあります）</li>
+            </ol>
+            <div className="text-xs text-slate-500">コメントや質問が届くと、ベルでお知らせします。</div>
+          </div>
+        )}
         {proposal.status === 'voting' && remainingVotingMin !== null && (
           <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded text-sm">
             投票期間中（残り {Math.floor(remainingVotingMin / 1440)}日 {Math.floor((remainingVotingMin % 1440) / 60)}時間）
