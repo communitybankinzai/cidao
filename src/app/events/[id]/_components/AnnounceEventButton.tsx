@@ -26,7 +26,11 @@ export function AnnounceEventButton({ eventId, hasFlyer }: { eventId: string; ha
       <Button type="button" variant="outline" size="sm" onClick={run} disabled={pending}>
         {pending ? '作成中…' : '📣 SNSで告知'}
       </Button>
-      {!hasFlyer && <p className="text-[11px] text-slate-500">チラシ画像が無いため、Instagram は対象外（Threads のみ）です</p>}
+      <p className="text-[11px] text-slate-500">
+        {hasFlyer
+          ? '配信先：Threads・Facebook・Instagram（承認制）'
+          : 'チラシ画像が無いため、Instagram は対象外（Threads・Facebook のみ）です'}
+      </p>
       {msg && (
         <p className={`text-xs ${msg.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
           {msg.text}{' '}

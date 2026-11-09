@@ -191,7 +191,8 @@ export default async function AdminSnsPage() {
           <p className="text-sm text-slate-500 mt-1">
             FreeFree は掲載時、提案は作成時、団体は新規登録・紹介内容の更新時とローテーションで、それぞれ告知の下書きが自動生成されます
             （FreeFree は承認するとその場で配信し、以後はローテーションで繰り返し告知。配信先：Threads、FreeFree は Facebook・Instagram も、提案は Instagram も）。
-            イベントは毎朝のまとめ配信で告知するため、ローテーション単独紹介の対象外です。
+            イベントは毎朝のまとめ配信で告知するため、ローテーション単独紹介の対象外です
+            （運営がイベント詳細の「📣 SNSで告知」を押したときだけ、Threads・Facebook・Instagram の下書きを作ります）。
           </p>
         </header>
 
@@ -206,7 +207,7 @@ export default async function AdminSnsPage() {
                 <li><strong>提案</strong>：CiDAOに提案が作成されると自動生成（Threads / Instagram / Facebook）</li>
                 <li><strong>団体</strong>：新規登録・紹介内容の更新のタイミングで自動生成＋毎朝9時のローテーションでも定期紹介（Threads）</li>
                 <li><strong>FreeFree</strong>：掲載と同時に自動生成（Threads / Facebook、画像があれば Instagram）。「承認して配信」でその場で配信。以後はローテーションが「最近紹介していないもの」から1件ずつ承認済みで作り、18時台に冒頭のカウントダウン（「開催まであと◯日！」など）を付けて配信（初回の承認・配信を経た掲載、SNS紹介を許可した掲載のみ）</li>
-                <li><strong>イベント</strong>：毎朝のまとめ配信で告知するため、ローテーションによる単独紹介は行いません</li>
+                <li><strong>イベント</strong>：毎朝のまとめ配信で告知するため、ローテーションによる単独紹介は行いません。運営がイベント詳細の「📣 SNSで告知」を押したときだけ、Threads / Facebook（チラシ画像があれば Instagram も）の下書きを作ります（承認制・2026-11-09 から Facebook も）</li>
               </ul>
               <p className="text-xs mt-1">下書きができると管理者へベル・プッシュ・メールで通知が届きます。</p>
             </div>
@@ -392,8 +393,8 @@ export default async function AdminSnsPage() {
                 </tr>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
                   <td className="py-1.5 pr-3 whitespace-nowrap">📘 Facebook</td>
-                  <td className="py-1.5 pr-3 whitespace-nowrap text-amber-600 dark:text-amber-400">⏸ 見送り中</td>
-                  <td className="py-1.5">CBI名義のFacebookページが未開設のため（2026-08-15 決定）。配信コードは実装済みなので、ページを開設して「SNS接続設定」にトークンを保存すれば有効化できる</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap text-emerald-600 dark:text-emerald-400">✅ 稼働中</td>
+                  <td className="py-1.5">CBI の Facebook ページを「SNS接続設定」から接続（2026-10-01）。FreeFree・提案の告知に加え、イベント詳細の「📣 SNSで告知」の下書きも 2026-11-09 から対象</td>
                 </tr>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
                   <td className="py-1.5 pr-3 whitespace-nowrap">💬 LINE</td>

@@ -460,7 +460,9 @@ async function repostChangedFreefree(
 // 運営が任意のイベントを「イベント紹介」としてSNSへ告知する（イベント詳細ページのボタンから）。
 // 常に承認制：下書き（承認待ち）を作るだけで、運営が /admin/sns で本文・画像を確認して承認すると配信される。
 // Instagram は画像が必須なので、チラシ画像のあるイベントだけ作る（画像は /api/og/event/[id] が JPEG にして渡す）
-const EVENT_MEDIA: SnsMedium[] = ['threads', 'instagram']
+// Facebook は 2026-11-09 に追加。ページは 2026-10-01 に接続済みだったが、この一覧に無かったため
+// ボタンを押しても FB の下書きができず「承認できない」状態になっていた（FreeFree と同じ承認制で出す）
+const EVENT_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
 
 export async function announceEventToSns(eventId: string): Promise<
   { ok: true; created: number; media: SnsMedium[] } | { ok: false; error: string }
