@@ -20,7 +20,8 @@ const PUBLIC_ORIGINS = new Set([
 ])
 
 const MAX_CHARS = 400
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite'
+// 2026-11-09: gemini-2.5-flash-lite は「新規利用者には提供終了」（404）だったので 3.5 の lite に。別名 gemini-flash-lite-latest でも可
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite'
 const LANG_NAME: Record<string, string> = { ja: 'Japanese', en: 'English' }
 
 function corsHeaders(request: Request) {
@@ -88,8 +89,9 @@ export async function POST(request: Request) {
       const status = res.status === 429 ? 429 : 502
       return json(request, { error: `translation service error (${res.status})` }, status)
     }
-    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-    const out = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim()
+    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> }
+    // 思考過程の part（thought: true）は訳文に混ぜない
+    const out = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim()
     if (!out) return json(request, { error: 'empty translation' }, 502)
     return json(request, { text: out, model })
   } catch (e) {
