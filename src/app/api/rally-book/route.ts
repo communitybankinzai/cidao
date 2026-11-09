@@ -27,6 +27,33 @@ const CODE_LEN = 8
 const MAX_STAMPS = 60               // 文化財は50件。少し余裕を持たせる
 const REPORT_ID_RE = /^[a-z0-9-]{3,60}$/
 
+// 簡易の利用制限：IP ごとに 1 分あたり RATE_LIMIT 回まで。
+// モジュール変数なのでインスタンスごとの目安であり、厳密ではない（複数インスタンスや再起動で数え直しになる）。
+const RATE_LIMIT = 60
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX_ENTRIES = 1000
+const rateMap = new Map<string, { count: number; windowStart: number }>()
+
+function rateLimited(request: Request): boolean {
+  const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+  const now = Date.now()
+  if (rateMap.size > RATE_MAX_ENTRIES) {
+    // 古い窓のものを掃除する。それでも多ければ古い順（挿入順）に捨てる
+    for (const [k, v] of rateMap) if (now - v.windowStart >= RATE_WINDOW_MS) rateMap.delete(k)
+    for (const k of rateMap.keys()) {
+      if (rateMap.size <= RATE_MAX_ENTRIES) break
+      rateMap.delete(k)
+    }
+  }
+  const cur = rateMap.get(ip)
+  if (!cur || now - cur.windowStart >= RATE_WINDOW_MS) {
+    rateMap.set(ip, { count: 1, windowStart: now })
+    return false
+  }
+  cur.count++
+  return cur.count > RATE_LIMIT
+}
+
 type Stamp = { at: string; lat?: number | null; lon?: number | null }
 type Stamps = Record<string, Stamp>
 
@@ -101,6 +128,7 @@ function mergeStamps(a: Stamps, b: Stamps): Stamps {
 }
 
 export async function GET(request: Request) {
+  if (rateLimited(request)) return json(request, { error: 'too many requests' }, 429)
   const supabase = adminClient()
   if (!supabase) return json(request, { error: 'server not configured' }, 500)
   const code = normalizeCode(new URL(request.url).searchParams.get('code'))
@@ -112,24 +140,30 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (rateLimited(request)) return json(request, { error: 'too many requests' }, 429)
   const supabase = adminClient()
   if (!supabase) return json(request, { error: 'server not configured' }, 500)
-  let body: Record<string, unknown> = {}
-  try { body = (await request.json()) as Record<string, unknown> } catch { return json(request, { error: 'invalid json' }, 400) }
+  let raw: unknown
+  try { raw = await request.json() } catch { return json(request, { error: 'invalid json' }, 400) }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return json(request, { error: 'invalid json' }, 400)
+  const body = raw as Record<string, unknown>
   const incoming = sanitizeStamps(body.stamps)
   const code = normalizeCode(body.code)
 
   if (code) {
-    const { data, error } = await supabase.from('rally_books').select('code, stamps').eq('code', code).maybeSingle()
-    if (error) return json(request, { error: 'db error' }, 502)
-    if (!data) return json(request, { error: 'not found' }, 404)
-    const merged = mergeStamps((data.stamps ?? {}) as Stamps, incoming)
-    const { error: upErr } = await supabase
-      .from('rally_books')
-      .update({ stamps: merged, updated_at: new Date().toISOString() })
-      .eq('code', code)
-    if (upErr) return json(request, { error: 'db error' }, 502)
-    return json(request, { code, stamps: merged })
+    // 楽観ロック：読んだときの updated_at が変わっていないときだけ更新する。
+    // 他の端末が先に書いた（更新件数 0）なら読み直してマージし直す。最大3回
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await supabase.from('rally_books').select('code, stamps, updated_at').eq('code', code).maybeSingle()
+      if (error) return json(request, { error: 'db error' }, 502)
+      if (!data) return json(request, { error: 'not found' }, 404)
+      const merged = mergeStamps((data.stamps ?? {}) as Stamps, incoming)
+      const q = supabase.from('rally_books').update({ stamps: merged, updated_at: new Date().toISOString() }).eq('code', code)
+      const { data: updated, error: upErr } = await (data.updated_at === null ? q.is('updated_at', null) : q.eq('updated_at', data.updated_at)).select('code')
+      if (upErr) return json(request, { error: 'db error' }, 502)
+      if (updated && updated.length > 0) return json(request, { code, stamps: merged })
+    }
+    return json(request, { error: 'conflict, retry' }, 409)
   }
 
   // 新規発行。コードが偶然かぶったら作り直す（31^8 ≈ 8500億通りなのでまず起きない）
