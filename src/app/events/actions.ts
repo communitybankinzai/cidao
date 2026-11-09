@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { jstLocalToUtcIso } from '@/lib/datetime'
 import { notifyAllMembers } from '@/lib/notify'
+import { sendRegisterConfirm } from '@/lib/event-register-confirm'
 import { wantsInstantEvent } from '@/lib/event-notify-mode'
 import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
@@ -154,7 +155,7 @@ export async function createEvent(input: CreateInput) {
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。after() でレスポンス後に回す
   after(async () => {
-    await notifyAllMembers({
+    const result = await notifyAllMembers({
       kind: 'event',
       actorId: user.id,
       prefKey: 'notify_event',
@@ -165,6 +166,8 @@ export async function createEvent(input: CreateInput) {
         .join(' / ') || undefined,
       linkUrl: `/events/${data.id}`,
     })
+    // 登録した本人には一斉通知が届かない（自分の操作は通知しない）ので、実際に何人へ出たかを本人にだけ返す
+    await sendRegisterConfirm({ memberId: user.id, eventId: data.id, title: input.title, result })
   })
 
   // redirect() は例外を投げるので、記録はその前に済ませる
@@ -233,7 +236,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
   after(async () => {
     if (!bulkId) return
     const when = shortJst(list[0].start_at)
-    await notifyAllMembers({
+    const result = await notifyAllMembers({
       kind: 'event',
       actorId: user.id,
       prefKey: 'notify_event',
@@ -246,6 +249,13 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
         .filter(Boolean)
         .join(' / ') || undefined,
       linkUrl: `/events/${bulkId}`,
+    })
+    await sendRegisterConfirm({
+      memberId: user.id,
+      eventId: bulkId,
+      title: input.title,
+      result,
+      occurrences: list.length,
     })
   })
 
