@@ -7,10 +7,30 @@
 // - 通知に会員の名前は載せない（人数のみ）
 // - 宛先が0人のときは、宛先がいないのか送信に失敗したのか区別できないので、そのまま書く
 // - insertNotification は actorId と宛先が同じだと送らないので、actorId は渡さない
+// - スマホを鳴らすかは本人が選べる（マイページ /me の設定。contact_preferences.register_confirm_push）。
+//   未設定はこれまでどおり鳴らす。false にした人だけ、アプリ内のベル🔔にだけ届く
 
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { insertNotification } from '@/lib/notify'
+import { wantsRegisterConfirmPush } from '@/lib/register-confirm-pref'
 
 const TITLE_MAX = 40
+
+/** 本人の設定を読む。読めないとき（設定・通信の失敗）は従来どおり鳴らす側に倒す＝確認が届かなくなる事故を避ける */
+async function readPushPreference(memberId: string): Promise<boolean> {
+  try {
+    const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    if (!supaUrl || !serviceKey) return true
+    const admin = createSupabaseClient(supaUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const { data } = await admin.from('members').select('contact_preferences').eq('id', memberId).maybeSingle()
+    return wantsRegisterConfirmPush((data as { contact_preferences?: unknown } | null)?.contact_preferences)
+  } catch {
+    return true
+  }
+}
 
 function clip(text: string): string {
   const t = text.trim()
@@ -62,6 +82,7 @@ export async function sendRegisterConfirm(input: {
       title: notice.title,
       body: notice.body,
       linkUrl: `/events/${input.eventId}`,
+      push: await readPushPreference(input.memberId),
     })
     return r.inserted
   } catch {

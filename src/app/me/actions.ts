@@ -10,6 +10,7 @@ import { nameWithSan } from '@/lib/honorific'
 import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
 import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
 import { eventNotifyPrefs, type EventNotifyMode } from '@/lib/event-notify-mode'
+import { REGISTER_CONFIRM_PUSH_KEY } from '@/lib/register-confirm-pref'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -245,4 +246,29 @@ export async function saveDisasterNotifyPrefs(input: {
   if (error) return { ok: false, message: `保存できませんでした：${error.message}` }
   revalidatePath('/me')
   return { ok: true, message: '保存しました' }
+}
+
+/**
+ * イベントを登録したときの確認通知を、スマホにも鳴らすかを保存する（マイページの通知欄・押した時点で保存）。
+ * - false ならアプリ内のベル🔔にだけ届く。true（初期）は従来どおりスマホにも鳴らす
+ * - contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
+ */
+export async function saveRegisterConfirmPref(input: { push: boolean }): Promise<{ ok: boolean; message: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, message: 'ログインしてください' }
+
+  const { data: current } = await (createServiceClient() ?? supabase)
+    .from('members')
+    .select('contact_preferences')
+    .eq('id', user.id)
+    .single()
+  const prefs: Record<string, unknown> = {
+    ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
+    [REGISTER_CONFIRM_PUSH_KEY]: input.push === true,
+  }
+  const { error } = await supabase.from('members').update({ contact_preferences: prefs }).eq('id', user.id)
+  if (error) return { ok: false, message: `保存できませんでした：${error.message}` }
+  revalidatePath('/me')
+  return { ok: true, message: input.push === true ? '保存しました（スマホにも通知します）' : '保存しました（ベル🔔だけに届きます）' }
 }

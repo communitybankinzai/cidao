@@ -1,9 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { insertNotification } = vi.hoisted(() => ({ insertNotification: vi.fn() }))
+const { insertNotification, holder } = vi.hoisted(() => ({
+  insertNotification: vi.fn(),
+  holder: { prefs: undefined as unknown, throwOnRead: false },
+}))
 vi.mock('@/lib/notify', () => ({ insertNotification }))
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    from: () => {
+      const b: Record<string, unknown> = {}
+      b.select = () => b
+      b.eq = () => b
+      b.maybeSingle = () => {
+        if (holder.throwOnRead) throw new Error('read failed')
+        return Promise.resolve({ data: { contact_preferences: holder.prefs }, error: null })
+      }
+      return b
+    },
+  }),
+}))
 
 import { buildRegisterConfirm, sendRegisterConfirm } from '@/lib/event-register-confirm'
+import { REGISTER_CONFIRM_PUSH_KEY, wantsRegisterConfirmPush } from '@/lib/register-confirm-pref'
+
+describe('wantsRegisterConfirmPush（スマホにも鳴らすか）', () => {
+  it('未設定・空・null は、従来どおり鳴らす', () => {
+    expect(wantsRegisterConfirmPush(undefined)).toBe(true)
+    expect(wantsRegisterConfirmPush(null)).toBe(true)
+    expect(wantsRegisterConfirmPush({})).toBe(true)
+    expect(wantsRegisterConfirmPush({ notify_event: false })).toBe(true) // 他の設定には引きずられない
+  })
+
+  it('true は鳴らす、false を選んだ人だけベルのみ', () => {
+    expect(wantsRegisterConfirmPush({ [REGISTER_CONFIRM_PUSH_KEY]: true })).toBe(true)
+    expect(wantsRegisterConfirmPush({ [REGISTER_CONFIRM_PUSH_KEY]: false })).toBe(false)
+  })
+
+  it('保存キーは register_confirm_push（マイページの保存処理と同じ定義を使う）', () => {
+    expect(REGISTER_CONFIRM_PUSH_KEY).toBe('register_confirm_push')
+  })
+})
 
 describe('buildRegisterConfirm', () => {
   it('宛先人数と、届いた端末数を書く', () => {
@@ -43,8 +79,39 @@ describe('buildRegisterConfirm', () => {
 
 describe('sendRegisterConfirm', () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key-example'
+    holder.prefs = undefined
+    holder.throwOnRead = false
     insertNotification.mockReset()
     insertNotification.mockResolvedValue({ inserted: true, pushed: 1 })
+  })
+
+  const send = () =>
+    sendRegisterConfirm({ memberId: 'me', eventId: 'ev1', title: 'x', result: { recipients: 3, pushed: 1 } })
+
+  it('設定が無い人には、スマホにも鳴らす（push: true）', async () => {
+    holder.prefs = {}
+    await send()
+    expect(insertNotification.mock.calls[0][0].push).toBe(true)
+  })
+
+  it('「ベルだけ」を選んだ人には、スマホは鳴らさない（push: false）。確認通知そのものは出す', async () => {
+    holder.prefs = { [REGISTER_CONFIRM_PUSH_KEY]: false }
+    expect(await send()).toBe(true)
+    expect(insertNotification).toHaveBeenCalledTimes(1)
+    expect(insertNotification.mock.calls[0][0].push).toBe(false)
+  })
+
+  it('設定が読めないとき（通信の失敗・サーバー設定なし）は、確認が届かなくなる事故を避けて従来どおり鳴らす', async () => {
+    holder.throwOnRead = true
+    await send()
+    expect(insertNotification.mock.calls[0][0].push).toBe(true)
+    insertNotification.mockClear()
+    holder.throwOnRead = false
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    await send()
+    expect(insertNotification.mock.calls[0][0].push).toBe(true)
   })
 
   it('登録した本人に1通だけ送る。actorId は渡さない（渡すと自分宛てで除かれる）', async () => {
