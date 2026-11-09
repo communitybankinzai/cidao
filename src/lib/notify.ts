@@ -40,6 +40,8 @@ export async function insertNotification(input: {
   title: string
   body?: string
   linkUrl?: string
+  /** false ならベルのみ（スマホへのプッシュは送らない）。省略は従来どおり送る */
+  push?: boolean
 }): Promise<{ inserted: boolean; pushed: number; error?: string; notificationId?: string }> {
   try {
     if (input.actorId && input.actorId === input.recipientId) return { inserted: false, pushed: 0 }
@@ -61,12 +63,15 @@ export async function insertNotification(input: {
       .single()
 
     // Webプッシュ（購読者のみ・best-effort）。スリープ中の端末にも届く
-    const pushed = await sendWebPush({
-      recipientId: input.recipientId,
-      title: input.title,
-      body: input.body,
-      url: input.linkUrl,
-    })
+    const pushed =
+      input.push === false
+        ? 0
+        : await sendWebPush({
+            recipientId: input.recipientId,
+            title: input.title,
+            body: input.body,
+            url: input.linkUrl,
+          })
     return { inserted: !error, pushed, error: error?.message, notificationId: created?.id as string | undefined }
   } catch {
     // best-effort：通知失敗は本体処理に影響させない
