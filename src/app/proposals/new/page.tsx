@@ -125,7 +125,7 @@ export default async function NewProposalPage() {
             />
           </Field>
 
-          <Field label="本文（2000字以内、Markdown 可）" required>
+          <Field label="本文（2000字以内・改行はそのまま表示されます。記号による飾りは効きません）" required>
             <textarea
               name="body"
               required
