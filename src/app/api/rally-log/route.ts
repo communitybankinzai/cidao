@@ -167,7 +167,16 @@ export async function POST(request: Request) {
   const en = cleanText(body.en, MAX_EN)
   if (!ja && !en) return json(request, { error: 'ja or en required' }, 400)
   const spot = normalizeSpot(body.spot)
-  const replyTo = typeof body.replyTo === 'string' && UUID_RE.test(body.replyTo) ? body.replyTo : null
+  // 回答（answer）だけが replyTo を持てる。say / ask では無視して null で保存する
+  let replyTo: string | null = null
+  if (kind === 'answer') {
+    if (typeof body.replyTo !== 'string' || !UUID_RE.test(body.replyTo)) return json(request, { error: 'replyTo required for answer' }, 400)
+    // 参照先は「同じツアーの ask」だけ（他ツアーの質問や、say / answer には紐付けられない）
+    const { data: target, error: targetError } = await supabase.from('rally_tour_logs').select('id, tour, kind').eq('id', body.replyTo).maybeSingle()
+    if (targetError) return json(request, { error: 'db error' }, 502)
+    if (!target || target.tour !== tour || target.kind !== 'ask') return json(request, { error: 'replyTo must be an ask of the same tour' }, 400)
+    replyTo = body.replyTo
+  }
 
   const { data, error } = await supabase
     .from('rally_tour_logs')
