@@ -52,6 +52,14 @@ describe('一次ふるい（AI 不使用）', () => {
     expect(looksLikeEventPost(media({ id: 'e', caption: '10/12 講座', media_type: 'VIDEO' }))).toEqual({ ok: false, reason: 'no_image' })
   })
 
+  it('requireDate=false なら本文に日付が無くても通す（催しの語・画像・対象外語の条件は残る）', () => {
+    const opt = { requireDate: false }
+    expect(looksLikeEventPost(media({ id: 'c', caption: 'マルシェ開催 #印西' }), opt)).toEqual({ ok: true })
+    expect(looksLikeEventPost(media({ id: 'f', caption: '今日のランチ #印西' }), opt)).toEqual({ ok: false, reason: 'no_event_word' })
+    expect(looksLikeEventPost(media({ id: 'g', caption: 'スタッフ募集 #印西' }), opt)).toEqual({ ok: false, reason: 'not_event' })
+    expect(looksLikeEventPost(media({ id: 'h', caption: '講座開催', media_type: 'VIDEO' }), opt)).toEqual({ ok: false, reason: 'no_image' })
+  })
+
   it('カルーセルは最初の画像、動画は対象外', () => {
     expect(pickImageUrl(media({ id: 'a', media_type: 'CAROUSEL_ALBUM', media_url: 'https://cdn.example/album.jpg', children: [
       { id: '1', media_type: 'VIDEO', media_url: 'https://cdn.example/v.mp4' },

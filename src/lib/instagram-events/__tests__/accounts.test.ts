@@ -158,6 +158,23 @@ describe('syncInstagramAccounts', () => {
     expect(extract).toHaveBeenCalledTimes(1)
   })
 
+  it('本文に日付が無くても、催しの語があれば読む（日付が画像の中だけの告知）。語も無い投稿は読まない', async () => {
+    const db = fakeDb([shokokai])
+    const extract = vi.fn(async () => ({ ok: true as const, data: extracted({ title: '海外からこんにちは（Zoom）' }), usage: null as never }))
+    const r = await syncInstagramAccounts(db, {
+      apiKey: 'k', botMemberId: BOT, now: NOW, extract: extract as never,
+      fetchFn: graphFetch([
+        { id: 'z1', caption: '＼第1回 海外からこんにちは！／ Zoomで気軽に参加できます', media_type: 'IMAGE', media_url: 'https://cdn/z1.jpg', permalink: 'https://www.instagram.com/p/z1/', timestamp: '2026-09-27T01:00:00+0000' },
+        { id: 'z2', caption: '今日のランチ', media_type: 'IMAGE', media_url: 'https://cdn/z2.jpg', permalink: 'https://www.instagram.com/p/z2/', timestamp: '2026-09-27T02:00:00+0000' },
+      ]),
+    })
+    expect(r.ok).toBe(true)
+    expect(r.prefilter).toMatchObject({ noDate: 0, noEventWord: 1, passed: 1 })
+    expect(r.scanned).toEqual(['z1'])
+    expect(extract).toHaveBeenCalledTimes(1)
+    expect(db.rows[0]).toMatchObject({ external_source: 'instagram-account', external_source_id: 'ig:z1:2026-11-09', status: 'draft' })
+  })
+
   it('権限エラーなら残りのアカウントは読まず、errors に案内を残す', async () => {
     const db = fakeDb([shokokai, { ...shokokai, id: 'acc-2', username: 'other' }])
     const denied = (async () => new Response(JSON.stringify({ error: { message: '(#10) no permission', code: 10 } }), { status: 400 })) as unknown as typeof fetch

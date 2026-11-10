@@ -176,11 +176,15 @@ export function hasDateMention(caption: string): boolean {
 
 export type Prefilter = { ok: true } | { ok: false; reason: 'no_image' | 'no_date' | 'no_event_word' | 'not_event' }
 
-export function looksLikeEventPost(media: IgMedia): Prefilter {
+/**
+ * requireDate=false にすると、本文に日付が無い投稿も通す（日付がチラシ画像の中だけにある告知を読むため）。
+ * 登録済みの巡回先アカウントだけで使う。ハッシュタグ検索は誰の投稿か分からないので既定（true）のまま。
+ */
+export function looksLikeEventPost(media: IgMedia, opts: { requireDate?: boolean } = {}): Prefilter {
   if (!pickImageUrl(media)) return { ok: false, reason: 'no_image' }
   const caption = media.caption ?? ''
   if (NOT_EVENT_RE.test(caption)) return { ok: false, reason: 'not_event' }
-  if (!hasDateMention(caption)) return { ok: false, reason: 'no_date' }
+  if ((opts.requireDate ?? true) && !hasDateMention(caption)) return { ok: false, reason: 'no_date' }
   if (!EVENT_WORDS_RE.test(caption)) return { ok: false, reason: 'no_event_word' }
   return { ok: true }
 }

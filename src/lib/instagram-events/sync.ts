@@ -301,6 +301,8 @@ type Resolved = {
   timeBudgetMs: number
   fetchDeadline: number
   scanDeadline: number
+  /** 一次ふるいで本文の日付を必須にするか（ハッシュタグ検索は true・登録済みアカウントの巡回は false） */
+  requireDate: boolean
 }
 
 function resolve(opts: IgSyncOptions): Resolved {
@@ -323,6 +325,7 @@ function resolve(opts: IgSyncOptions): Resolved {
     timeBudgetMs,
     fetchDeadline: startedMs + timeBudgetMs * 0.45,
     scanDeadline: startedMs + timeBudgetMs * 0.85,
+    requireDate: true,
   }
 }
 
@@ -358,7 +361,7 @@ export async function processPosts(
       result.prefilter.already++
       continue
     }
-    const pf = looksLikeEventPost(m)
+    const pf = looksLikeEventPost(m, { requireDate: r.requireDate })
     if (!pf.ok) {
       if (pf.reason === 'no_image') result.prefilter.noImage++
       else if (pf.reason === 'no_date') result.prefilter.noDate++
@@ -508,7 +511,8 @@ export async function syncInstagramEvents(db: IgSyncDb, opts: IgSyncOptions): Pr
 
 /** モニタ対象アカウントの直近の投稿を候補にする */
 export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOptions & { lookbackDays?: number; perAccountLimit?: number }): Promise<IgSyncResult> {
-  const r = resolve(opts)
+  // 登録済みの巡回先は、本文に日付が無くても読む（日付がチラシ画像の中だけの告知を取りこぼさない・2026-11-10）
+  const r = { ...resolve(opts), requireDate: false }
   const result = emptyResult(r.dryRun, r.limitJpy)
   result.accounts = []
 
