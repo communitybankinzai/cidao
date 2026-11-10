@@ -9,7 +9,7 @@
 // （このルート自体はメールを送らない）。一時停止・費用の上限・読み取り済みの記憶はハッシュタグ側と共通。
 //
 // 認証: Authorization: Bearer <CRON_SECRET>。?dry=1 で書き込みなし（AI の読み取りと費用記録は行う）。
-// 環境変数: ハッシュタグ側と同じ。任意: INSTAGRAM_ACCOUNT_LOOKBACK_DAYS（既定 14）
+// 環境変数: ハッシュタグ側と同じ。任意: INSTAGRAM_ACCOUNT_LOOKBACK_DAYS（既定 45）
 
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'

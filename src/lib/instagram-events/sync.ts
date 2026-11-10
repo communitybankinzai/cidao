@@ -38,8 +38,10 @@ export const DEFAULT_BUDGET_JPY = 500
 export const DEFAULT_MAX_SCANS_PER_RUN = 12
 /** 1回の実行に使える時間（ms）。route.ts の maxDuration より短くし、取得は前半・読み取りは後半で打ち切る */
 export const DEFAULT_TIME_BUDGET_MS = 100_000
-/** アカウント経由で見る投稿の新しさ（これより古い投稿は読まない） */
-export const ACCOUNT_LOOKBACK_DAYS = 14
+/** アカウント経由で見る投稿の新しさ（これより古い投稿は読まない）。
+ *  14→45 日（2026-11-10）：団体の月間予定の告知は開催の3〜5週間前に出ることがあり、巡回に登録する前の告知が取り込まれなかったため。
+ *  読み取り済みの投稿は読み直さない（knownPosts）ので、広げても追加の読み取りは新しく範囲に入った分だけ。 */
+export const ACCOUNT_LOOKBACK_DAYS = 45
 const ACCOUNT_FETCH_CONCURRENCY = 3
 const SCAN_CONCURRENCY = 3
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
