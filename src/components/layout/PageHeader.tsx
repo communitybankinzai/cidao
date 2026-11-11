@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { FEATURES, HEADER_COLORS, type FeatureKey } from '@/components/features'
+import { HELP_SLUG_BY_FEATURE } from '@/lib/help-guide'
 
 /**
  * 「← 前のページへ」のリンク。押しやすい高さ（40px以上）で、全ページ同じ見た目にする。
@@ -86,6 +87,16 @@ export function PageHeader({
         </div>
         {description && (
           <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{description}</div>
+        )}
+        {feature && HELP_SLUG_BY_FEATURE[feature] && (
+          <p>
+            <Link
+              href={`/help/${HELP_SLUG_BY_FEATURE[feature]}`}
+              className="inline-flex min-h-10 items-center gap-1 text-sm text-sky-700 hover:underline dark:text-sky-300"
+            >
+              📖 この機能の使い方（画面と音声で説明）
+            </Link>
+          </p>
         )}
       </header>
     </>
