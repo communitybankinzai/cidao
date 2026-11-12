@@ -98,8 +98,6 @@ export default async function Home() {
   const tiles = (
     <section aria-label="できること" className="space-y-3">
       <TileGrid label="CiDAOでできること">
-        {/* 防災マップ（CBI サイト・2026-11-13）。災害のときに探しやすいよう先頭に置く。CiDAO の外なので新しいタブ */}
-        <Tile href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="cyan" external />
         <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" />
         <Tile href="/events" icon={CalendarDays} label="イベント" color="orange" />
         <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
@@ -107,6 +105,8 @@ export default async function Home() {
         <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
         {/* 食レポマップ（CBI サイト・2026-11-13）。CiDAO の外なので新しいタブで開く。名前は事業主の希望で短く「ぐるめ」 */}
         <Tile href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
+        {/* 防災マップ（CBI サイト・2026-11-13）。事業主の指示で「ぐるめ」の後ろ（防災は主役ではない）。CiDAO の外なので新しいタブ */}
+        <Tile href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="cyan" external />
         <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
           <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />
