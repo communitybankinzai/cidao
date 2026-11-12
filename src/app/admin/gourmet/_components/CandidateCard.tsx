@@ -4,6 +4,7 @@
 import { useState, useTransition } from 'react'
 import { approveSelected, rejectPost, rejectSelected } from '../actions'
 import type { StoredShop } from '@/lib/gourmet-candidates'
+import { NewShopPanel } from './NewShopPanel'
 
 type Props = {
   id: string
@@ -25,6 +26,7 @@ export function CandidateCard(p: Props) {
   // お店ごとの選択（チェック・選んだお店の参照）。決まったお店は操作しない
   const [checked, setChecked] = useState<boolean[]>(p.shops.map((s) => !s.decision && Boolean(s.chosen_ref)))
   const [refs, setRefs] = useState<string[]>(p.shops.map((s) => s.chosen_ref ?? s.matches[0]?.ref ?? ''))
+  const [adding, setAdding] = useState<number | null>(null) // 「地図に足して承認」の小窓を開いているお店
   const held = Boolean(p.holdReason)
 
   const run = (fn: () => Promise<{ ok: boolean; message: string }>) => start(async () => { const r = await fn(); setMsg(r.message) })
@@ -54,8 +56,16 @@ export function CandidateCard(p: Props) {
                 {s.matches.map((m) => <option key={m.ref} value={m.ref}>{m.name}（{m.municipality ?? ''}{m.area === 'near' ? '・周辺' : ''}）</option>)}
               </select>
             ) : (
-              <span className="text-xs text-slate-500">地図にないお店（食レポマップの「地図に無いお店を足す」で足してから）</span>
+              <>
+                <span className="text-xs text-slate-500">地図にないお店</span>
+                {!held && (
+                  <button type="button" onClick={() => setAdding(adding === i ? null : i)} className="rounded border border-emerald-600 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                    {adding === i ? '閉じる' : '地図に足して承認'}
+                  </button>
+                )}
+              </>
             )}
+            {adding === i && !s.decision && !held && <NewShopPanel candidateId={p.id} index={i} initialName={s.name} onClose={() => setAdding(null)} />}
             <span className="w-full text-xs text-slate-400">{s.reason}</span>
           </li>
         ))}

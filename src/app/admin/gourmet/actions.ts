@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { CandidateError, approveShops, rejectCandidate, rejectShops } from '@/lib/gourmet-candidates'
+import { CandidateError, addShopAndApprove, approveShops, rejectCandidate, rejectShops } from '@/lib/gourmet-candidates'
 import { GOURMET_CRAWL_SETTING } from '@/lib/gourmet-crawl'
 
 async function requireAdmin() {
@@ -31,6 +31,16 @@ export async function approveSelected(id: string, picks: Array<{ index: number; 
     const n = await approveShops(db, id, picks, userId)
     revalidatePath('/admin/gourmet')
     return { ok: true, message: `${n} 件を地図に出しました（反映まで最大1分）` }
+  } catch (e) { return fail(e) }
+}
+
+/** 地図にないお店を足して、そのまま承認する（位置は運営が確かめたもの） */
+export async function addShopAndApproveAction(id: string, index: number, input: { name: string; address: string; lat: number; lon: number }): Promise<Result> {
+  try {
+    const { db, userId } = await requireAdmin()
+    const r = await addShopAndApprove(db, id, index, input, userId)
+    revalidatePath('/admin/gourmet')
+    return { ok: true, message: r.reused ? '同じお店がもう地図にあったので、そのお店に付けて承認しました（反映まで最大1分）' : 'お店を地図に足して承認しました（反映まで最大1分）' }
   } catch (e) { return fail(e) }
 }
 

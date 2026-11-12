@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
-import { gourmetAreaOf, parseShopRef } from '@/lib/gourmet'
+import { MAX_ADDRESS, MAX_SHOP_NAME, gourmetAreaOf, insideGourmetArea, normalizeText, parseShopRef, roundCoord } from '@/lib/gourmet'
 import type { CandidateShop } from '@/lib/gourmet-crawl'
 
 export type StoredShop = CandidateShop & { decision: 'approved' | 'rejected' | null; report_id: string | null }
@@ -71,6 +71,67 @@ export async function approveShops(db: SupabaseClient, id: string, picks: Array<
   }).eq('id', id)
   if (error) throw new CandidateError(`候補を更新できません：${error.message}`)
   return added
+}
+
+const SAME_SHOP_M = 100 // 同じ名前でこの距離以内のお店がもうあれば、それを使う（二重登録を防ぐ。市民の登録 API と同じ）
+
+function distanceM(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const R = 6371000
+  const rad = (d: number) => (d * Math.PI) / 180
+  const dLat = rad(bLat - aLat)
+  const dLon = rad(bLon - aLon)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+export type NewShopInput = { name: unknown; address?: unknown; lat: unknown; lon: unknown }
+
+/** 新しいお店の入力を確かめて整える。名前なし・長すぎ・範囲外はエラー（範囲＝印西市＋周辺6市町） */
+export function checkNewShop(input: NewShopInput): { name: string; address: string | null; lat: number; lon: number } {
+  const name = normalizeText(input.name, MAX_SHOP_NAME)
+  if (!name) throw new CandidateError('お店の名前を入れてください（60字まで）')
+  const address = normalizeText(input.address, MAX_ADDRESS)
+  if (address === undefined) throw new CandidateError('住所は100字までで入れてください')
+  const lat = Number(input.lat)
+  const lon = Number(input.lon)
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !insideGourmetArea(lat, lon)) throw new CandidateError('位置が範囲の外です（印西市と周辺6市町の中で指定してください）')
+  return { name, address, lat: roundCoord(lat), lon: roundCoord(lon) }
+}
+
+/** 同じ名前で近い位置のお店（100m 以内）があればそれを返す */
+export function findSameShop<T extends { name: string; lat: number; lon: number }>(shops: T[], name: string, lat: number, lon: number): T | undefined {
+  return shops.find((s) => s.name === name && distanceM(s.lat, s.lon, lat, lon) <= SAME_SHOP_M)
+}
+
+/** 地図にないお店を運営が足して（位置は運営が確かめたもの）、そのまま承認する。同じ名前で100m 以内のお店があればそれに付ける。
+ *  承認に失敗したら、いま作ったお店は消す（地図に孤立したお店を残さない） */
+export async function addShopAndApprove(db: SupabaseClient, id: string, index: number, input: NewShopInput, memberId: string | null): Promise<{ added: number; ref: string; reused: boolean }> {
+  const c = await load(db, id)
+  if (c.status !== 'pending') throw new CandidateError('この候補はもう処理済みです')
+  if (c.hold_reason) throw new CandidateError(`承認できません：${c.hold_reason}`)
+  const s = c.shops[index]
+  if (!s || s.decision) throw new CandidateError('このお店はもう処理済みです')
+  const shop = checkNewShop(input)
+  const { data: same, error: readErr } = await db.from('gourmet_shops').select('id, name, lat, lon').eq('name', shop.name).eq('hidden', false).limit(20)
+  if (readErr) throw new CandidateError(`お店を調べられません：${readErr.message}`)
+  const near = findSameShop((same ?? []) as Array<{ id: string; name: string; lat: number; lon: number }>, shop.name, shop.lat, shop.lon)
+  let shopId: string
+  let created = false
+  if (near) shopId = near.id
+  else {
+    const { data: ins, error } = await db.from('gourmet_shops').insert({ name: shop.name, address: shop.address, lat: shop.lat, lon: shop.lon, device_id: 'admin', ip_hash: '' }).select('id').single()
+    if (error || !ins) throw new CandidateError(`お店を登録できません：${error?.message ?? ''}`)
+    shopId = ins.id as string
+    created = true
+  }
+  const ref = `shop:${shopId}`
+  try {
+    const added = await approveShops(db, id, [{ index, ref }], memberId)
+    return { added, ref, reused: !created }
+  } catch (e) {
+    if (created) await db.from('gourmet_shops').delete().eq('id', shopId)
+    throw e
+  }
 }
 
 /** お店ごとに却下する（残りのお店は承認できる） */
