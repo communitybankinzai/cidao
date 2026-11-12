@@ -3,8 +3,11 @@
 // 2026-11-06 事業主決定：お店＝OpenStreetMap＋市民の登録（＋FreeFreeの飲食の掲載）／すぐ公開・運営が伏せる／匿名で貼れる
 // ／他人の投稿も貼れる（写真は出さずリンクだけ）。
 
-// 印西市と周辺（白井・栄町・佐倉北部・成田西部・我孫子南部・柏東部）。site/gourmet-map/pipeline/build_shops.py の BBOX と揃える
-export const GOURMET_BBOX = { south: 35.70, west: 140.02, north: 35.90, east: 140.32 }
+import { GOURMET_AREAS, type GourmetAreaKind } from '@/lib/gourmet-areas'
+
+// 登録できる範囲＝印西市（inzai）＋周辺の市町（near：白井・栄町・柏・我孫子・成田・佐倉）の市域（2026-11-13 事業主決定・案2）。
+// 以前は緯度・経度の四角形で、八千代・船橋・富里などが混ざっていた。市町は site/gourmet-map/pipeline/make_areas.py の NEAR で決め、
+// 同じスクリプトが gourmet-areas.ts を書き出す（手で直さない）。食レポマップの地図の一覧（osm-shops.json の area）とそろう
 
 export const MAX_COMMENT = 100
 export const MAX_SHOP_NAME = 60
@@ -88,9 +91,35 @@ export function normalizeText(raw: unknown, max: number): string | null | undefi
   return v
 }
 
+function inRing(lon: number, lat: number, ring: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+const AREA_INDEX = GOURMET_AREAS.map((a) => {
+  const xs = a.polygons.flatMap((p) => p[0].map((c) => c[0]))
+  const ys = a.polygons.flatMap((p) => p[0].map((c) => c[1]))
+  return { ...a, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as const }
+}).sort((x, y) => (x.area === 'inzai' ? -1 : 0) - (y.area === 'inzai' ? -1 : 0))
+
+/** 'inzai'（印西市内）・'near'（周辺の市町）・null（範囲外）。市境の穴（飛び地の外）は外として扱う */
+export function gourmetAreaOf(lat: number, lon: number): GourmetAreaKind | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  for (const a of AREA_INDEX) {
+    const [w, s, e, n] = a.box
+    if (lon < w || lon > e || lat < s || lat > n) continue
+    if (a.polygons.some((p) => inRing(lon, lat, p[0]) && !p.slice(1).some((h) => inRing(lon, lat, h)))) return a.area
+  }
+  return null
+}
+
 export function insideGourmetArea(lat: number, lon: number) {
-  return Number.isFinite(lat) && Number.isFinite(lon) &&
-    lat >= GOURMET_BBOX.south && lat <= GOURMET_BBOX.north && lon >= GOURMET_BBOX.west && lon <= GOURMET_BBOX.east
+  return gourmetAreaOf(lat, lon) !== null
 }
 
 export function roundCoord(v: number) {

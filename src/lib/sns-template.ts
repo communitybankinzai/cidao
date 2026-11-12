@@ -85,7 +85,8 @@ function generateGourmetSnsContent(target: SnsTarget, medium: SnsMedium): string
   const handle = target.gourmet_handle ? `@${target.gourmet_handle.replace(/^@/, '')}` : ''
   const who = handle ? `${handle} さんの${platform}の投稿` : `${platform}の投稿${target.gourmet_is_own ? '' : '（見つけた人が紹介）'}`
   const comment = target.body ? `「${truncate(target.body, 100)}」\n` : ''
-  const prefix = '【印西 食レポマップ🍽】新しい食レポが届きました'
+  // 名前は「印西 食レポマップ（CiDAOの『ぐるめ』）」と両方書く（2026-11-13 事業主決定・案2。浸透したら寄せる）
+  const prefix = '【印西 食レポマップ（CiDAOの「ぐるめ」）🍽】新しい食レポが届きました'
   const ask = '食べた投稿のURL、あなたも地図に貼ってみませんか（ログイン不要）。'
   const tags = '#印西市 #印西グルメ #食レポ'
   if (medium === 'x') {
@@ -93,7 +94,7 @@ function generateGourmetSnsContent(target: SnsTarget, medium: SnsMedium): string
   }
   // Instagram はキャプション内の URL を押せないので、検索の言葉で地図へ誘う
   if (medium === 'instagram') {
-    return `${prefix}\n\n${shop}\n${comment}📱 ${who}\n\nくわしくは元の投稿へ。地図は「印西 食レポマップ」で検索。\n${ask}\n\n${tags} #印西 #印西ランチ #CommunityBankInzai`
+    return `${prefix}\n\n${shop}\n${comment}📱 ${who}\n\nくわしくは元の投稿へ。地図は「印西 食レポマップ」で検索（CiDAOの「ぐるめ」からも開けます）。\n${ask}\n\n${tags} #印西 #印西ランチ #CommunityBankInzai`
   }
   return `${prefix}\n\n${shop}\n${comment}📱 ${who}\n${target.gourmet_post_url ?? ''}\n\n▶ 地図でお店を見る\n${url(target, medium)}\n\n${ask}\n${tags}`
 }

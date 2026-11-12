@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insideGourmetArea, normalizeHandle, normalizeText, parseShopRef, parseSnsUrl } from '@/lib/gourmet'
+import { gourmetAreaOf, insideGourmetArea, normalizeHandle, normalizeText, parseShopRef, parseSnsUrl } from '@/lib/gourmet'
 
 describe('parseSnsUrl', () => {
   it('Instagram の投稿は追跡用のパラメータを落として受ける', () => {
@@ -42,6 +42,12 @@ describe('入力の整え方', () => {
   it('範囲は印西市と周辺だけ', () => {
     expect(insideGourmetArea(35.8, 140.15)).toBe(true)
     expect(insideGourmetArea(35.68, 139.76)).toBe(false) // 東京駅
+    // 2026-11-13：四角形ではなく市域（印西市＋周辺6市町）
+    expect(gourmetAreaOf(35.8314, 140.1458)).toBe('inzai') // 印西市役所
+    expect(gourmetAreaOf(35.7845, 140.0570)).toBe('near') // 白井市（白井駅）
+    expect(gourmetAreaOf(35.7764, 140.3184)).toBe('near') // 成田市（成田駅）
+    expect(gourmetAreaOf(35.7230, 140.0990)).toBe(null) // 八千代市（以前の四角形の中だが範囲外）
+    expect(insideGourmetArea(35.7230, 140.0990)).toBe(false)
   })
   it('お店の参照は osm・poi・shop・ff の4種類', () => {
     expect(parseShopRef('osm:n123')).toEqual({ kind: 'osm', ref: 'osm:n123', id: 'n123' })

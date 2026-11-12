@@ -24,6 +24,8 @@ describe('食レポの SNS 紹介文', () => {
     expect(t).toContain('gourmet-map/?shop=osm%3An4418406387')
     expect(t).toContain('「煮干しのスープが最高でした」')
     expect(t.length).toBeLessThanOrEqual(500)
+    // 名前は両方書く（2026-11-13）
+    expect(t).toContain('印西 食レポマップ（CiDAOの「ぐるめ」）')
   })
 
   it('他人の投稿を紹介した食レポでは @名前 を出さない（紹介した人の同意は本人の同意ではない）', () => {
