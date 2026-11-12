@@ -7,7 +7,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { notifyDisasterSubscribers } from '@/lib/notify'
 import { DISASTER_CATEGORIES, type DisasterCategory } from '@/lib/disaster-notify-categories'
 
-export const DISASTER_MAP_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/'
+// URL は画面側からも読めるよう cbi-site-urls.ts に置いた（2026-11-13）
+export { DISASTER_MAP_URL } from '@/lib/cbi-site-urls'
+import { DISASTER_MAP_URL } from '@/lib/cbi-site-urls'
 
 export { DISASTER_CATEGORIES, type DisasterCategory } from '@/lib/disaster-notify-categories'
 

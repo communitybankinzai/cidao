@@ -13,13 +13,16 @@ import {
   Megaphone,
   Menu as MenuIcon,
   PenLine,
+  ShieldAlert,
   Smartphone,
   UserRound,
   Users,
+  Utensils,
   Vote,
   type LucideIcon,
 } from 'lucide-react'
 import { Sheet } from '@/components/ui/sheet'
+import { DISASTER_MAP_URL, GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
 
 /**
  * 画面下に固定する主要導線のタブ。
@@ -40,11 +43,14 @@ const TABS: { href: string; icon: LucideIcon; label: string }[] = [
 /** 「メニュー」を開くと出る導線。下タブに入らないものをここへ集約する */
 const MENU_GROUPS: {
   title: string
-  items: { href: string; icon: LucideIcon; label: string; note: string }[]
+  // external：CiDAO の外のページ（CBI サイト）。新しいタブで開く（2026-11-13）
+  items: { href: string; icon: LucideIcon; label: string; note: string; external?: boolean }[]
 }[] = [
   {
     title: 'さがす・参加する',
     items: [
+      { href: DISASTER_MAP_URL, icon: ShieldAlert, label: '防災', note: '防災マップ（CBIの試作）・新しいタブで開く', external: true },
+      { href: GOURMET_MAP_URL, icon: Utensils, label: 'ぐるめ', note: '食レポマップ（地域のお店を応援）・新しいタブで開く', external: true },
       { href: '/proposals', icon: Vote, label: '提案・投票', note: 'まちへの提案を見る・投票する' },
       { href: '/talent', icon: Users, label: 'メンバー一覧', note: '登録した人のPRを見る' },
     ],
@@ -146,22 +152,32 @@ export function BottomNav() {
               <ul className="space-y-1">
                 {g.items.map((it) => (
                   <li key={it.href}>
-                    <Link
-                      href={it.href}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                    >
-                      <span
-                        aria-hidden
-                        className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#1e3a5f] dark:bg-slate-800 dark:text-sky-300"
-                      >
-                        <it.icon className="size-5" strokeWidth={1.75} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium">{it.label}</span>
-                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">{it.note}</span>
-                      </span>
-                    </Link>
+                    {(() => {
+                      const cls = 'flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition'
+                      const inner = (
+                        <>
+                          <span
+                            aria-hidden
+                            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#1e3a5f] dark:bg-slate-800 dark:text-sky-300"
+                          >
+                            <it.icon className="size-5" strokeWidth={1.75} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium">{it.label}</span>
+                            <span className="block text-[11px] text-slate-500 dark:text-slate-400">{it.note}</span>
+                          </span>
+                        </>
+                      )
+                      return it.external ? (
+                        <a href={it.href} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)} className={cls}>
+                          {inner}
+                        </a>
+                      ) : (
+                        <Link href={it.href} onClick={() => setMenuOpen(false)} className={cls}>
+                          {inner}
+                        </Link>
+                      )
+                    })()}
                   </li>
                 ))}
               </ul>

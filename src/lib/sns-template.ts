@@ -44,7 +44,9 @@ export type SnsTarget = {
 }
 
 // 食レポマップ（CBI サイト・GitHub Pages）。CiDAO ではないので utm は付けない（ルール15は CiDAO のリンクが対象）
-export const GOURMET_MAP_URL = 'https://communitybankinzai.github.io/cbi-site/gourmet-map/'
+// URL は画面側からも読めるよう cbi-site-urls.ts に置いた（2026-11-13）
+export { GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
+import { GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
 export function gourmetShopUrl(ref?: string | null): string {
   return ref ? `${GOURMET_MAP_URL}?shop=${encodeURIComponent(ref)}` : GOURMET_MAP_URL
 }

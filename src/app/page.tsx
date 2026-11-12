@@ -9,13 +9,14 @@ import { PushNudge } from '@/components/PushNudge'
 import { PageShell } from '@/components/layout/PageShell'
 import { Tile, TileGrid } from '@/components/Tile'
 import { MemberQr } from '@/components/MemberQr'
-import { GOURMET_MAP_URL } from '@/lib/sns-template'
+import { DISASTER_MAP_URL, GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
 import {
   Building2,
   CalendarDays,
   CircleHelp,
   LogIn,
   Megaphone,
+  ShieldAlert,
   Smartphone,
   UserRound,
   Users,
@@ -97,6 +98,8 @@ export default async function Home() {
   const tiles = (
     <section aria-label="できること" className="space-y-3">
       <TileGrid label="CiDAOでできること">
+        {/* 防災マップ（CBI サイト・2026-11-13）。災害のときに探しやすいよう先頭に置く。CiDAO の外なので新しいタブ */}
+        <Tile href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="cyan" external />
         <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" />
         <Tile href="/events" icon={CalendarDays} label="イベント" color="orange" />
         <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
