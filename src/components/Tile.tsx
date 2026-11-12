@@ -82,24 +82,35 @@ export function Tile({
   icon: Icon,
   label,
   color = 'sky',
+  external = false,
 }: {
   href: string
   icon: LucideIcon
   label: string
   /** タイルの色。省略時は従来の淡い青 */
   color?: TileColor
+  /** CiDAO の外のページ（CBI サイトの食レポマップなど）。新しいタブで開く（2026-11-13） */
+  external?: boolean
 }) {
   const c = COLORS[color]
+  const className = `flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border px-1 py-3 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
+  const inner = (
+    <>
+      <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
+      <span className={`text-[13px] font-semibold leading-tight ${c.label}`}>{label}</span>
+    </>
+  )
   return (
     <li>
-      <Link
-        href={href}
-        prefetch={false}
-        className={`flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border px-1 py-3 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`}
-      >
-        <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
-        <span className={`text-[13px] font-semibold leading-tight ${c.label}`}>{label}</span>
-      </Link>
+      {external ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+          {inner}
+        </a>
+      ) : (
+        <Link href={href} prefetch={false} className={className}>
+          {inner}
+        </Link>
+      )}
     </li>
   )
 }

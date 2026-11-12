@@ -9,6 +9,7 @@ import { PushNudge } from '@/components/PushNudge'
 import { PageShell } from '@/components/layout/PageShell'
 import { Tile, TileGrid } from '@/components/Tile'
 import { MemberQr } from '@/components/MemberQr'
+import { GOURMET_MAP_URL } from '@/lib/sns-template'
 import {
   Building2,
   CalendarDays,
@@ -18,6 +19,7 @@ import {
   Smartphone,
   UserRound,
   Users,
+  UtensilsCrossed,
   Vote,
 } from 'lucide-react'
 import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
@@ -100,6 +102,8 @@ export default async function Home() {
         <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
         <Tile href="/talent" icon={Users} label="メンバー" color="violet" />
         <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
+        {/* 食レポマップ（CBI サイト・2026-11-13）。CiDAO の外なので新しいタブで開く */}
+        <Tile href={GOURMET_MAP_URL} icon={UtensilsCrossed} label="食レポマップ" color="rose" external />
         <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
           <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />
