@@ -226,3 +226,21 @@ describe('syncInstagramAccounts', () => {
     expect(r.skipped[0]).toContain('モニタ対象のアカウントがありません')
   })
 })
+
+describe('syncInstagramAccounts：食レポ用のアカウントの条件語（2026-11-13）', () => {
+  it('条件語のある食レポ用アカウントは、条件語に当たる投稿だけを食レポに渡す。イベントの読み取りには回さない', async () => {
+    const big: MonitorAccount = { id: 'acc-9', username: 'chiba_big', label: '千葉全域の発信者', kind: 'その他', orgId: null, useEvents: false, useGourmet: true, keywords: ['印西', '成田'] }
+    const seen: string[][] = []
+    const extract = vi.fn()
+    await syncInstagramAccounts(fakeDb([big]), {
+      apiKey: 'k', botMemberId: BOT, now: new Date('2026-10-01T00:00:00Z'), extract: extract as never,
+      fetchFn: graphFetch([
+        { id: 'a1', caption: '印西のラーメン店に行ってきた', media_type: 'IMAGE', media_url: 'https://cdn/a1.jpg', permalink: 'https://www.instagram.com/p/a1/', timestamp: '2026-09-27T01:00:00+0000' },
+        { id: 'a2', caption: '船橋のカフェ', media_type: 'IMAGE', media_url: 'https://cdn/a2.jpg', permalink: 'https://www.instagram.com/p/a2/', timestamp: '2026-09-28T01:00:00+0000' },
+      ]),
+      gourmet: async (posts) => { seen.push(posts.map((p) => p.id)); return { enabled: true, read: posts.length, created: 0, skipped: 0, costJpy: 0 } },
+    })
+    expect(seen).toEqual([['a1']])
+    expect(extract).not.toHaveBeenCalled()
+  })
+})

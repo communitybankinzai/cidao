@@ -35,6 +35,11 @@ async function readSetting(db: SupabaseClient): Promise<Setting> {
   return ((data?.value as Setting | null) ?? {}) as Setting
 }
 
+/** 巡回のスイッチが入っているか（食レポ用のハッシュタグを取りに行くかどうかの判断に使う） */
+export async function isGourmetCrawlEnabled(db: SupabaseClient): Promise<boolean> {
+  return (await readSetting(db)).enabled === true
+}
+
 async function usedToday(db: SupabaseClient): Promise<number> {
   const since = new Date(`${jstDate()}T00:00:00+09:00`).toISOString()
   const { count } = await db.from('api_usage').select('id', { count: 'exact', head: true }).eq('purpose', GOURMET_CRAWL_PURPOSE).gte('created_at', since)

@@ -334,3 +334,38 @@ describe('syncInstagramEvents', () => {
     await expect(syncInstagramEvents(fakeDb({ loadDiscoveryAuth: async () => null }), { apiKey: 'k', botMemberId: BOT, fetchFn: fakeFetch([]) })).rejects.toThrow(/トークン/)
   })
 })
+
+describe('syncInstagramEvents：食レポ用のハッシュタグ（2026-11-13）', () => {
+  it('食レポ用の語で取った投稿は食レポにだけ渡し、イベントの候補には使わない。1語の失敗では止まらない', async () => {
+    const fetchFn = (async (input: string | URL | Request) => {
+      const url = decodeURIComponent(String(input))
+      if (url.includes('ig_hashtag_search')) {
+        if (url.includes('q=印西ディナー')) return new Response(JSON.stringify({ error: { message: 'boom' } }), { status: 500 })
+        const id = url.includes('q=印西グルメ') ? 'HG' : url.includes('q=印西ランチ') ? 'HL' : 'H1'
+        return new Response(JSON.stringify({ data: [{ id }] }), { status: 200 })
+      }
+      if (url.includes('/HG/recent_media')) return new Response(JSON.stringify({ data: [post('g1', '10/20 グルメフェス開催 #印西グルメ'), post('p1', '重複 #印西')] }), { status: 200 })
+      if (url.includes('/HL/recent_media')) return new Response(JSON.stringify({ data: [post('g2', 'ランチおいしかった #印西ランチ')] }), { status: 200 })
+      if (url.includes('/H1/recent_media')) return new Response(JSON.stringify({ data: [post('p1', '今日のランチ #印西')] }), { status: 200 })
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+    const seen: string[][] = []
+    const extract = vi.fn()
+    const r = await syncInstagramEvents(fakeDb({}), {
+      apiKey: 'k', botMemberId: BOT, now: new Date('2026-10-01T00:00:00Z'), extract: extract as never, fetchFn,
+      gourmetHashtags: ['印西グルメ', '印西ディナー', '印西ランチ'],
+      gourmet: async (posts) => { seen.push(posts.map((p) => p.id)); return { enabled: true, read: posts.length, created: 0, skipped: 0, costJpy: 0 } },
+    })
+    expect(seen).toEqual([['p1', 'g1', 'g2']])
+    expect(r.fetched.list).toBe(1) // イベント側が見たのは #印西 の1件だけ
+    expect(extract).not.toHaveBeenCalled() // g1 は日付と催しの語があるが、イベントの読み取りには回らない
+  })
+
+  it('食レポの巡回を渡さなければ、食レポ用の語は取りに行かない', async () => {
+    const urls: string[] = []
+    const base = fakeFetch([post('p1', '今日のランチ #印西')])
+    const fetchFn = (async (input: string | URL | Request) => { urls.push(String(input)); return base(input as never) }) as unknown as typeof fetch
+    await syncInstagramEvents(fakeDb({}), { apiKey: 'k', botMemberId: BOT, now: new Date('2026-10-01T00:00:00Z'), fetchFn, gourmetHashtags: ['印西グルメ'] })
+    expect(urls.filter((u) => u.includes('ig_hashtag_search')).length).toBe(1)
+  })
+})

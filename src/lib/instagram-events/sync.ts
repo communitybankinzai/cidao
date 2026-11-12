@@ -85,6 +85,8 @@ export type IgSyncOptions = SyncOptions & {
   timeBudgetMs?: number
   /** 食レポの SNS 巡回（2026-11-13）。取得済みの投稿をその場で渡す（Meta への追加の呼び出しは無い）。結果は件数だけ返す */
   gourmet?: (posts: IgMedia[], source: 'instagram-hashtag' | 'instagram-account') => Promise<GourmetHookSummary>
+  /** 食レポだけに使うハッシュタグ（2026-11-13）。巡回が有効なときだけ渡す。ここで取った投稿はイベントの候補には使わない */
+  gourmetHashtags?: string[]
 }
 
 export type GourmetHookSummary = { enabled: boolean; read: number; created: number; skipped: number; costJpy: number; note?: string }
@@ -512,7 +514,22 @@ export async function syncInstagramEvents(db: IgSyncDb, opts: IgSyncOptions): Pr
   if (truncated) result.skipped.push(`投稿が多く ${pages} ページ（${media.length} 件）で打ち切り（取得に時間がかかるため。それ以降の投稿は見ていない）`)
 
   const known = await loadKnownPosts(db)
-  await runGourmetHook(opts, media, 'instagram-hashtag', result, r.log)
+  // 食レポ用のハッシュタグ（#印西グルメ など）。食レポにだけ渡す。1語が失敗・時間切れでも、ほかの語とイベントの取り込みは続ける
+  const gourmetMedia = [...media]
+  for (const tag of opts.gourmet ? opts.gourmetHashtags ?? [] : []) {
+    if (Date.now() > r.fetchDeadline) {
+      r.log(`#${tag}（食レポ用）：時間切れのため未取得`)
+      continue
+    }
+    try {
+      const g = await fetchHashtagRecentMedia(r.fetchFn, { userId: auth.user_id, token: auth.access_token, hashtag: tag, maxPages: 3, deadline: r.fetchDeadline })
+      r.log(`#${tag}（食レポ用）: ${g.media.length} 件`)
+      for (const m of g.media) if (!gourmetMedia.some((x) => x.id === m.id)) gourmetMedia.push(m)
+    } catch (e) {
+      r.log(`#${tag}（食レポ用）の取得に失敗：${errMessage(e)}`)
+    }
+  }
+  await runGourmetHook(opts, gourmetMedia, 'instagram-hashtag', result, r.log)
   return processPosts(db, r, opts.botMemberId, media, known, result)
 }
 
@@ -570,7 +587,8 @@ export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOpt
       return
     }
     report.posts = fetched.media.length
-    if (account.useGourmet) gourmetPosts.push(...mediaSince(fetched.media, since))
+    // 条件語のあるアカウント（千葉全域の発信者など）は、本文に条件語（印西・周辺の市町名）がある投稿だけを食レポに渡す（読み取りの費用を抑える）
+    if (account.useGourmet) gourmetPosts.push(...mediaSince(fetched.media, since).filter((m) => matchesAccountKeywords(m.caption, account.keywords)))
     // 食レポだけに使うアカウント（ちばモグなど）は、イベントの候補づくりには入れない
     const newPosts = account.useEvents === false ? [] : mediaSince(fetched.media, since).filter((m) => !known.knownPosts.has(m.id))
     // 食堂以外の投稿も混じるアカウントは、条件語に当たる投稿だけを読む（読み取りの費用も減る）

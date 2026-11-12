@@ -20,6 +20,9 @@ export const GOURMET_CRAWL_PURPOSE = 'gourmet_crawl_instagram'
 export const GOURMET_CRAWL_SETTING = 'gourmet_crawl'
 export const MAX_SHOPS_PER_POST = 10
 export const DEFAULT_DAILY_AI_LIMIT = 40
+/** 食レポだけに使うハッシュタグ（# は付けない）。個人のグルメ投稿を拾うため（2026-11-13 事業主決定）。
+ *  イベントの候補づくりには使わない。Instagram の「7日で30語」の枠を使うので、増やすときは防災MAPの分と合わせて数える */
+export const GOURMET_HASHTAGS = ['印西グルメ', '印西ランチ', '印西ディナー', '印西カフェ']
 // Haiku 4.5 の単価（USD / 100万トークン）と円の換算（費用の記録用の目安）
 const USD_PER_MTOK = { input: 1, output: 5 }
 const JPY_PER_USD = 155
