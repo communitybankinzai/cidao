@@ -104,16 +104,9 @@ export function normShopName(s: string): string {
     .replace(/[\s・･'’"“”「」『』()（）［］\[\]【】!！?？.。、,，~〜ー\-_/／&＆#＃@＠]/g, '')
 }
 
-// 範囲（印西市＋周辺6市町）の市町名と、範囲外としてよく出る市町名（手がかりがこれなら照合しない）
-const IN_RANGE = ['印西', '白井', '栄町', '柏', '我孫子', '成田', '佐倉', '千葉ニュータウン', '牧の原', '木下', '小林', '印旛']
-const OUT_OF_RANGE = ['八千代', '船橋', '富里', '鎌ケ谷', '鎌ヶ谷', '松戸', '千葉市', '習志野', '四街道', '酒々井', '流山', '野田', '市川', '東京', '茨城', '取手', '龍ケ崎', '龍ヶ崎']
-
-/** 地域の手がかりが範囲外の市町を指していれば true（範囲内の名前も同時に出ていれば false） */
-export function hintIsOutOfRange(hint: string): boolean {
-  const h = hint.normalize('NFKC')
-  if (IN_RANGE.some((w) => h.includes(w))) return false
-  return OUT_OF_RANGE.some((w) => h.includes(w))
-}
+// 地域の手がかりの判定（市内・周辺・範囲外・不明）は、画面からも使うので gourmet-area-class.ts に置く
+import { hintIsOutOfRange } from '@/lib/gourmet-area-class'
+export { hintIsOutOfRange }
 
 // 一般的な語だけの店名（正規化した形）。地図に「ラーメン」「カフェ」のような名前のお店が実際にある
 const GENERIC = new Set(['ラーメン', 'らーめん', '拉麺', 'カフェ', 'cafe', 'coffee', '珈琲', 'コーヒー', '喫茶', '喫茶店', '食堂', '寿司', 'すし', '鮨', '焼肉', '焼き肉', '居酒屋', 'パン', 'ベーカリー', 'bakery', 'レストラン', 'restaurant', 'そば', '蕎麦', 'うどん', '中華', '中華料理', '定食', '弁当', 'ピザ', 'pizza', 'バー', 'bar', '洋菓子', '和菓子', 'ケーキ', 'お好み焼き', 'とんかつ', 'カレー', 'たこ焼き', 'クレープ', 'ドーナツ', 'スイーツ', 'イタリアン', 'フレンチ', '和食', '洋食', 'ファストフード'].map((w) => normShopName(w)))

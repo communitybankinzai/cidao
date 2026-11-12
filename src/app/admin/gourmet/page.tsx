@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { CandidateCard } from './_components/CandidateCard'
+import { CandidateList } from './_components/CandidateList'
 import { CrawlSwitch } from './_components/CrawlSwitch'
 import type { CandidateRow } from '@/lib/gourmet-candidates'
 import { GOURMET_CRAWL_SETTING } from '@/lib/gourmet-crawl'
@@ -44,12 +44,7 @@ export default async function AdminGourmetPage() {
         {candidates.length === 0 ? (
           <p className="text-sm text-slate-500">承認待ちの候補はありません。</p>
         ) : (
-          <ul className="space-y-3">
-            {candidates.map((c) => (
-              <CandidateCard key={c.id} id={c.id} postUrl={c.post_url} source={c.source} authorHandle={c.author_handle} postedAt={c.posted_at}
-                moreShops={c.more_shops} holdReason={c.hold_reason} shops={c.shops} />
-            ))}
-          </ul>
+          <CandidateList candidates={candidates} />
         )}
       </div>
     </div>

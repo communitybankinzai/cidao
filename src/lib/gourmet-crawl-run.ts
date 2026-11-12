@@ -99,7 +99,10 @@ export async function runGourmetCrawl(
     const cost = await estimateCost({ model: GOURMET_CRAWL_MODEL, usage }).catch(() => unavailableCost())
     costJpy += Number(cost.est_cost_jpy ?? 0)
     // 候補に残すのは「地図のお店と照合できた（ok）」「地図にないお店（unmatched）」だけ。批判的・範囲外は外す
-    const keep = buildCandidateShops(r.extraction, shops).filter((s) => s.status === 'ok' || s.status === 'unmatched')
+    // 範囲外の市町のお店も候補に残す（管理画面の絞り込みで見せる。地図には載せられない）。批判的なお店だけ外す
+    const all = buildCandidateShops(r.extraction, shops)
+    const inRange = all.filter((s) => s.status === 'ok' || s.status === 'unmatched')
+    const keep = all.filter((s) => s.status === 'ok' || s.status === 'unmatched' || s.status === 'out_of_area')
     const row = {
       source, platform: 'instagram', post_id: m.id, post_url: m.permalink,
       author_handle: source === 'instagram-account' ? m.account?.username ?? null : null,
@@ -111,7 +114,7 @@ export async function runGourmetCrawl(
       status: keep.length ? 'pending' : 'skipped',
       model: GOURMET_CRAWL_MODEL, input_tokens: r.usage.input, output_tokens: r.usage.output, est_cost_jpy: cost.est_cost_jpy ?? null,
     }
-    if (keep.length) created++; else skipped++
+    if (inRange.length) created++; else skipped++ // 範囲外のお店だけの投稿は、運営への知らせの対象にしない
     if (opts.dryRun) continue
     await recordApiUsage({
       run_id: randomUUID(), case_id: null, subject_id: null, member_id: opts.botMemberId,
