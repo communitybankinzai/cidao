@@ -12,7 +12,7 @@ import { dispatchLogs } from '@/lib/sns-dispatch'
 
 type LogRow = {
   id: string
-  target_type: 'freefree' | 'event' | 'org' | 'proposal'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal' | 'gourmet'
   target_id: string
   medium: 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
 }

@@ -10,7 +10,7 @@ import { FOR_SHOPS_PATH, areaLabelFromLocation, gsiCreditLine, introOfBody } fro
 const SITE_BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cidao.vercel.app'
 
 export type SnsTarget = {
-  target_type: 'freefree' | 'event' | 'org' | 'proposal'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal' | 'gourmet'
   target_id: string
   // 以下は呼び出し側で DB から取得した上で渡す
   title: string
@@ -33,6 +33,20 @@ export type SnsTarget = {
   import_source?: 'openpoi' | 'manual' | null
   // 画像カードに地図が入るか（入るなら国土地理院の出典を投稿文に添える）
   has_map?: boolean
+  // gourmet（食レポマップ・2026-11-12）用。title＝店名、body＝ひとこと。
+  // gourmet_handle は「自分の投稿」かつ「CBIのSNSで紹介してよい」に同意したときだけ入る（@で呼ぶ）。
+  // 他人の投稿を紹介した食レポでは、紹介した人の同意は投稿者本人の同意ではないので入れない
+  gourmet_handle?: string | null
+  gourmet_platform?: string | null   // 'Instagram' などの表示名
+  gourmet_post_url?: string | null   // 元の投稿
+  gourmet_shop_ref?: string | null   // 地図でお店を直接開く ?shop= の値
+  gourmet_is_own?: boolean
+}
+
+// 食レポマップ（CBI サイト・GitHub Pages）。CiDAO ではないので utm は付けない（ルール15は CiDAO のリンクが対象）
+export const GOURMET_MAP_URL = 'https://communitybankinzai.github.io/cbi-site/gourmet-map/'
+export function gourmetShopUrl(ref?: string | null): string {
+  return ref ? `${GOURMET_MAP_URL}?shop=${encodeURIComponent(ref)}` : GOURMET_MAP_URL
 }
 
 export type SnsMedium = 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
@@ -57,7 +71,29 @@ function url(target: SnsTarget, medium?: SnsMedium): string {
     case 'event':    return withUtm(`/events/${target.target_id}`, medium, 'event_announce')
     case 'org':      return withUtm(`/orgs/${target.target_id}`, medium, 'org_announce')
     case 'proposal': return withUtm(`/proposals/${target.target_id}`, medium, 'proposal_announce')
+    case 'gourmet':  return gourmetShopUrl(target.gourmet_shop_ref)
   }
+}
+
+// 食レポの紹介文（2026-11-12・事業主決定「通知＋同意つきだけ承認制で紹介」）。
+// 元の投稿へ人を送り、投稿した人のフォロワーが増えるようにするのが狙い。写真は転載しない（カード画像は自前）
+function generateGourmetSnsContent(target: SnsTarget, medium: SnsMedium): string {
+  const shop = truncate(target.title, 40)
+  const platform = target.gourmet_platform || 'SNS'
+  const handle = target.gourmet_handle ? `@${target.gourmet_handle.replace(/^@/, '')}` : ''
+  const who = handle ? `${handle} さんの${platform}の投稿` : `${platform}の投稿${target.gourmet_is_own ? '' : '（見つけた人が紹介）'}`
+  const comment = target.body ? `「${truncate(target.body, 100)}」\n` : ''
+  const prefix = '【印西 食レポマップ🍽】新しい食レポが届きました'
+  const ask = '食べた投稿のURL、あなたも地図に貼ってみませんか（ログイン不要）。'
+  const tags = '#印西市 #印西グルメ #食レポ'
+  if (medium === 'x') {
+    return `${prefix}\n${shop}\n${who}\n${target.gourmet_post_url ?? ''}\n${url(target, medium)}\n${tags}`
+  }
+  // Instagram はキャプション内の URL を押せないので、検索の言葉で地図へ誘う
+  if (medium === 'instagram') {
+    return `${prefix}\n\n${shop}\n${comment}📱 ${who}\n\nくわしくは元の投稿へ。地図は「印西 食レポマップ」で検索。\n${ask}\n\n${tags} #印西 #印西ランチ #CommunityBankInzai`
+  }
+  return `${prefix}\n\n${shop}\n${comment}📱 ${who}\n${target.gourmet_post_url ?? ''}\n\n▶ 地図でお店を見る\n${url(target, medium)}\n\n${ask}\n${tags}`
 }
 
 function truncate(s: string, max: number): string {
@@ -155,6 +191,7 @@ export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): 
 
 export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = Date.now()): string {
   if (target.target_type === 'freefree' && target.import_source) return generateImportSnsContent(target, medium)
+  if (target.target_type === 'gourmet') return generateGourmetSnsContent(target, medium)
   const link = url(target, medium)
   // FreeFree は冒頭をカウントダウンで強調する（無ければ何も付けない）
   const countdown = target.target_type === 'freefree' ? freefreeCountdown(target, jstToday(now)) : null

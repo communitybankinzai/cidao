@@ -2,14 +2,16 @@
 // GET   : 市民が足したお店と、食レポ（SNS の URL）の一覧。?all=1＋合言葉で伏せた分も
 // POST  : 食レポを1件登録（multipart）。お店は shopRef か、新しいお店（newShopName・newShopLat・newShopLon・newShopAddress）
 //         写真（image）は「自分の投稿です」（isOwn=1）のときだけ1枚。JPEG に作り直して位置情報を落とす
+//         snsOk=1 は「CBIのSNSで紹介してよい」。登録のたびに運営へ通知し、同意つきだけ SNS の下書き（承認制）を作る
 // DELETE: 自分の食レポの取り消し（同じ端末ID・送信から30分以内。行は消さず hidden=true）
 // PATCH : 運営が伏せる／戻す（?id=&type=report|shop・合言葉）
 // 匿名・すぐ公開・運営が伏せる（2026-11-06 事業主決定・防災MAPの通れた道と同じ運用）。
 
 import { createHash, randomUUID } from 'node:crypto'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { memoTtl } from '@/lib/memo-ttl'
+import { announceGourmetReport } from '@/lib/sns-announce'
 import { encodeRoadImage, MAX_ROAD_IMAGE_INPUT_BYTES } from '@/lib/disaster-road-media'
 import {
   MAX_ADDRESS, MAX_COMMENT, MAX_SHOP_NAME, insideGourmetArea, normalizeHandle, normalizeText,
@@ -205,6 +207,8 @@ export async function POST(request: Request) {
   const sns = parseSnsUrl(field(form, 'url'))
   if (!sns) return json(request, { error: 'invalid_url' }, 400)
   const isOwn = field(form, 'isOwn') === '1'
+  // 「CBIのSNSで紹介してよい」（2026-11-12）。同意つきの食レポだけ SNS 告知の下書きを作る（承認制）
+  const snsOk = field(form, 'snsOk') === '1'
   const handle = normalizeHandle(field(form, 'handle'))
   if (handle === undefined) return json(request, { error: 'invalid_handle' }, 400)
   const comment = normalizeText(field(form, 'comment'), MAX_COMMENT)
@@ -319,6 +323,7 @@ export async function POST(request: Request) {
   const row = {
     id, shop_ref: shop.ref, shop_name: shop.name, lat: shop.lat, lon: shop.lon, url: sns.url, platform: sns.platform,
     author_handle: handle ?? sns.handle, is_own: isOwn, image_url: imageUrl, comment, device_id: deviceId, ip_hash: hash,
+    sns_ok: snsOk,
   }
   const { error: insErr } = await supabase.from('gourmet_reports').insert(row)
   if (insErr) {
@@ -327,6 +332,11 @@ export async function POST(request: Request) {
     console.error('[gourmet POST]', insErr.message)
     return json(request, { error: 'insert_failed' }, 500)
   }
+  // 運営への通知（ベル・Webプッシュ・メール）と、同意つきなら SNS 告知の下書き（承認制）。応答の後で行う
+  after(() => announceGourmetReport({
+    id: row.id, shop_ref: row.shop_ref, shop_name: row.shop_name, url: row.url, platform: row.platform,
+    author_handle: row.author_handle, is_own: row.is_own, comment: row.comment, hidden: false, sns_ok: snsOk,
+  }))
   return json(request, {
     ok: true,
     report: reportOut({ ...row, hidden: false, created_at: new Date().toISOString() } as ReportRow, false),

@@ -1,19 +1,61 @@
-// SNS 投稿対象（freefree / event / org）を DB から読み、テンプレート入力に整える。
+// SNS 投稿対象（freefree / event / org / proposal / gourmet）を DB から読み、テンプレート入力に整える。
 //
 // 管理画面の下書き生成（/admin/sns）と実配信（/api/sns/dispatch）の両方から呼ぶ。
 // 両者が別々に組み立てると「承認した文面と実際に飛ぶ文面が違う」事故になるため、
 // 取得ロジックは1か所に置く。
 
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { SnsTarget } from '@/lib/sns-template'
 import { jstYmdOf } from '@/lib/freefree-dates'
+import { parseSnsUrl } from '@/lib/gourmet'
 
 type AnySupabase = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
 
+export type GourmetReportForSns = {
+  id: string; shop_ref: string; shop_name: string; url: string; platform: string
+  author_handle: string | null; is_own: boolean; comment: string | null; hidden: boolean; sns_ok: boolean
+}
+
+// 食レポ（gourmet_reports）は anon・authenticated から読めない表なので、運営画面のセッションでも
+// サーバー権限で読む（2026-11-12）。伏せた・取り消した食レポ、紹介に同意していない食レポは null
+export async function fetchGourmetReportForSns(id: string): Promise<GourmetReportForSns | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url || !key || !/^[0-9a-f-]{36}$/i.test(id)) return null
+  const db = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+  const { data } = await db
+    .from('gourmet_reports')
+    .select('id, shop_ref, shop_name, url, platform, author_handle, is_own, comment, hidden, sns_ok')
+    .eq('id', id)
+    .maybeSingle()
+  if (!data || data.hidden || !data.sns_ok) return null
+  return data as GourmetReportForSns
+}
+
+export function gourmetSnsTarget(r: GourmetReportForSns): SnsTarget {
+  return {
+    target_type: 'gourmet',
+    target_id: r.id,
+    title: r.shop_name,
+    body: r.comment,
+    // @で呼ぶのは「自分の投稿」のときだけ（sns_ok はこの関数に来る時点で true）
+    gourmet_handle: r.is_own && r.author_handle ? r.author_handle : null,
+    gourmet_platform: parseSnsUrl(r.url)?.platformLabel ?? r.platform,
+    gourmet_post_url: r.url,
+    gourmet_shop_ref: r.shop_ref,
+    gourmet_is_own: r.is_own,
+  }
+}
+
 export async function fetchSnsTarget(
   supabase: AnySupabase,
-  target_type: 'freefree' | 'event' | 'org' | 'proposal',
+  target_type: 'freefree' | 'event' | 'org' | 'proposal' | 'gourmet',
   target_id: string,
 ): Promise<SnsTarget | null> {
+  if (target_type === 'gourmet') {
+    const r = await fetchGourmetReportForSns(target_id)
+    return r ? gourmetSnsTarget(r) : null
+  }
   if (target_type === 'proposal') {
     const { data } = await supabase
       .from('proposals')

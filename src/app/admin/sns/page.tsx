@@ -27,6 +27,7 @@ const TARGET_LABEL: Record<string, string> = {
   event:    '📅 イベント',
   org:      '👥 団体',
   proposal: '📮 提案',
+  gourmet:  '🍽 食レポ',
 }
 
 const MEDIUM_LABEL: Record<string, string> = {

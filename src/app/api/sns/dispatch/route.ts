@@ -12,7 +12,7 @@ import type { SnsMedium } from '@/lib/sns-template'
 
 type Log = {
   id: string
-  target_type: 'freefree' | 'event' | 'org' | 'proposal'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal' | 'gourmet'
   target_id: string
   medium: SnsMedium
   status: 'success' | 'failed' | 'pending'

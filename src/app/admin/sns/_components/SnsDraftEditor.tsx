@@ -7,7 +7,7 @@ import { regenerateDraft, saveDraft, approveDraft, unapproveDraft, dismissDraft,
 
 export type DraftLog = {
   id: string
-  target_type: 'freefree' | 'event' | 'org' | 'proposal'
+  target_type: 'freefree' | 'event' | 'org' | 'proposal' | 'gourmet'
   target_id: string
   medium: 'x' | 'facebook' | 'line' | 'threads' | 'instagram'
   content: string | null
@@ -60,7 +60,7 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
   const approved = !!log.approved_at
   // sns-dispatch.ts の imageUrl と同じ対象。配信される画像をそのまま見せる
   const previewUrl =
-    log.medium === 'instagram' && log.target_id && (log.target_type === 'freefree' || log.target_type === 'proposal')
+    log.medium === 'instagram' && log.target_id && (log.target_type === 'freefree' || log.target_type === 'proposal' || log.target_type === 'gourmet')
       ? `/api/og/${log.target_type}/${log.target_id}`
       : null
 

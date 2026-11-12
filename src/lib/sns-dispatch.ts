@@ -11,6 +11,7 @@
 //   Instagram は画像必須（JPEG）のため、画像生成パイプライン整備後に接続する
 
 import type { SnsMedium } from '@/lib/sns-template'
+import { fetchGourmetReportForSns } from '@/lib/sns-target'
 
 export type PostOutcome = { status: 'success' | 'failed' | 'pending'; message?: string; posted_id?: string }
 
@@ -250,6 +251,13 @@ export async function dispatchLogs(
       results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: 'content empty' })
       continue
     }
+    // 食レポは「すぐ公開・本人が30分以内なら取り消せる・運営が伏せる」ので、承認までの間に
+    // 伏せた／取り消した食レポは配信しない（2026-11-12）
+    if (log.target_type === 'gourmet' && log.target_id && !(await fetchGourmetReportForSns(log.target_id))) {
+      await markLog(supabase, log.id, 'failed', 'gourmet report hidden, withdrawn or not shared')
+      results.push({ id: log.id, medium: log.medium, outcome: 'failed', message: 'gourmet report not available' })
+      continue
+    }
     try {
       // Instagram 投稿には画像（公開URL・JPEG）を添える。
       // 提案は告知カード画像、FreeFree は1枚目の掲載画像を JPEG・4:5 に直したもの（2026-09-15）
@@ -263,7 +271,9 @@ export async function dispatchLogs(
               ? `${SITE_BASE}/api/og/freefree/${log.target_id}`
               : log.target_type === 'event'
                 ? `${SITE_BASE}/api/og/event/${log.target_id}`
-                : undefined
+                : log.target_type === 'gourmet'
+                  ? `${SITE_BASE}/api/og/gourmet/${log.target_id}`
+                  : undefined
       const out = await postToMedium(log.medium, content, creds, { imageUrl })
       await markLog(supabase, log.id, out.status, out.message, out.posted_id)
       // 「紹介済み」は実際に配信できたときだけ刻む。下書きを作った時点では刻まない

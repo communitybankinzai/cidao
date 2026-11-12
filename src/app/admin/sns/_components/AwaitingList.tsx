@@ -13,6 +13,7 @@ const TARGET_FILTERS: Array<[string, string]> = [
   ['freefree', '🛍 FreeFree'],
   ['event', '📅 イベント'],
   ['org', '👥 団体'],
+  ['gourmet', '🍽 食レポ'],
 ]
 
 const MEDIUM_FILTERS: Array<[string, string]> = [

@@ -10,8 +10,8 @@
 // service role client で行う（src/lib/notify.ts と同じ方針の best-effort）。
 
 import { createClient as createAdminClient, type SupabaseClient } from '@supabase/supabase-js'
-import { generateSnsContent, type SnsMedium, type SnsTarget } from '@/lib/sns-template'
-import { fetchSnsTarget } from '@/lib/sns-target'
+import { generateSnsContent, gourmetShopUrl, type SnsMedium, type SnsTarget } from '@/lib/sns-template'
+import { fetchSnsTarget, gourmetSnsTarget, type GourmetReportForSns } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
 import { normalizeMailFrom } from '@/lib/mail'
@@ -587,5 +587,95 @@ async function notifyAdminsOfPendingDrafts(
     })
   } catch (e) {
     console.error('[sns-announce] admin mail failed:', e instanceof Error ? e.message : e)
+  }
+}
+
+// ── 食レポマップ（2026-11-12・事業主決定：通知＋同意つきだけ承認制で紹介）────────────────
+// 食レポが登録されたら、運営へベル（＋Webプッシュ）とメールで必ず知らせる（すぐ公開なので、伏せる判断にも使う）。
+// 「CBIのSNSで紹介してよい」に同意した食レポだけ、Threads・Facebook・Instagram の下書きを作る。
+// 下書きは全自動モード（sns_auto_post）でも常に承認待ち。運営が /admin/sns で承認するとその場で配信される。
+// Instagram の画像は /api/og/gourmet/[id] のカード（店名だけ・投稿の写真は転載しない）。
+// 呼び出し元は食レポ登録 API の after()（best-effort。失敗しても登録は成立させる）
+const GOURMET_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
+
+export async function announceGourmetReport(report: GourmetReportForSns): Promise<{ created: number }> {
+  const supabase = adminClient()
+  if (!supabase) return { created: 0 }
+  let created = 0
+  try {
+    if (report.sns_ok && !report.hidden) {
+      const { data: existing } = await supabase
+        .from('sns_post_logs')
+        .select('id')
+        .eq('target_type', 'gourmet')
+        .eq('target_id', report.id)
+        .limit(1)
+      if (!existing || existing.length === 0) {
+        const target = gourmetSnsTarget(report)
+        const rows = GOURMET_MEDIA.map((medium) => ({
+          target_type: 'gourmet',
+          target_id: report.id,
+          medium,
+          status: 'pending',
+          content: generateSnsContent(target, medium),
+          approved_at: null,
+          error_message: 'gourmet announce: awaiting approval',
+        }))
+        const { data: inserted, error } = await supabase.from('sns_post_logs').insert(rows).select('id')
+        if (error) console.error('[sns-announce] gourmet insert failed:', error.message)
+        created = inserted?.length ?? 0
+      }
+    }
+  } catch (e) {
+    console.error('[sns-announce] gourmet drafts failed:', e instanceof Error ? e.message : e)
+  }
+  await notifyAdminsOfGourmet(supabase, report, created)
+  return { created }
+}
+
+async function notifyAdminsOfGourmet(supabase: SupabaseClient, report: GourmetReportForSns, drafts: number) {
+  const shop = report.shop_name
+  const title = drafts > 0 ? `食レポが届きました（SNSで紹介の承認待ち ${drafts} 件）` : '食レポが届きました'
+  const body = drafts > 0
+    ? `「${shop}」に食レポが登録されました。登録した人は CBI の SNS での紹介に同意しています。管理画面で確認・承認すると配信されます`
+    : `「${shop}」に食レポが登録されました（SNS での紹介には同意していません）。すぐ公開されているので、内容を確認してください`
+  const linkUrl = drafts > 0 ? '/admin/sns' : gourmetShopUrl(report.shop_ref)
+  try {
+    const { data: admins } = await supabase
+      .from('members')
+      .select('id')
+      .not('admin_role', 'is', null)
+      .is('deleted_at', null)
+    for (const a of admins ?? []) {
+      await insertNotification({ recipientId: a.id as string, kind: 'system', title, body, linkUrl })
+    }
+  } catch (e) {
+    console.error('[sns-announce] gourmet in-app notify failed:', e instanceof Error ? e.message : e)
+  }
+  try {
+    const apiKey = process.env.RESEND_API_KEY ?? ''
+    const from = process.env.MAIL_FROM ?? ''
+    const to = process.env.ADMIN_NOTIFY_EMAIL ?? ''
+    if (!apiKey || !from || !to) return
+    const { Resend } = await import('resend')
+    const resend = new Resend(apiKey)
+    await resend.emails.send({
+      from: normalizeMailFrom(from),
+      to,
+      subject: `【食レポマップ】${title}：${shop}`,
+      text: [
+        `${body}。`,
+        ``,
+        `お店：${shop}`,
+        `元の投稿：${report.url}`,
+        `自分の投稿：${report.is_own ? 'はい' : 'いいえ（見つけた人が紹介）'}`,
+        `ひとこと：${report.comment ?? '（なし）'}`,
+        ``,
+        `地図で見る：${gourmetShopUrl(report.shop_ref)}`,
+        drafts > 0 ? `SNS の承認：${SITE_BASE}/admin/sns` : '',
+      ].filter((l) => l !== '').join('\n'),
+    })
+  } catch (e) {
+    console.error('[sns-announce] gourmet mail failed:', e instanceof Error ? e.message : e)
   }
 }
