@@ -43,7 +43,7 @@ export function CandidateCard(p: Props) {
       <ul className="space-y-2">
         {p.shops.map((s, i) => (
           <li key={i} className="flex flex-wrap items-center gap-2 text-sm border-t border-slate-100 dark:border-slate-800 pt-2">
-            <input type="checkbox" aria-label={`${s.name}を選ぶ`} disabled={held || Boolean(s.decision) || !refs[i]} checked={checked[i]} onChange={(e) => setChecked((c) => c.map((v, k) => (k === i ? e.target.checked : v)))} />
+            <input type="checkbox" aria-label={`${s.name}を選ぶ`} disabled={Boolean(s.decision)} checked={checked[i]} onChange={(e) => setChecked((c) => c.map((v, k) => (k === i ? e.target.checked : v)))} />
             <span className="font-medium">{s.name || '（店名なし）'}</span>
             <span className="text-slate-500">{s.area_hint}</span>
             <span className="text-xs text-slate-500">論調 {TONE[s.tone] ?? s.tone}・確度 {CONF[s.confidence] ?? s.confidence}</span>
