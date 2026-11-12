@@ -19,7 +19,7 @@ import {
   Smartphone,
   UserRound,
   Users,
-  UtensilsCrossed,
+  Utensils,
   Vote,
 } from 'lucide-react'
 import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
@@ -102,8 +102,8 @@ export default async function Home() {
         <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
         <Tile href="/talent" icon={Users} label="メンバー" color="violet" />
         <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
-        {/* 食レポマップ（CBI サイト・2026-11-13）。CiDAO の外なので新しいタブで開く */}
-        <Tile href={GOURMET_MAP_URL} icon={UtensilsCrossed} label="食レポマップ" color="rose" external />
+        {/* 食レポマップ（CBI サイト・2026-11-13）。CiDAO の外なので新しいタブで開く。名前は事業主の希望で短く「ぐるめ」 */}
+        <Tile href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
         <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
           <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />
