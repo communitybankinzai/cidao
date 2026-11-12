@@ -83,7 +83,11 @@ export type IgSyncOptions = SyncOptions & {
   hashtag?: string
   extract?: typeof extractFromFlyer
   timeBudgetMs?: number
+  /** 食レポの SNS 巡回（2026-11-13）。取得済みの投稿をその場で渡す（Meta への追加の呼び出しは無い）。結果は件数だけ返す */
+  gourmet?: (posts: IgMedia[], source: 'instagram-hashtag' | 'instagram-account') => Promise<GourmetHookSummary>
 }
+
+export type GourmetHookSummary = { enabled: boolean; read: number; created: number; skipped: number; costJpy: number; note?: string }
 
 export type IgPrefilterCounts = { noImage: number; noDate: number; noEventWord: number; notEvent: number; already: number; passed: number }
 
@@ -110,6 +114,8 @@ export type IgSyncResult = SyncResult & {
   prefilter: IgPrefilterCounts
   /** アカウント経由の実行だけ */
   accounts?: AccountReport[]
+  /** 食レポの SNS 巡回の件数（本文は持たない） */
+  gourmet?: GourmetHookSummary
 }
 
 /** fetched の意味（この取り込みでは）: list=取得した投稿, calendar=一次ふるい通過, details=AI に読ませた画像,
@@ -506,7 +512,20 @@ export async function syncInstagramEvents(db: IgSyncDb, opts: IgSyncOptions): Pr
   if (truncated) result.skipped.push(`投稿が多く ${pages} ページ（${media.length} 件）で打ち切り（取得に時間がかかるため。それ以降の投稿は見ていない）`)
 
   const known = await loadKnownPosts(db)
+  await runGourmetHook(opts, media, 'instagram-hashtag', result, r.log)
   return processPosts(db, r, opts.botMemberId, media, known, result)
+}
+
+/** 食レポの SNS 巡回に、取得済みの投稿を渡す（失敗してもイベントの取り込みは続ける） */
+async function runGourmetHook(opts: IgSyncOptions, posts: IgMedia[], source: 'instagram-hashtag' | 'instagram-account', result: IgSyncResult, log: (m: string) => void) {
+  if (!opts.gourmet || posts.length === 0) return
+  try {
+    result.gourmet = await opts.gourmet(posts, source)
+    if (result.gourmet.enabled) log(`食レポ：${result.gourmet.read} 件を読み、候補 ${result.gourmet.created} 件（約 ${Math.round(result.gourmet.costJpy)} 円）`)
+  } catch (e) {
+    log(`食レポの巡回に失敗（イベントは続ける）：${errMessage(e)}`)
+    result.gourmet = { enabled: true, read: 0, created: 0, skipped: 0, costJpy: 0, note: `失敗：${errMessage(e)}` }
+  }
 }
 
 /** モニタ対象アカウントの直近の投稿を候補にする */
@@ -528,6 +547,7 @@ export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOpt
   const known = await loadKnownPosts(db)
   const since = new Date(r.now.getTime() - (opts.lookbackDays ?? ACCOUNT_LOOKBACK_DAYS) * 86_400_000)
   const posts: IgMedia[] = []
+  const gourmetPosts: IgMedia[] = [] // 食レポに使うアカウントの投稿（2026-11-13・イベント側とは別）
   let permissionDenied = false
 
   await mapLimit(accounts, ACCOUNT_FETCH_CONCURRENCY, async (account) => {
@@ -550,7 +570,9 @@ export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOpt
       return
     }
     report.posts = fetched.media.length
-    const newPosts = mediaSince(fetched.media, since).filter((m) => !known.knownPosts.has(m.id))
+    if (account.useGourmet) gourmetPosts.push(...mediaSince(fetched.media, since))
+    // 食レポだけに使うアカウント（ちばモグなど）は、イベントの候補づくりには入れない
+    const newPosts = account.useEvents === false ? [] : mediaSince(fetched.media, since).filter((m) => !known.knownPosts.has(m.id))
     // 食堂以外の投稿も混じるアカウントは、条件語に当たる投稿だけを読む（読み取りの費用も減る）
     const fresh = newPosts.filter((m) => matchesAccountKeywords(m.caption, account.keywords))
     if (fresh.length !== newPosts.length) report.skippedByKeyword = newPosts.length - fresh.length
@@ -574,6 +596,7 @@ export async function syncInstagramAccounts(db: IgAccountSyncDb, opts: IgSyncOpt
     result.skipped.push(`取得できなかったアカウント ${failed.length} 件：${failed.map((a) => `@${a.username}（${a.error}）`).join('、')}`)
   }
   r.log(`投稿 ${result.fetched.list} 件（新しい未読み取り ${posts.length} 件）`)
+  await runGourmetHook(opts, gourmetPosts, 'instagram-account', result, r.log)
   await processPosts(db, r, opts.botMemberId, posts, known, result)
   result.ok = result.errors.length === 0
   return result

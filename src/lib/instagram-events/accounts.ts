@@ -24,6 +24,11 @@ export type MonitorAccount = {
   childPlace?: AccountChildPlace | null
   /** 空＝全投稿。入っていれば、本文にどれか1つ含まれる投稿だけを取り込む（食堂以外の投稿も混じるアカウント用） */
   keywords?: string[]
+  /** イベントの候補づくりに使う（既定 true）／食レポの候補づくりに使う（既定 false）・2026-11-13 */
+  useEvents?: boolean
+  useGourmet?: boolean
+  /** 空でなければ、この理由の確認が済むまで、このアカウント由来の食レポの候補は承認できない */
+  gourmetHold?: string
 }
 
 export type AccountFetchResult =

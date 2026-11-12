@@ -101,6 +101,7 @@ type ReportRow = {
   id: string; shop_ref: string; shop_name: string; lat: number; lon: number; url: string; platform: string
   author_handle: string | null; is_own: boolean; image_url: string | null; comment: string | null
   hidden: boolean; created_at: string
+  source?: string | null; multi_shop?: boolean | null
 }
 type ShopRow = { id: string; name: string; address: string | null; lat: number; lon: number; hidden: boolean; created_at: string }
 
@@ -109,6 +110,8 @@ function reportOut(r: ReportRow, withHidden: boolean) {
     id: r.id, shopRef: r.shop_ref, shopName: r.shop_name, lat: r.lat, lon: r.lon, url: r.url,
     platform: r.platform, platformLabel: PLATFORM_LABELS[r.platform] ?? r.platform, handle: r.author_handle,
     isOwn: r.is_own, imageUrl: r.image_url, comment: r.comment, createdAt: r.created_at,
+    // SNS 巡回で見つけ、運営が承認したもの（2026-11-13）。カードに「巡回で見つけた投稿」「複数のお店を紹介」の印を出す
+    source: r.source === 'crawl' ? 'crawl' : 'user', multiShop: r.multi_shop === true,
     ...(withHidden ? { hidden: r.hidden } : {}),
   }
 }
@@ -123,7 +126,7 @@ async function readAll(supabase: Db, withHidden: boolean) {
   let shopQ = supabase.from('gourmet_shops').select('id, name, address, lat, lon, hidden, created_at')
     .order('created_at', { ascending: false }).limit(LIST_LIMIT)
   let repQ = supabase.from('gourmet_reports')
-    .select('id, shop_ref, shop_name, lat, lon, url, platform, author_handle, is_own, image_url, comment, hidden, created_at')
+    .select('id, shop_ref, shop_name, lat, lon, url, platform, author_handle, is_own, image_url, comment, hidden, created_at, source, multi_shop')
     .order('created_at', { ascending: false }).limit(LIST_LIMIT)
   if (!withHidden) { shopQ = shopQ.eq('hidden', false); repQ = repQ.eq('hidden', false) }
   const [shops, reports] = await Promise.all([shopQ, repQ])

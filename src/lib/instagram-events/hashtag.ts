@@ -33,6 +33,10 @@ export type IgMedia = {
     /** 居場所系アカウントの設定（取り込む催しの目印の固定・取り込む投稿の条件語）。accounts.ts の MonitorAccount と同じ */
     childPlace?: 'ibasho' | 'oyako' | null
     keywords?: string[]
+    /** 食レポの SNS 巡回（2026-11-13）。accounts.ts の MonitorAccount と同じ */
+    useEvents?: boolean
+    useGourmet?: boolean
+    gourmetHold?: string
   }
 }
 

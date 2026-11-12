@@ -25,6 +25,7 @@ import { INSTAGRAM_ACCOUNT_SOURCE } from '@/lib/instagram-events/accounts'
 import { describePauseState, pausePageUrl, readPauseState } from '@/lib/instagram-events/pause'
 import { buildReportMail, resultFromRunRow, type AccountSection, type ReportResult } from '@/lib/instagram-events/report-mail'
 import { costSums, makeIgSyncDb } from '@/lib/instagram-events/db-supabase'
+import { runGourmetCrawl } from '@/lib/gourmet-crawl-run'
 import {
   DEFAULT_BUDGET_JPY,
   DEFAULT_MAX_SCANS_PER_RUN,
@@ -172,6 +173,8 @@ async function handle(request: Request) {
     result = await syncInstagramEvents(db, {
       apiKey, botMemberId, dryRun, model, budgetJpy, maxScansPerRun, timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
       log: (m) => console.warn('[instagram-events-sync]', m),
+      // 食レポの SNS 巡回（2026-11-13）：取得済みの #印西 の投稿をその場で読む。スイッチ app_settings.gourmet_crawl（既定オフ）
+      gourmet: (posts, source) => runGourmetCrawl(supabase, posts, source, { dryRun, botMemberId }),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

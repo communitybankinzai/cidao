@@ -17,6 +17,7 @@ import { emptyFailedResult, recordSyncRun } from '@/lib/event-sync/record-run'
 import { INSTAGRAM_ACCOUNT_SOURCE } from '@/lib/instagram-events/accounts'
 import { describePauseState, readPauseState } from '@/lib/instagram-events/pause'
 import { makeIgSyncDb } from '@/lib/instagram-events/db-supabase'
+import { runGourmetCrawl } from '@/lib/gourmet-crawl-run'
 import {
   ACCOUNT_LOOKBACK_DAYS,
   DEFAULT_BUDGET_JPY,
@@ -87,6 +88,8 @@ async function handle(request: Request) {
     result = await syncInstagramAccounts(db, {
       apiKey, botMemberId, dryRun, model, budgetJpy, maxScansPerRun, lookbackDays, timeBudgetMs: DEFAULT_TIME_BUDGET_MS,
       log: (m) => console.warn('[instagram-accounts-sync]', m),
+      // 食レポの SNS 巡回（2026-11-13）：食レポに使うアカウント（use_gourmet）の取得済みの投稿をその場で読む。スイッチ既定オフ
+      gourmet: (posts, source) => runGourmetCrawl(supabase, posts, source, { dryRun, botMemberId }),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

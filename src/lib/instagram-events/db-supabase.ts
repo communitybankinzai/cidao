@@ -40,6 +40,9 @@ type AccountRow = {
   kind: MonitorAccount['kind']
   org_id: string | null
   child_place: string | null
+  use_events?: boolean | null
+  use_gourmet?: boolean | null
+  gourmet_hold?: string | null
   child_place_keywords: string[] | null
 }
 
@@ -132,7 +135,7 @@ export function makeIgSyncDb(supabase: SupabaseClient, botMemberId: string): IgA
       await syncOrgAccountsIntoList(supabase)
       const { data, error } = await supabase
         .from('sns_monitor_accounts')
-        .select('id, username, label, kind, org_id, child_place, child_place_keywords')
+        .select('id, username, label, kind, org_id, child_place, child_place_keywords, use_events, use_gourmet, gourmet_hold')
         .eq('platform', 'instagram')
         .eq('enabled', true)
         .order('created_at', { ascending: true })
@@ -142,7 +145,8 @@ export function makeIgSyncDb(supabase: SupabaseClient, botMemberId: string): IgA
         id: a.id, username: a.username, label: a.label, kind: a.kind, orgId: a.org_id,
         childPlace: isAccountChildPlace(a.child_place) ? a.child_place : null,
         keywords: Array.isArray(a.child_place_keywords) ? a.child_place_keywords : [],
-      }))
+        useEvents: a.use_events !== false, useGourmet: a.use_gourmet === true, gourmetHold: a.gourmet_hold ?? '',
+      })).filter((a) => a.useEvents || a.useGourmet)
     },
     async updateAccountStatus(id, patch) {
       const { error } = await supabase.from('sns_monitor_accounts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)

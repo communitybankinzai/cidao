@@ -106,6 +106,15 @@ export default async function AdminHomePage() {
           </li>
           <li>
             <Link
+              href="/admin/gourmet"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">食レポの候補（SNS 巡回）</h2>
+              <p className="text-sm text-slate-500">AI が見つけた食レポを、お店ごとに承認して食レポマップへ。巡回のスイッチ（既定オフ）</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/freefree/openpoi"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >

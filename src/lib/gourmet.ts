@@ -122,6 +122,17 @@ export function insideGourmetArea(lat: number, lon: number) {
   return gourmetAreaOf(lat, lon) !== null
 }
 
+/** 範囲内なら市町の名前（印西市・白井市…）。範囲外は null。SNS 巡回の照合で地域の手がかりと突き合わせる（2026-11-13） */
+export function gourmetMunicipalityOf(lat: number, lon: number): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  for (const a of AREA_INDEX) {
+    const [w, s, e, n] = a.box
+    if (lon < w || lon > e || lat < s || lat > n) continue
+    if (a.polygons.some((p) => inRing(lon, lat, p[0]) && !p.slice(1).some((h) => inRing(lon, lat, h)))) return a.name
+  }
+  return null
+}
+
 export function roundCoord(v: number) {
   return Math.round(v * 1e6) / 1e6
 }
