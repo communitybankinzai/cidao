@@ -10,8 +10,8 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { addShopAndApprove } from '../src/lib/gourmet-candidates.ts'
-import { hintAreaClass } from '../src/lib/gourmet-area-class.ts'
+import { addShopAndApprove } from '../src/lib/gourmet-candidates'
+import { hintAreaClass } from '../src/lib/gourmet-area-class'
 
 const DRY = process.argv.includes('--dry-run')
 const HOME = process.env.USERPROFILE ?? 'C:/Users/you08'
