@@ -1,7 +1,7 @@
 'use client'
 
 // 食レポの候補の一覧：地域で絞り込み・並べ替え（2026-11-13 事業主指示「範囲外でもソートで表示（デフォルトで市内のみ）」）。
-// 既定は市内のみ（市内＋地域が決められないもの）。周辺6市町・範囲外は切り替えて見る。範囲外のお店は地図に載せられない（承認できない）。
+// 既定は市内のみ（市内＋地域が決められないもの）。周辺6市町・千葉県内・県外は切り替えて見る。県外のお店は地図に載せられない（承認できない）。
 import { useMemo, useState } from 'react'
 import { CandidateCard } from './CandidateCard'
 import { areaRank, areaVisible, candidateAreaClass, type AreaFilter } from '@/lib/gourmet-area-class'
@@ -10,7 +10,8 @@ import type { CandidateRow } from '@/lib/gourmet-candidates'
 const FILTERS: Array<{ value: AreaFilter; label: string }> = [
   { value: 'inzai', label: '市内のみ' },
   { value: 'near', label: '市内＋周辺6市町' },
-  { value: 'all', label: 'すべて（範囲外も）' },
+  { value: 'pref', label: '千葉県内すべて' },
+  { value: 'all', label: 'すべて（県外も）' },
 ]
 
 export function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
@@ -33,7 +34,7 @@ export function CandidateList({ candidates }: { candidates: CandidateRow[] }) {
           </button>
         ))}
       </div>
-      {filter === 'all' && <p className="text-xs text-slate-500">範囲（印西市＋周辺6市町）の外のお店は地図に載せられません。確認・却下だけできます。</p>}
+      {filter === 'all' && <p className="text-xs text-slate-500">千葉県の外のお店は地図に載せられません。確認・却下だけできます。千葉県内のお店は、承認すると地図に載ります（住所に「千葉県」が必要です）。</p>}
       {shown.length === 0 ? (
         <p className="text-sm text-slate-500">この地域の候補はありません。</p>
       ) : (

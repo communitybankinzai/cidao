@@ -3,15 +3,19 @@
 // 1 回の実行でやること（Windows タスク「CBI-食レポ住所自動」が30分ごとに呼ぶ。cwd は C:\Repos\cidao）
 //   A. 未処理の成果（Drive の Claude連絡/成果/NNN_お店の住所.json）があれば、位置を国土地理院で調べて、地図に足して承認する
 //      - 登録する条件：営業中／住所あり／範囲の中（範囲外・閉店・移転・住所不明・確度低は登録せず、理由を残す）
-//   B. 開いている依頼（成果待ち）が無く、地図にないお店（範囲外でない）が溜まっていれば、次の番号の依頼書を Drive に置く
+//      - 範囲は千葉県内まで（2026-11-14 事業主決定「県内であればとりあえず登録」）。県外・閉店・移転・住所不明・確度低は登録しない
+//   B. 開いている依頼（成果待ち）が無く、地図にないお店（県外でない）が溜まっていれば、次の番号の依頼書を Drive に置く
+//   C. 地図のお店との照合がはっきりした候補を自動で承認する（2026-11-14「候補抽出・住所調査・地図登録まで自動化」条件つき）
+//      - 条件：保留なし・投稿が批判的でない（好意的／中立）・AI の確度が高・照合の1位がはっきり（chosen_ref あり）。ほかは管理画面に残す
 //   Muse は夜に依頼を処理する（21:05〜22:50）。直接頼めば即実行されるが、ここでは自動化しない。
 // 状態: CBI/scripts/_gourmet_address_auto_state.json ／ 通知文: _gourmet_address_auto_msg.txt（声は ps1 が読む）
 // 使い方: npx tsx scripts/gourmet-address-auto.ts [--dry-run]（--dry-run は何も書かない）
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { addShopAndApprove } from '../src/lib/gourmet-candidates'
+import { addShopAndApprove, approveShops } from '../src/lib/gourmet-candidates'
 import { hintAreaClass } from '../src/lib/gourmet-area-class'
+import { gourmetAreaOf, insideChibaPrefecture } from '../src/lib/gourmet'
 
 const DRY = process.argv.includes('--dry-run')
 const HOME = process.env.USERPROFILE ?? 'C:/Users/you08'
@@ -77,7 +81,7 @@ function requestMarkdown(number: string, targets: Target[]): string {
 - 事業主の指示：「地図を調べないといけないものは自動で住所を調べる流れにして」「わからないものは Muse に依頼してください」（2026-11-13）
 
 ## 目的
-CiDAO の「ぐるめ」（食レポマップ）は、印西市と周辺6市町（白井市・栄町・柏市・我孫子市・成田市・佐倉市）のお店を地図に載せます。
+CiDAO の「ぐるめ」（食レポマップ）は、千葉県内のお店を地図に載せます（印西市と周辺6市町（白井市・栄町・柏市・我孫子市・成田市・佐倉市）を中心に、県内のほかの市町村も載せます）。
 SNS の投稿で紹介されたお店のうち、地図にまだ無い${n}店の「所在地（住所）」を、下の表から調べてください。住所が分かれば、パソコン側で位置に変換して地図に載せます（自動）。
 
 ## 調べてほしいこと（お店ごとに）
@@ -91,7 +95,7 @@ SNS の投稿で紹介されたお店のうち、地図にまだ無い${n}店の
 - **推測で住所を作らない。** 分からない店は address を空文字にして、note に理由を書く（部分的な当て推量を入れない）
 - 同じ名前のお店が複数あるとき（チェーン店など）は、下の「地域のヒント」と投稿の内容にいちばん近い店舗を選ぶ。選んだ理由を note に書く
 - ホテルの中のレストランは、ホテルの住所を書く（note に「ホテル内」）
-- 調べた結果、実際の所在地が上の7市町の外だと分かったら、その住所をそのまま書き、note に「範囲外」と書く
+- 調べた結果、実際の所在地が千葉県の外（東京・茨城・埼玉など）だと分かったら、その住所をそのまま書き、note に「範囲外」と書く。千葉県内ならどの市町村でもよい
 - 食中毒・営業停止・行政処分・衛生上の指摘・事故・不祥事など、営業上の問題が報じられている店は、business_issue に内容と出典を1行で書く（問題がなければ空文字）。書かれた店は自動登録されず、人が判断する
 - 投稿のURLは、お店を特定する手がかりとして読んでよい（公開投稿）。個人の情報は、成果に書かない
 - 調べるのに使えない（検索できない）ときは、成果物を置かず、返信にその理由を書く
@@ -153,13 +157,14 @@ async function main() {
       const conf = String(it.confidence ?? '')
       if (!address) { results.push({ name: label, outcome: `住所が分からない（${note.slice(0, 60)}）` }); continue }
       if (status === '閉店' || status === '移転') { results.push({ name: label, outcome: `${status}のため登録しない` }); continue }
-      if (note.includes('範囲外')) { results.push({ name: label, outcome: '範囲外（印西市と周辺6市町の外）' }); continue }
+      if (note.includes('範囲外') || !address.normalize('NFKC').includes('千葉県')) { results.push({ name: label, outcome: `範囲外（千葉県の外、または住所に千葉県がない・${address.slice(0, 30)}）` }); continue }
       if (conf === '低') { results.push({ name: label, outcome: '確度が低いため登録しない' }); continue }
       const issue = String(it.business_issue ?? '').trim()
       const kw = ISSUE_WORDS.find((w) => note.includes(w) || issue.includes(w))
       if (issue || kw) { results.push({ name: label, outcome: `営業上の問題の記載があるため保留（${(issue || note).slice(0, 60)}）` }); continue }
       const g = await gsi(address)
       if (!g) { results.push({ name: label, outcome: `位置に変換できない（${address}）` }); continue }
+      if (!gourmetAreaOf(g.lat, g.lon) && !insideChibaPrefecture(g.lat, g.lon, address)) { results.push({ name: label, outcome: `位置が千葉県の外（${address}）` }); continue }
       if (DRY) { results.push({ name: label, outcome: `（dry-run）登録できる：${address} → ${g.lat},${g.lon}` }); continue }
       try {
         const r = await addShopAndApprove(db, t.cid, t.idx, { name: String(it.name ?? t.name), address, lat: g.lat, lon: g.lon }, null)
@@ -174,6 +179,38 @@ async function main() {
     for (const r of results) log(`依頼${req.number} ${r.name}：${r.outcome}`)
     const bad = results.filter((r) => !r.outcome.startsWith('承認'))
     msgs.push(`依頼${req.number}の住所調べが終わりました。${added}店を地図に載せました。` + (bad.length ? `${bad.length}店は載せていません。` : ''))
+  }
+
+  // ---- 0. 県内のその他の市町村で「範囲外」と記録された未処理のお店を、地図にないお店に戻す（範囲を県内に広げたため・何度走らせても同じ結果） ----
+  if (!DRY) {
+    const { data: pend } = await db.from('gourmet_candidates').select('id, shops').eq('status', 'pending')
+    for (const c of pend ?? []) {
+      const shops = c.shops as Array<Record<string, unknown>>
+      if (!shops.some((s) => !s.decision && s.status === 'out_of_area' && hintAreaClass(String(s.area_hint ?? '')) === 'pref')) continue
+      const next = shops.map((s) => (!s.decision && s.status === 'out_of_area' && hintAreaClass(String(s.area_hint ?? '')) === 'pref' ? { ...s, status: 'unmatched' } : s))
+      await db.from('gourmet_candidates').update({ shops: next }).eq('id', c.id)
+      log(`候補${String(c.id).slice(0, 8)}：県内のお店を「範囲外」から「地図にないお店」に戻した`)
+    }
+  }
+
+  // ---- C. 照合がはっきりした候補を自動で承認する ----
+  {
+    const { data: cand } = await db.from('gourmet_candidates').select('id, shops, hold_reason').eq('status', 'pending').is('hold_reason', null)
+    let autoAdded = 0
+    for (const c of cand ?? []) {
+      const shops = c.shops as Array<Record<string, unknown>>
+      const picks = shops.flatMap((s, i) => (!s.decision && s.status === 'ok' && s.chosen_ref && s.tone !== 'negative' && s.confidence === 'high' ? [{ index: i, ref: String(s.chosen_ref) }] : []))
+      if (!picks.length) continue
+      if (DRY) { log(`（dry-run）候補${String(c.id).slice(0, 8)}：${picks.length}店を自動承認できる`); continue }
+      try {
+        const n = await approveShops(db, String(c.id), picks, null)
+        autoAdded += n
+        log(`候補${String(c.id).slice(0, 8)}：照合がはっきりした${picks.length}店を自動承認（${n}件を地図へ）`)
+      } catch (e) {
+        log(`候補${String(c.id).slice(0, 8)}：自動承認できない（${e instanceof Error ? e.message : e}）`)
+      }
+    }
+    if (autoAdded) msgs.push(`照合がはっきりした食レポ${autoAdded}件を、自動で地図に載せました。`)
   }
 
   // ---- B. 次の依頼書を作る（開いている依頼が無いとき）----

@@ -122,6 +122,16 @@ export function insideGourmetArea(lat: number, lon: number) {
   return gourmetAreaOf(lat, lon) !== null
 }
 
+// 千葉県の外枠（境界データは持たない粗い四角）。運営が承認で足すお店だけに使う（2026-11-14 事業主決定：県内ならとりあえず登録）
+const CHIBA_BOX = { south: 34.89, north: 36.13, west: 139.72, east: 140.88 }
+
+/** 千葉県内か。座標が県の外枠にあり、かつ住所に「千葉県」が入っていること（東京・茨城・埼玉との境の取り違えを防ぐ） */
+export function insideChibaPrefecture(lat: number, lon: number, address: string | null | undefined): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false
+  if (lat < CHIBA_BOX.south || lat > CHIBA_BOX.north || lon < CHIBA_BOX.west || lon > CHIBA_BOX.east) return false
+  return String(address ?? '').normalize('NFKC').includes('千葉県')
+}
+
 /** 範囲内なら市町の名前（印西市・白井市…）。範囲外は null。SNS 巡回の照合で地域の手がかりと突き合わせる（2026-11-13） */
 export function gourmetMunicipalityOf(lat: number, lon: number): string | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null

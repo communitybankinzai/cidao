@@ -57,8 +57,8 @@ export function CandidateCard(p: Props) {
                 {s.matches.map((m) => <option key={m.ref} value={m.ref}>{m.name}（{m.municipality ?? ''}{m.area === 'near' ? '・周辺' : ''}）</option>)}
               </select>
             ) : (
-              s.status === 'out_of_area' || hintAreaClass(s.area_hint) === 'out' ? (
-                <span className="text-xs text-rose-700 dark:text-rose-300">範囲の外のお店です（印西市＋周辺6市町の外・地図に載せられません）。確認・却下だけできます</span>
+              hintAreaClass(s.area_hint) === 'out' ? (
+                <span className="text-xs text-rose-700 dark:text-rose-300">県外のお店です（千葉県の外・地図に載せられません）。確認・却下だけできます</span>
               ) : (
               <>
                 <span className="text-xs text-slate-500">地図にないお店</span>

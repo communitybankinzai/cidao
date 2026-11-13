@@ -32,7 +32,8 @@ describe('照合', () => {
     expect(matchShop('すき家', '佐倉市', SHOPS)[0]?.ref).toBe('osm:n4')
   })
   it('範囲外の市町の手がかり', () => {
-    expect(hintIsOutOfRange('八千代市ゆりのき台')).toBe(true)
+    expect(hintIsOutOfRange('東京都新宿区')).toBe(true)
+    expect(hintIsOutOfRange('八千代市ゆりのき台')).toBe(false) // 県内のその他は足切りしない（2026-11-14）
     expect(hintIsOutOfRange('印西市高花')).toBe(false)
     expect(hintIsOutOfRange('白井駅近く、船橋市神保町')).toBe(false) // 範囲内の名前も出ていれば外さない（照合に任せる）
   })
@@ -48,7 +49,7 @@ describe('候補づくり', () => {
     expect(c.map((s) => s.status)).toEqual(['ok', 'negative'])
   })
   it('範囲外は外し、地図にないお店は「地図にないお店」で残す', () => {
-    const c = buildCandidateShops(ex([{ name: 'お好み焼き どんどん', area_hint: '八千代市' }, { name: 'スナヲめし', area_hint: '印西市高花' }]), SHOPS)
+    const c = buildCandidateShops(ex([{ name: 'お好み焼き どんどん', area_hint: '東京都新宿区' }, { name: 'スナヲめし', area_hint: '印西市高花' }]), SHOPS)
     expect(c.map((s) => s.status)).toEqual(['out_of_area', 'unmatched'])
     expect(c[1].chosen_ref).toBeNull()
   })

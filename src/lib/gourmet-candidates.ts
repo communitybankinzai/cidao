@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
-import { MAX_ADDRESS, MAX_SHOP_NAME, gourmetAreaOf, insideGourmetArea, normalizeText, parseShopRef, roundCoord } from '@/lib/gourmet'
+import { MAX_ADDRESS, MAX_SHOP_NAME, gourmetAreaOf, insideChibaPrefecture, insideGourmetArea, normalizeText, parseShopRef, roundCoord } from '@/lib/gourmet'
 import type { CandidateShop } from '@/lib/gourmet-crawl'
 
 export type StoredShop = CandidateShop & { decision: 'approved' | 'rejected' | null; report_id: string | null }
@@ -29,8 +29,9 @@ export async function resolveShop(db: SupabaseClient, refRaw: string): Promise<{
   const ref = parseShopRef(refRaw)
   if (!ref || ref.kind === 'ff') return null
   if (ref.kind === 'shop') {
-    const { data } = await db.from('gourmet_shops').select('id, name, lat, lon, hidden').eq('id', ref.id).maybeSingle()
-    return data && !data.hidden && gourmetAreaOf(data.lat, data.lon) ? { ref: ref.ref, name: data.name, lat: data.lat, lon: data.lon } : null
+    const { data } = await db.from('gourmet_shops').select('id, name, address, lat, lon, hidden').eq('id', ref.id).maybeSingle()
+    // 運営が足したお店は千葉県内まで通す（2026-11-14）。市民の登録 API は従来どおり印西市＋周辺6市町だけ
+    return data && !data.hidden && (gourmetAreaOf(data.lat, data.lon) || insideChibaPrefecture(data.lat, data.lon, data.address)) ? { ref: ref.ref, name: data.name, lat: data.lat, lon: data.lon } : null
   }
   const res = await fetch(`${GOURMET_MAP_URL}osm-shops.json`, { cache: 'no-store' })
   if (!res.ok) throw new CandidateError('お店の一覧を読めません')
@@ -94,7 +95,7 @@ export function checkNewShop(input: NewShopInput): { name: string; address: stri
   if (address === undefined) throw new CandidateError('住所は100字までで入れてください')
   const lat = Number(input.lat)
   const lon = Number(input.lon)
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !insideGourmetArea(lat, lon)) throw new CandidateError('位置が範囲の外です（印西市と周辺6市町の中で指定してください）')
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !(insideGourmetArea(lat, lon) || insideChibaPrefecture(lat, lon, address))) throw new CandidateError('位置が範囲の外です（千葉県内で、住所に「千葉県」を入れて指定してください）')
   return { name, address, lat: roundCoord(lat), lon: roundCoord(lon) }
 }
 

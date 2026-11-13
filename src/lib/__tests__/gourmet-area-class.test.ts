@@ -10,8 +10,9 @@ describe('hintAreaClass', () => {
   it('周辺6市町は near', () => {
     for (const h of ['白井市復', '栄町安食', '柏市柏の葉', '我孫子市', '成田市花崎町', '佐倉市ユーカリが丘']) expect(hintAreaClass(h)).toBe('near')
   })
-  it('旭市・香取市・匝瑳市・八千代市などは範囲外', () => {
-    for (const h of ['千葉県旭市飯岡', '香取市小見川', '匝瑳市平木、JR八日市場駅', '八千代市ゆりのき台', '東京都新宿区', '茨城県取手市']) expect(hintAreaClass(h)).toBe('out')
+  it('旭市・香取市・匝瑳市・八千代市などは県内のその他（pref）、東京・茨城は県外（out）', () => {
+    for (const h of ['千葉県旭市飯岡', '香取市小見川', '匝瑳市平木、JR八日市場駅', '八千代市ゆりのき台']) expect(hintAreaClass(h)).toBe('pref')
+    for (const h of ['東京都新宿区', '茨城県取手市']) expect(hintAreaClass(h)).toBe('out')
   })
   it('手がかりが無い・町名だけなら unknown。「千葉県」だけでは範囲外にしない', () => {
     expect(hintAreaClass('')).toBe('unknown')
@@ -30,7 +31,8 @@ describe('candidateAreaClass と areaVisible', () => {
   const shop = (status: string, area_hint: string, area?: string) => ({ status, area_hint, matches: area ? [{ area }] : [] })
   it('複数店の投稿は、いちばん内側のお店の区分', () => {
     expect(candidateAreaClass([shop('out_of_area', '旭市'), shop('unmatched', '印西市中央北')])).toBe('inzai')
-    expect(candidateAreaClass([shop('out_of_area', '旭市'), shop('out_of_area', '八千代市')])).toBe('out')
+    expect(candidateAreaClass([shop('out_of_area', '旭市'), shop('out_of_area', '八千代市')])).toBe('pref')
+    expect(candidateAreaClass([shop('out_of_area', '東京都新宿区'), shop('out_of_area', '茨城県取手市')])).toBe('out')
   })
   it('照合できたお店は、地図のお店の area を使う', () => {
     expect(candidateAreaClass([shop('ok', '', 'near')])).toBe('near')
@@ -46,6 +48,9 @@ describe('candidateAreaClass と areaVisible', () => {
     expect(areaVisible('out', 'inzai')).toBe(false)
     expect(areaVisible('near', 'near')).toBe(true)
     expect(areaVisible('out', 'near')).toBe(false)
+    expect(areaVisible('pref', 'near')).toBe(false)
+    expect(areaVisible('pref', 'pref')).toBe(true)
+    expect(areaVisible('out', 'pref')).toBe(false)
     expect(areaVisible('out', 'all')).toBe(true)
   })
 })

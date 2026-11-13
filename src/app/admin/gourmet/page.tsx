@@ -5,6 +5,8 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { CandidateList } from './_components/CandidateList'
 import { CrawlSwitch } from './_components/CrawlSwitch'
+import { RegistrationChart } from './_components/RegistrationChart'
+import { dailyRegistrations } from '@/lib/gourmet-stats'
 import type { CandidateRow } from '@/lib/gourmet-candidates'
 import { GOURMET_CRAWL_SETTING } from '@/lib/gourmet-crawl'
 
@@ -25,6 +27,16 @@ export default async function AdminGourmetPage() {
     db.from('gourmet_reports').select('id', { count: 'exact', head: true }).eq('source', 'crawl').eq('hidden', false),
   ])
   const candidates = (rows ?? []) as CandidateRow[]
+  // 登録実績（直近30日）。巡回で承認された食レポの作成日時と、承認した人の有無（null＝自動）
+  const since = new Date(Date.now() - 31 * 86_400_000).toISOString()
+  const { data: regRows } = await db.from('gourmet_reports').select('created_at, candidate_id').eq('source', 'crawl').eq('hidden', false).gte('created_at', since).limit(3000)
+  const candIds = [...new Set((regRows ?? []).map((r) => r.candidate_id as string | null).filter((x): x is string => Boolean(x)))]
+  const decidedBy = new Map<string, string | null>()
+  if (candIds.length) {
+    const { data: cs } = await db.from('gourmet_candidates').select('id, decided_by').in('id', candIds)
+    for (const c of cs ?? []) decidedBy.set(c.id as string, (c.decided_by as string | null) ?? null)
+  }
+  const series = dailyRegistrations((regRows ?? []).map((r) => ({ created_at: r.created_at as string, auto: !decidedBy.get(r.candidate_id as string) })), 30)
   const value = (setting?.value as { enabled?: boolean; daily_ai_limit?: number } | null) ?? {}
 
   return (
@@ -36,10 +48,11 @@ export default async function AdminGourmetPage() {
           <h1 className="text-3xl font-serif font-bold">食レポの候補（SNS 巡回）</h1>
           <p className="text-sm text-slate-500">
             毎朝の Instagram の取得（#印西 の検索・監視アカウント）から、AI が見つけた食レポの候補です。お店ごとに確かめて「選んだものを承認」すると、
-            食レポマップに「巡回で見つけた投稿」として出ます。承認するまで公開されません。批判的なお店と、範囲（印西市＋周辺6市町）の外のお店は、最初から除いています。
+            食レポマップに「巡回で見つけた投稿」として出ます。承認するまで公開されません。批判的なお店と、千葉県の外のお店は、最初から除いています。
           </p>
         </header>
         <CrawlSwitch enabled={value.enabled === true} dailyLimit={value.daily_ai_limit ?? 40} />
+        <RegistrationChart series={series} title="登録実績（直近30日・1日あたりの地図に載った食レポ数）" />
         <p className="text-sm text-slate-500">承認待ち {candidates.length} 件・巡回から地図に出ている食レポ {doneCount ?? 0} 件</p>
         {candidates.length === 0 ? (
           <p className="text-sm text-slate-500">承認待ちの候補はありません。</p>
