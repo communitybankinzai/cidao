@@ -11,6 +11,7 @@ import { wantsInstantEvent } from '@/lib/event-notify-mode'
 import { notifyOrganizersOfJoin } from '@/lib/event-join-notify'
 import { recordWrite } from '@/lib/audit'
 import { childPlaceColumns, decideAttendeeColumns, type AttendeeColumns } from '@/lib/child-place'
+import { seniorPlaceColumns } from '@/lib/senior-place'
 
 type CreateInput = {
   title: string
@@ -30,6 +31,8 @@ type CreateInput = {
   form_url?: string
   // 子どもの居場所の目印。'' | 'ibasho' | 'oyako' | 'none'（'' は自動判定にまかせる）
   child_place?: string
+  // 高齢者の居場所の目印。'' | 'yes' | 'none'（'' は自動判定にまかせる）
+  senior_place?: string
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -136,6 +139,7 @@ export async function createEvent(input: CreateInput) {
       website_url: input.website_url?.trim() || null,
       form_url: input.form_url?.trim() || null,
       ...childPlaceColumns(input.child_place),
+      ...seniorPlaceColumns(input.senior_place),
       status: 'open',
     })
     .select('id')
@@ -215,6 +219,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
         proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
         flyer_image_url: input.flyer_image_url?.trim() || null,
         ...childPlaceColumns(input.child_place),
+      ...seniorPlaceColumns(input.senior_place),
         status: 'open',
       })
       .select('id')
@@ -290,6 +295,8 @@ type UpdateInput = {
   form_url?: string
   // 子どもの居場所の目印。'' のときは今の値を触らない
   child_place?: string
+  // 高齢者の居場所の目印。'' のときは今の値を触らない
+  senior_place?: string
   // 開催後の参加者数。undefined＝触らない／null＝消す（未報告に戻す）／数＝報告された人数
   attendee_count?: number | null
 }
@@ -346,6 +353,7 @@ export async function updateEvent(input: UpdateInput) {
       website_url: input.website_url?.trim() || null,
       form_url: input.form_url?.trim() || null,
       ...childPlaceColumns(input.child_place),
+      ...seniorPlaceColumns(input.senior_place),
       ...attendeeColumns,
       // input.flyer_image_url が undefined のときは触らない（"" の場合のみ NULL クリア）
       ...(input.flyer_image_url === undefined

@@ -4,15 +4,16 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { buildCells, fetchWindow, parseYm, ymdInJst } from '@/lib/events-calendar'
-import { parseChildPlaceTag, tagKinds } from '@/lib/child-place'
+import { tagKinds } from '@/lib/child-place'
+import { parsePlaceTag } from '@/lib/senior-place'
 import EventsBrowser, { type EventRow, type OrgInfo } from './_components/EventsBrowser'
 
 export default async function EventsPage({ searchParams }: { searchParams: Promise<{ ym?: string; view?: string; tag?: string }> }) {
   const sp = await searchParams
   const { y, m } = parseYm(sp.ym)
   const view: 'calendar' | 'list' = sp.view === 'list' ? 'list' : 'calendar'
-  // 子どもの居場所での絞り込み（?tag=kodomo|ibasho|oyako）。知らない値は絞り込みなし
-  const tag = parseChildPlaceTag(sp.tag)
+  // 居場所での絞り込み（?tag=kodomo|ibasho|oyako＝子ども、senior＝高齢者）。知らない値は絞り込みなし
+  const tag = parsePlaceTag(sp.tag)
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,11 +27,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   let eventsQuery = supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place, senior_place')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())
-  if (tag) eventsQuery = eventsQuery.in('child_place', tagKinds(tag))
+  if (tag === 'senior') eventsQuery = eventsQuery.eq('senior_place', true)
+  else if (tag) eventsQuery = eventsQuery.in('child_place', tagKinds(tag))
   const { data: events } = await eventsQuery.order('start_at', { ascending: true })
 
   const rows: EventRow[] = (events ?? []) as EventRow[]

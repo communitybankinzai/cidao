@@ -12,6 +12,8 @@ import { OrganizerPicker, ORGANIZER_EXTERNAL, ORGANIZER_MEMBER } from '../../new
 import { DeleteEventButton } from './_components/DeleteEventButton'
 import { ChildPlaceField } from '../../_components/ChildPlaceField'
 import { childPlaceInitialInput } from '@/lib/child-place'
+import { SeniorPlaceField } from '../../_components/SeniorPlaceField'
+import { seniorPlaceInitialInput } from '@/lib/senior-place'
 
 // JST datetime-local 用の文字列（YYYY-MM-DDTHH:MM）に変換
 function toLocalDatetime(iso: string): string {
@@ -119,6 +121,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       website_url: (formData.get('website_url') as string | null) || undefined,
       form_url: (formData.get('form_url') as string | null) || undefined,
       child_place: String(formData.get('child_place') ?? ''),
+      senior_place: String(formData.get('senior_place') ?? ''),
       // 開催前は欄が無効（送られない）＝触らない。空にして保存すると未報告に戻る
       attendee_count: attendeeRaw === null ? undefined : String(attendeeRaw).trim() === '' ? null : Number(attendeeRaw),
     })
@@ -151,6 +154,10 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
           <ChildPlaceField
             defaultValue={childPlaceInitialInput(event)}
             autoValue={event.child_place_checked ? null : event.child_place}
+          />
+          <SeniorPlaceField
+            defaultValue={seniorPlaceInitialInput(event)}
+            autoValue={!event.senior_place_checked && !!event.senior_place}
           />
           <OrganizerPicker
             memberOrgs={memberOrgs}

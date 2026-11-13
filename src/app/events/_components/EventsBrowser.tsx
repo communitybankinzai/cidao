@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { categoryLabel } from '@/lib/categories'
 import { TYPE_LABEL } from '@/lib/org-labels'
-import { CHILD_PLACE_KINDS, childPlaceLabel, tagLabel, type ChildPlaceTag } from '@/lib/child-place'
+import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
+import { SENIOR_PLACE_DESC, SENIOR_PLACE_LABEL, placeTagLabel, type PlaceTag } from '@/lib/senior-place'
 
 const JST = 'Asia/Tokyo'
 const hmFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -32,6 +33,7 @@ export type EventRow = {
   organizer_name_text: string | null
   flyer_image_url: string | null
   child_place?: 'ibasho' | 'oyako' | null
+  senior_place?: boolean | null
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
@@ -56,7 +58,7 @@ type Props = {
   currentUserId?: string | null
   isAdmin?: boolean
   // 子どもの居場所での絞り込み（URL の ?tag=。null＝絞り込みなし）。events は絞り込み済みで届く
-  tag?: ChildPlaceTag | null
+  tag?: PlaceTag | null
   // 月送り・ビュー切替のリンクの土台（既定は /events。専用ページでは /events/kodomo）
   basePath?: string
 }
@@ -169,7 +171,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
 
   const selectedYm = `${year}-${String(month).padStart(2, '0')}`
 
-  function tagHref(t: ChildPlaceTag): string {
+  function tagHref(t: PlaceTag): string {
     return `${basePath}?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}&tag=${t}`
   }
 
@@ -275,9 +277,18 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             </TagChip>
           ))}
         </div>
+        {/* 高齢者の居場所での絞り込み（?tag=senior）。専用ページ（/events/kodomo）の中では出さない */}
+        {basePath === '/events' && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-500 mr-0.5">🧓 {SENIOR_PLACE_LABEL}:</span>
+            <TagChip href={tagHref('senior')} active={tag === 'senior'} title={SENIOR_PLACE_DESC}>
+              {SENIOR_PLACE_LABEL}
+            </TagChip>
+          </div>
+        )}
         {tag && (
           <p className="text-xs text-slate-500">
-            「{tagLabel(tag)}」の催しだけを表示しています。目印は、題名・主催名からの自動判定と、主催者・運営の確認で付けています。付いていない催しは載りません。
+            「{placeTagLabel(tag)}」の催しだけを表示しています。目印は、題名・主催名からの自動判定と、主催者・運営の確認で付けています。付いていない催しは載りません。
           </p>
         )}
 
@@ -907,6 +918,9 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
                         <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{categoryLabel(e.category)}</span>
                         {e.child_place && (
                           <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 rounded">🧒 {childPlaceLabel(e.child_place)}</span>
+                        )}
+                        {e.senior_place && (
+                          <span className="px-2 py-0.5 bg-teal-100 dark:bg-teal-900/40 text-teal-900 dark:text-teal-200 rounded">🧓 {SENIOR_PLACE_LABEL}</span>
                         )}
                         <span className="text-slate-500">主催: {organizerLabel(e)}</span>
                         {info && info.type !== 'civic_group' && (
