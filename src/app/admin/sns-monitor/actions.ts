@@ -46,6 +46,9 @@ export type MonitorAccountRow = {
   profile_url: string
   child_place: AccountChildPlace | null
   child_place_keywords: string[]
+  use_events: boolean
+  use_gourmet: boolean
+  gourmet_hold: string
 }
 
 /** 一覧（団体の分を先に写してから返す） */
@@ -59,7 +62,7 @@ export async function listMonitorAccounts(): Promise<MonitorAccountRow[]> {
   }
   const { data, error } = await service
     .from('sns_monitor_accounts')
-    .select('id, username, label, kind, org_id, enabled, note, last_checked_at, last_error, last_post_at, created_at, child_place, child_place_keywords, organizations(name)')
+    .select('id, username, label, kind, org_id, enabled, note, last_checked_at, last_error, last_post_at, created_at, child_place, child_place_keywords, use_events, use_gourmet, gourmet_hold, organizations(name)')
     .eq('platform', 'instagram')
     .order('kind', { ascending: true })
     .order('created_at', { ascending: true })
@@ -67,7 +70,11 @@ export async function listMonitorAccounts(): Promise<MonitorAccountRow[]> {
   if (error) throw new Error(error.message)
   return ((data ?? []) as unknown as (Omit<MonitorAccountRow, 'org_name' | 'profile_url'> & { organizations: { name: string } | { name: string }[] | null })[]).map((r) => {
     const org = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations
-    return { ...r, organizations: undefined, org_name: org?.name ?? null, profile_url: instagramProfileUrl(r.username) }
+    return {
+      ...r, organizations: undefined, org_name: org?.name ?? null, profile_url: instagramProfileUrl(r.username),
+      // 列が無い（NULL）ときの扱いは巡回と同じ：イベントは既定で使う・食レポは既定で使わない
+      use_events: r.use_events !== false, use_gourmet: r.use_gourmet === true, gourmet_hold: r.gourmet_hold ?? '',
+    }
   })
 }
 
@@ -86,11 +93,14 @@ export async function addMonitorAccount(formData: FormData): Promise<void> {
   const childPlaceRaw = String(formData.get('child_place') ?? '')
   const childPlace = isAccountChildPlace(childPlaceRaw) ? childPlaceRaw : null
   const keywords = parseAccountKeywords(String(formData.get('keywords') ?? ''))
+  const useEvents = formData.get('use_events') === 'on'
+  const useGourmet = formData.get('use_gourmet') === 'on'
   const username = parseInstagramUsername(input)
   if (!username) back('Instagram の URL（https://www.instagram.com/xxx/）か @ユーザー名を入れてください', 'error')
+  if (!useEvents && !useGourmet) back('使い道（イベント・食レポ）を1つ以上選んでください', 'error')
   const { error } = await serviceClient()
     .from('sns_monitor_accounts')
-    .insert({ platform: 'instagram', username, label: label || username, kind, note, created_by: userId, child_place: childPlace, child_place_keywords: keywords })
+    .insert({ platform: 'instagram', username, label: label || username, kind, note, created_by: userId, child_place: childPlace, child_place_keywords: keywords, use_events: useEvents, use_gourmet: useGourmet })
   if (error) {
     if (/duplicate|unique/i.test(error.message)) back(`@${username} は登録済みです`, 'error')
     back(`追加に失敗しました：${error.message}`, 'error')
@@ -112,6 +122,21 @@ export async function updateMonitorAccountPlace(id: string, formData: FormData):
   if (error) back(`変更に失敗しました：${error.message}`, 'error')
   revalidatePath(PAGE)
   back('取り込む催しの設定を保存しました（次の朝6:32の読み取りから反映）')
+}
+
+/** 使い道（イベントの候補づくり／食レポの候補づくり）を変える（form action）。両方外すことはできない */
+export async function updateMonitorAccountUses(id: string, formData: FormData): Promise<void> {
+  await requireAdmin()
+  const useEvents = formData.get('use_events') === 'on'
+  const useGourmet = formData.get('use_gourmet') === 'on'
+  if (!useEvents && !useGourmet) back('使い道（イベント・食レポ）を1つ以上選んでください。読ませたくないときは「停止」を使います', 'error')
+  const { error } = await serviceClient()
+    .from('sns_monitor_accounts')
+    .update({ use_events: useEvents, use_gourmet: useGourmet, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) back(`変更に失敗しました：${error.message}`, 'error')
+  revalidatePath(PAGE)
+  back('使い道を保存しました（次の朝6:32の読み取りから反映）')
 }
 
 export async function setMonitorAccountEnabled(id: string, enabled: boolean): Promise<void> {

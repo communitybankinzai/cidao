@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { addMonitorAccount, deleteMonitorAccount, listMonitorAccounts, setMonitorAccountEnabled, updateMonitorAccountPlace } from './actions'
+import { addMonitorAccount, deleteMonitorAccount, listMonitorAccounts, setMonitorAccountEnabled, updateMonitorAccountPlace, updateMonitorAccountUses } from './actions'
 import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 
 // 管理画面「SNS モニタ対象」：Instagram のイベント告知を自動で候補にするアカウントの一覧。
@@ -10,7 +10,14 @@ import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 
 const fmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-export default async function AdminSnsMonitorPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+const PAGE_PATH = '/admin/sns-monitor'
+const USE_TABS: Array<{ key: 'all' | 'gourmet' | 'events'; label: string }> = [
+  { key: 'all', label: 'すべて' },
+  { key: 'gourmet', label: '🍽 食レポ' },
+  { key: 'events', label: '📅 イベント' },
+]
+
+export default async function AdminSnsMonitorPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; use?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -18,8 +25,11 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
   if (rpcErr || !isAdmin) redirect('/')
 
   const sp = await searchParams
-  const rows = await listMonitorAccounts()
-  const enabledCount = rows.filter((r) => r.enabled).length
+  const allRows = await listMonitorAccounts()
+  const use = sp.use === 'gourmet' || sp.use === 'events' ? sp.use : 'all'
+  const rows = use === 'gourmet' ? allRows.filter((r) => r.use_gourmet) : use === 'events' ? allRows.filter((r) => r.use_events) : allRows
+  const enabledCount = allRows.filter((r) => r.enabled).length
+  const tabCount = { all: allRows.length, gourmet: allRows.filter((r) => r.use_gourmet).length, events: allRows.filter((r) => r.use_events).length }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -38,7 +48,11 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
             団体は<Link href="/orgs" className="underline">団体検索</Link>から団体ページ →「編集」の SNS 欄に Instagram の URL を入れると、自動でここに載ります（種別「団体」）。
             企業・行政など CiDAO に登録されないものは下のフォームで追加してください。
             読めるのは Instagram のビジネス／クリエイターアカウントだけです（個人アカウントは「見つからない」になります）。
-            有効 {enabledCount} ／ 全 {rows.length} 件
+            有効 {enabledCount} ／ 全 {allRows.length} 件
+          </p>
+          <p className="text-xs text-slate-500">
+            各アカウントには「使い道」があります。📅 イベント＝チラシ画像から催しを読み取る／🍽 食レポ＝飲食店を紹介する投稿を読み取って「食レポ候補」（承認制）にする。
+            食レポ専門のアカウントは「イベント」を外し、「食レポ」だけにしてください。
           </p>
         </header>
 
@@ -70,6 +84,11 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
               <input name="note" placeholder="例：セミナー・相談会の告知が多い" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
             </label>
             <button type="submit" className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">追加</button>
+            <fieldset className="md:col-span-5 flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
+              <legend className="mb-1">使い道（1つ以上）</legend>
+              <label className="flex items-center gap-1.5"><input type="checkbox" name="use_events" defaultChecked /> 📅 イベントの候補づくり</label>
+              <label className="flex items-center gap-1.5"><input type="checkbox" name="use_gourmet" /> 🍽 食レポの候補づくり（食レポ専門なら、こちらだけ）</label>
+            </fieldset>
             <div className="grid gap-3 md:col-span-5 md:grid-cols-[14rem_1fr]">
               <label className="text-xs text-slate-600 dark:text-slate-300">
                 取り込む催しの目印（子どもの居場所）
@@ -94,8 +113,19 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
 
         <section className="space-y-2">
           <h2 className="text-base font-semibold">一覧</h2>
+          <nav className="flex flex-wrap gap-2 text-xs" aria-label="使い道で絞り込む">
+            {USE_TABS.map((t) => (
+              <Link
+                key={t.key}
+                href={t.key === 'all' ? PAGE_PATH : `${PAGE_PATH}?use=${t.key}`}
+                className={`rounded-full border px-3 py-1 ${use === t.key ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200' : 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+              >
+                {t.label}（{tabCount[t.key]}）
+              </Link>
+            ))}
+          </nav>
           {rows.length === 0 ? (
-            <p className="text-sm text-slate-500">まだありません。</p>
+            <p className="text-sm text-slate-500">{use === 'all' ? 'まだありません。' : 'この使い道のアカウントはまだありません。'}</p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <table className="w-full text-sm">
@@ -104,6 +134,7 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
                     <th className="px-3 py-2 text-left">アカウント</th>
                     <th className="px-3 py-2 text-left">種別</th>
                     <th className="px-3 py-2 text-left">団体</th>
+                    <th className="px-3 py-2 text-left">使い道</th>
                     <th className="px-3 py-2 text-left">取り込む催し</th>
                     <th className="px-3 py-2 text-left">直近の確認</th>
                     <th className="px-3 py-2 text-left">状態</th>
@@ -121,6 +152,20 @@ export default async function AdminSnsMonitorPage({ searchParams }: { searchPara
                       <td className="px-3 py-2 whitespace-nowrap">{r.kind}</td>
                       <td className="px-3 py-2">
                         {r.org_id ? <Link href={`/orgs/${r.org_id}`} className="text-blue-700 hover:underline dark:text-blue-300">{r.org_name ?? '団体ページ'}</Link> : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <details>
+                          <summary className="cursor-pointer space-y-0.5">
+                            {r.use_events && <div><span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">📅 イベント</span></div>}
+                            {r.use_gourmet && <div><span className="rounded bg-orange-100 px-1.5 py-0.5 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200">🍽 食レポ</span></div>}
+                            {r.use_gourmet && r.gourmet_hold && <div className="text-rose-700 dark:text-rose-300">⏸ {r.gourmet_hold}</div>}
+                          </summary>
+                          <form action={updateMonitorAccountUses.bind(null, r.id)} className="mt-2 space-y-1.5">
+                            <label className="flex items-center gap-1.5"><input type="checkbox" name="use_events" defaultChecked={r.use_events} /> 📅 イベント</label>
+                            <label className="flex items-center gap-1.5"><input type="checkbox" name="use_gourmet" defaultChecked={r.use_gourmet} /> 🍽 食レポ</label>
+                            <button type="submit" className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">保存</button>
+                          </form>
+                        </details>
                       </td>
                       <td className="px-3 py-2 text-xs">
                         <details>
