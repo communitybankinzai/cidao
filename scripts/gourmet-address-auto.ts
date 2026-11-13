@@ -22,6 +22,8 @@ const LOG = `${SCRIPTS}/_gourmet_address_auto.log`
 const REQ_DIR = 'G:/マイドライブ/Claude連絡/依頼'
 const OUT_DIR = 'G:/マイドライブ/Claude連絡/成果'
 const STALE_DAYS = 3
+// 成果の note / business_issue にこれらがあれば自動登録せず保留（食中毒などの営業上の問題）
+const ISSUE_WORDS = ['食中毒', '営業停止', '営業禁止', '行政処分', '行政指導', '衛生上', '不祥事', '休業中', '営業を見合わせ']
 
 type Target = { no: number; cid: string; idx: number; name: string; hint: string; post: string }
 type Req = { number: string; createdAt: string; targets: Target[]; done: boolean; staleNotified?: boolean; results?: Array<{ name: string; outcome: string }> }
@@ -90,6 +92,7 @@ SNS の投稿で紹介されたお店のうち、地図にまだ無い${n}店の
 - 同じ名前のお店が複数あるとき（チェーン店など）は、下の「地域のヒント」と投稿の内容にいちばん近い店舗を選ぶ。選んだ理由を note に書く
 - ホテルの中のレストランは、ホテルの住所を書く（note に「ホテル内」）
 - 調べた結果、実際の所在地が上の7市町の外だと分かったら、その住所をそのまま書き、note に「範囲外」と書く
+- 食中毒・営業停止・行政処分・衛生上の指摘・事故・不祥事など、営業上の問題が報じられている店は、business_issue に内容と出典を1行で書く（問題がなければ空文字）。書かれた店は自動登録されず、人が判断する
 - 投稿のURLは、お店を特定する手がかりとして読んでよい（公開投稿）。個人の情報は、成果に書かない
 - 調べるのに使えない（検索できない）ときは、成果物を置かず、返信にその理由を書く
 
@@ -102,7 +105,7 @@ ${rows}
 - 保存先：成果/${number}_お店の住所.json（UTF-8 の JSON だけ。説明文・前置き・コードフェンスは入れない。保存前に JSON として正しいか自分で確かめる）
 - 形：
 
-{"items":[{"no":1,"name":"正式な店名","address":"千葉県印西市中央北1-4 アルカサール内","address_level":"番地","status":"営業中","source_urls":["https://…"],"confidence":"高","note":""}]}
+{"items":[{"no":1,"name":"正式な店名","address":"千葉県印西市中央北1-4 アルカサール内","address_level":"番地","status":"営業中","source_urls":["https://…"],"confidence":"高","business_issue":"","note":""}]}
 
 - items は上の表の${n}件すべてを、no の順に入れる（分からない店も入れる）
 - address_level：番地（番地・号まで分かる）／町丁（町名・丁目まで）／不明
@@ -152,6 +155,9 @@ async function main() {
       if (status === '閉店' || status === '移転') { results.push({ name: label, outcome: `${status}のため登録しない` }); continue }
       if (note.includes('範囲外')) { results.push({ name: label, outcome: '範囲外（印西市と周辺6市町の外）' }); continue }
       if (conf === '低') { results.push({ name: label, outcome: '確度が低いため登録しない' }); continue }
+      const issue = String(it.business_issue ?? '').trim()
+      const kw = ISSUE_WORDS.find((w) => note.includes(w) || issue.includes(w))
+      if (issue || kw) { results.push({ name: label, outcome: `営業上の問題の記載があるため保留（${(issue || note).slice(0, 60)}）` }); continue }
       const g = await gsi(address)
       if (!g) { results.push({ name: label, outcome: `位置に変換できない（${address}）` }); continue }
       if (DRY) { results.push({ name: label, outcome: `（dry-run）登録できる：${address} → ${g.lat},${g.lon}` }); continue }
