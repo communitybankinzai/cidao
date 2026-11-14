@@ -29,14 +29,8 @@ export default async function AdminGourmetPage() {
   const candidates = (rows ?? []) as CandidateRow[]
   // 登録実績（直近30日）。巡回で承認された食レポの作成日時と、承認した人の有無（null＝自動）
   const since = new Date(Date.now() - 31 * 86_400_000).toISOString()
-  const { data: regRows } = await db.from('gourmet_reports').select('created_at, candidate_id').eq('source', 'crawl').eq('hidden', false).gte('created_at', since).limit(3000)
-  const candIds = [...new Set((regRows ?? []).map((r) => r.candidate_id as string | null).filter((x): x is string => Boolean(x)))]
-  const decidedBy = new Map<string, string | null>()
-  if (candIds.length) {
-    const { data: cs } = await db.from('gourmet_candidates').select('id, decided_by').in('id', candIds)
-    for (const c of cs ?? []) decidedBy.set(c.id as string, (c.decided_by as string | null) ?? null)
-  }
-  const series = dailyRegistrations((regRows ?? []).map((r) => ({ created_at: r.created_at as string, auto: !decidedBy.get(r.candidate_id as string) })), 30)
+  const { data: regRows } = await db.from('gourmet_reports').select('created_at, approval_route').eq('source', 'crawl').eq('hidden', false).gte('created_at', since).limit(3000)
+  const series = dailyRegistrations((regRows ?? []).map((r) => ({ created_at: r.created_at as string, route: r.approval_route === 'auto' || r.approval_route === 'manual' ? r.approval_route : 'unknown' })), 30)
   const value = (setting?.value as { enabled?: boolean; daily_ai_limit?: number } | null) ?? {}
 
   return (

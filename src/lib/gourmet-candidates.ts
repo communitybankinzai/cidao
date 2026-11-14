@@ -45,7 +45,7 @@ function finished(shops: StoredShop[]) {
 }
 
 /** 選んだお店（index と参照）を承認して地図に出す。戻り値は登録した件数 */
-export async function approveShops(db: SupabaseClient, id: string, picks: Array<{ index: number; ref: string }>, memberId: string | null): Promise<number> {
+export async function approveShops(db: SupabaseClient, id: string, picks: Array<{ index: number; ref: string }>, memberId: string | null, route: 'auto' | 'manual' = memberId ? 'manual' : 'auto'): Promise<number> {
   const c = await load(db, id)
   if (c.status !== 'pending') throw new CandidateError('この候補はもう処理済みです')
   if (c.hold_reason) throw new CandidateError(`承認できません：${c.hold_reason}`)
@@ -60,7 +60,7 @@ export async function approveShops(db: SupabaseClient, id: string, picks: Array<
     const { error } = await db.from('gourmet_reports').insert({
       id: reportId, shop_ref: shop.ref, shop_name: shop.name, lat: shop.lat, lon: shop.lon, url: c.post_url, platform: 'instagram',
       author_handle: c.author_handle, is_own: false, image_url: null, comment: null, device_id: 'crawl', ip_hash: '',
-      hidden: false, sns_ok: false, source: 'crawl', multi_shop: c.shops.length > 1, candidate_id: c.id,
+      hidden: false, sns_ok: false, source: 'crawl', multi_shop: c.shops.length > 1, candidate_id: c.id, approval_route: route,
     })
     if (error && error.code !== '23505') throw new CandidateError(`登録できません：${error.message}`)
     shops[p.index] = { ...s, chosen_ref: shop.ref, decision: 'approved', report_id: error ? null : reportId }

@@ -8,7 +8,7 @@ const PAD = { l: 28, r: 8, t: 8, b: 22 }
 
 export function RegistrationChart({ series, title }: { series: DayCount[]; title: string }) {
   const t = totals(series)
-  const max = Math.max(1, ...series.map((d) => d.auto + d.manual))
+  const max = Math.max(1, ...series.map((d) => d.auto + d.manual + d.unknown))
   const top = Math.ceil(max / 2) * 2 // 目盛りは偶数に丸める
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
@@ -21,9 +21,9 @@ export function RegistrationChart({ series, title }: { series: DayCount[]; title
     <section className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-xs text-slate-500">合計 {t.all} 件（自動 {t.auto}・手動 {t.manual}）</p>
+        <p className="text-xs text-slate-500">合計 {t.all} 件（自動 {t.auto}・手動 {t.manual}・記録前 {t.unknown}）</p>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}。合計${t.all}件、自動${t.auto}件、手動${t.manual}件`} className="w-full h-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}。合計${t.all}件、自動${t.auto}件、手動${t.manual}件、記録前${t.unknown}件`} className="w-full h-auto">
         {ticks.map((v) => (
           <g key={v}>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={1} />
@@ -34,11 +34,13 @@ export function RegistrationChart({ series, title }: { series: DayCount[]; title
           const x = PAD.l + slot * i + (slot - bar) / 2
           const hAuto = (d.auto / top) * innerH
           const hManual = (d.manual / top) * innerH
+          const hUnknown = (d.unknown / top) * innerH
           return (
             <g key={d.day}>
-              <title>{`${label(d.day)}：自動 ${d.auto}・手動 ${d.manual}`}</title>
+              <title>{`${label(d.day)}：自動 ${d.auto}・手動 ${d.manual}・記録前 ${d.unknown}`}</title>
               <rect x={x} y={y(d.manual)} width={bar} height={hManual} className="fill-sky-600" />
               <rect x={x} y={y(d.manual) - hAuto} width={bar} height={hAuto} className="fill-emerald-600" />
+              <rect x={x} y={y(d.manual) - hAuto - hUnknown} width={bar} height={hUnknown} className="fill-slate-400" />
               {(i === 0 || i === series.length - 1 || i % 7 === 0) && (
                 <text x={x + bar / 2} y={H - 6} textAnchor="middle" fontSize={9} className="fill-slate-500">{label(d.day)}</text>
               )}
@@ -49,6 +51,7 @@ export function RegistrationChart({ series, title }: { series: DayCount[]; title
       <p className="flex gap-4 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-600" />自動（住所調べ・自動承認）</span>
         <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-600" />手動（管理画面で承認）</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-slate-400" />記録前（11/14 以前・自動か手作業か不明）</span>
       </p>
     </section>
   )
