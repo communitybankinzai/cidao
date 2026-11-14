@@ -10,7 +10,8 @@ import { GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
 import { MAX_ADDRESS, MAX_SHOP_NAME, gourmetAreaOf, insideChibaPrefecture, insideGourmetArea, normalizeText, parseShopRef, roundCoord } from '@/lib/gourmet'
 import type { CandidateShop } from '@/lib/gourmet-crawl'
 
-export type StoredShop = CandidateShop & { decision: 'approved' | 'rejected' | null; report_id: string | null }
+// research_requested_at：運営が「住所を調べて自動登録」を押した時刻（調査中の印）。research_note：調べた結果、登録しなかった理由（2026-11-14）
+export type StoredShop = CandidateShop & { decision: 'approved' | 'rejected' | null; report_id: string | null; research_requested_at?: string | null; research_note?: string | null }
 export type CandidateRow = {
   id: string; source: string; post_id: string; post_url: string; author_handle: string | null; posted_at: string | null
   shops: StoredShop[]; more_shops: boolean; hold_reason: string; status: string; created_at: string
@@ -42,6 +43,18 @@ export async function resolveShop(db: SupabaseClient, refRaw: string): Promise<{
 
 function finished(shops: StoredShop[]) {
   return shops.every((s) => s.decision !== null)
+}
+
+/** 「住所を調べて自動登録」：そのお店に調査依頼の印を付ける。自動処理（gourmet-address-auto）が Muse へ依頼し、結果が出れば条件つきで登録する */
+export async function requestResearch(db: SupabaseClient, id: string, index: number): Promise<void> {
+  const c = await load(db, id)
+  if (c.status !== 'pending') throw new CandidateError('この候補はもう処理済みです')
+  const s = c.shops[index]
+  if (!s || s.decision) throw new CandidateError('このお店はもう処理済みです')
+  if (s.status !== 'unmatched') throw new CandidateError('地図にないお店だけ調べられます')
+  const shops = c.shops.map((x, i) => (i === index ? { ...x, research_requested_at: new Date().toISOString(), research_note: null } : x))
+  const { error } = await db.from('gourmet_candidates').update({ shops }).eq('id', id)
+  if (error) throw new CandidateError(`依頼を保存できません：${error.message}`)
 }
 
 /** 選んだお店（index と参照）を承認して地図に出す。戻り値は登録した件数 */

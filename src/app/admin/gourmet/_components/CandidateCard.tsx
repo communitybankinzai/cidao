@@ -2,7 +2,7 @@
 
 // 食レポの候補 1投稿＝1行。お店ごとにチェックと「選んだお店」（変えられる）を並べ、「選んだものを承認」の1タップで地図に出す
 import { useState, useTransition } from 'react'
-import { approveSelected, rejectPost, rejectSelected } from '../actions'
+import { approveSelected, rejectPost, rejectSelected, requestAddressResearch } from '../actions'
 import type { StoredShop } from '@/lib/gourmet-candidates'
 import { NewShopPanel } from './NewShopPanel'
 import { hintAreaClass } from '@/lib/gourmet-area-class'
@@ -62,6 +62,16 @@ export function CandidateCard(p: Props) {
               ) : (
               <>
                 <span className="text-xs text-slate-500">地図にないお店</span>
+                {s.research_requested_at ? (
+                  <span className="rounded bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-2 py-0.5 text-xs text-sky-800 dark:text-sky-200">住所を調査中（結果が出れば自動で登録します）</span>
+                ) : (
+                  !held && (
+                    <button type="button" disabled={pending} onClick={() => run(() => requestAddressResearch(p.id, i))} className="rounded border border-sky-600 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:text-sky-400 disabled:opacity-40">
+                      住所を調べて自動登録
+                    </button>
+                  )
+                )}
+                {s.research_note && <span className="text-xs text-amber-700 dark:text-amber-300">前回の調査：{s.research_note}</span>}
                 {!held && (
                   <button type="button" onClick={() => setAdding(adding === i ? null : i)} className="rounded border border-emerald-600 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                     {adding === i ? '閉じる' : '地図に足して承認'}

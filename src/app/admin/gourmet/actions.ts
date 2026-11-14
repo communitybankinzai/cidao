@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { CandidateError, addShopAndApprove, approveShops, rejectCandidate, rejectShops } from '@/lib/gourmet-candidates'
+import { CandidateError, addShopAndApprove, approveShops, rejectCandidate, rejectShops, requestResearch } from '@/lib/gourmet-candidates'
 import { GOURMET_CRAWL_SETTING } from '@/lib/gourmet-crawl'
 
 async function requireAdmin() {
@@ -41,6 +41,16 @@ export async function addShopAndApproveAction(id: string, index: number, input: 
     const r = await addShopAndApprove(db, id, index, input, userId)
     revalidatePath('/admin/gourmet')
     return { ok: true, message: r.reused ? '同じお店がもう地図にあったので、そのお店に付けて承認しました（反映まで最大1分）' : 'お店を地図に足して承認しました（反映まで最大1分）' }
+  } catch (e) { return fail(e) }
+}
+
+/** 「住所を調べて自動登録」：調査依頼の印を付ける。調査・登録は自動処理が行う（Muse の夜の処理のあと） */
+export async function requestAddressResearch(id: string, index: number): Promise<Result> {
+  try {
+    const { db } = await requireAdmin()
+    await requestResearch(db, id, index)
+    revalidatePath('/admin/gourmet')
+    return { ok: true, message: '住所の調査を依頼しました。結果が出れば自動で地図に載ります（Muse が夜に調べるので、明日の朝までかかります）' }
   } catch (e) { return fail(e) }
 }
 

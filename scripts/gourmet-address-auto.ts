@@ -5,6 +5,7 @@
 //      - 登録する条件：営業中／住所あり／範囲の中（範囲外・閉店・移転・住所不明・確度低は登録せず、理由を残す）
 //      - 範囲は千葉県内まで（2026-11-14 事業主決定「県内であればとりあえず登録」）。県外・閉店・移転・住所不明・確度低は登録しない
 //   B. 開いている依頼（成果待ち）が無く、地図にないお店（県外でない）が溜まっていれば、次の番号の依頼書を Drive に置く
+//      - 管理画面の「住所を調べて自動登録」（shops[].research_requested_at）が付いたお店は、開いている依頼があっても別の依頼にして先に出す。結果が出たら登録し、登録しなかった理由は research_note に残す
 //   C. 地図のお店との照合がはっきりした候補を自動で承認する（2026-11-14「候補抽出・住所調査・地図登録まで自動化」条件つき）
 //      - 条件：保留なし・投稿が批判的でない（好意的／中立）・AI の確度が高・照合の1位がはっきり（chosen_ref あり）。ほかは管理画面に残す
 //   Muse は夜に依頼を処理する（21:05〜22:50）。直接頼めば即実行されるが、ここでは自動化しない。
@@ -12,7 +13,7 @@
 // 使い方: npx tsx scripts/gourmet-address-auto.ts [--dry-run]（--dry-run は何も書かない）
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { addShopAndApprove, approveShops } from '../src/lib/gourmet-candidates'
 import { hintAreaClass } from '../src/lib/gourmet-area-class'
 import { gourmetAreaOf, insideChibaPrefecture } from '../src/lib/gourmet'
@@ -65,6 +66,14 @@ async function gsi(addr: string): Promise<{ lat: number; lon: number; title: str
   } catch {
     return null
   }
+}
+
+/** 調べたが登録しなかったお店に、調査中の印を外して理由を残す（管理画面に「前回の調査：…」と出る） */
+async function markResearch(db: SupabaseClient, cid: string, idx: number, note: string) {
+  const { data } = await db.from('gourmet_candidates').select('shops').eq('id', cid).maybeSingle()
+  if (!data) return
+  const shops = (data.shops as Array<Record<string, unknown>>).map((s, i) => (i === idx && !s.decision ? { ...s, research_requested_at: null, research_note: note.slice(0, 120) } : s))
+  await db.from('gourmet_candidates').update({ shops }).eq('id', cid)
 }
 
 function requestMarkdown(number: string, targets: Target[]): string {
@@ -175,7 +184,14 @@ async function main() {
       }
     }
     req.results = results
-    if (!DRY) req.done = true
+    if (!DRY) {
+      req.done = true
+      for (const res of results) {
+        if (res.outcome.startsWith('承認')) continue
+        const t = req.targets.find((x) => x.name === res.name)
+        if (t) await markResearch(db, t.cid, t.idx, res.outcome)
+      }
+    }
     for (const r of results) log(`依頼${req.number} ${r.name}：${r.outcome}`)
     const bad = results.filter((r) => !r.outcome.startsWith('承認'))
     msgs.push(`依頼${req.number}の住所調べが終わりました。${added}店を地図に載せました。` + (bad.length ? `${bad.length}店は載せていません。` : ''))
@@ -213,27 +229,38 @@ async function main() {
     if (autoAdded) msgs.push(`照合がはっきりした食レポ${autoAdded}件を、自動で地図に載せました。`)
   }
 
-  // ---- B. 次の依頼書を作る（開いている依頼が無いとき）----
-  if (!state.requests.some((r) => !r.done)) {
-    const requested = new Set(state.requests.flatMap((r) => r.targets.map((t) => `${t.cid}:${t.idx}`)))
+  // ---- B. 次の依頼書を作る ----
+  //  印付き（管理画面で「住所を調べて自動登録」）のお店は、開いている依頼があっても別の依頼にする。
+  //  印の無いお店は、開いている依頼が無いときだけまとめて出す。
+  {
+    const lastRequestAt = new Map<string, string>() // お店 → いちばん新しい依頼の作成日時
+    for (const rq of state.requests) for (const tg of rq.targets) { const k = `${tg.cid}:${tg.idx}`; if ((lastRequestAt.get(k) ?? '') < rq.createdAt) lastRequestAt.set(k, rq.createdAt) }
     const { data } = await db.from('gourmet_candidates').select('id, post_url, shops').eq('status', 'pending')
-    const targets: Target[] = []
+    const mk = (c: { id: unknown; post_url: unknown }, s: Record<string, unknown>, i: number, n: number): Target => ({ no: n, cid: String(c.id), idx: i, name: String(s.name), hint: String(s.area_hint ?? ''), post: String(c.post_url) })
+    const urgent: Target[] = []
+    const normal: Target[] = []
     for (const c of data ?? []) {
       ;(c.shops as Array<Record<string, unknown>>).forEach((s, i) => {
         if (s.decision || s.status !== 'unmatched') return
         if (hintAreaClass(String(s.area_hint ?? '')) === 'out') return
-        if (requested.has(`${c.id}:${i}`)) return
-        targets.push({ no: targets.length + 1, cid: String(c.id), idx: i, name: String(s.name), hint: String(s.area_hint ?? ''), post: String(c.post_url) })
+        const last = lastRequestAt.get(`${c.id}:${i}`)
+        const asked = typeof s.research_requested_at === 'string' ? s.research_requested_at : ''
+        if (asked && (!last || last < asked)) urgent.push(mk(c, s, i, urgent.length + 1))
+        else if (!last && !asked) normal.push(mk(c, s, i, normal.length + 1))
       })
     }
-    if (targets.length) {
+    const openNow = state.requests.some((rq) => !rq.done)
+    const batches: Target[][] = []
+    if (urgent.length) batches.push(urgent)
+    if (normal.length && !openNow && !urgent.length) batches.push(normal)
+    for (const targets of batches) {
       const nums = readdirSync(REQ_DIR).map((f) => /^(\d{3})_/.exec(f)?.[1]).filter(Boolean).map(Number)
-      const number = String(Math.max(0, ...nums) + 1).padStart(3, '0')
+      const number = String(Math.max(0, ...nums, ...state.requests.map((rq) => Number(rq.number))) + 1).padStart(3, '0')
       if (!DRY) {
         writeFileSync(`${REQ_DIR}/${number}_お店の住所を調べてください.md`, requestMarkdown(number, targets), 'utf8')
         state.requests.push({ number, createdAt: new Date().toISOString(), targets, done: false })
       }
-      log(`依頼${number}を Drive に置いた（${targets.length}店：${targets.map((t) => t.name).join('、')}）`)
+      log(`依頼${number}を Drive に置いた（${targets.length}店${targets === urgent ? '・管理画面の依頼' : ''}：${targets.map((x) => x.name).join('、')}）`)
     }
   }
 
