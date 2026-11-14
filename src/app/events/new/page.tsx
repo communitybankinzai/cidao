@@ -102,6 +102,12 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
           </p>
         )}
 
+        <p className="text-xs text-slate-600 dark:text-slate-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 rounded p-3">
+          団体の方へ：Instagram の告知を毎回自動で載せたいときは、
+          <Link href="/help/auto-listing" className="mx-1 text-blue-600 hover:underline">催しをカレンダーに載せるには</Link>
+          をご覧ください（プロアカウントが必要です）。
+        </p>
+
         <ImageScanField />
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">

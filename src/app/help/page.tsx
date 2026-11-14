@@ -62,6 +62,20 @@ export default function HelpPage() {
             </span>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/help/auto-listing"
+            className="flex h-full min-h-24 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-500"
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="text-2xl leading-none">📅</span>
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">催しをカレンダーに載せるには（団体の方へ）</span>
+            </span>
+            <span className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              Instagram の告知が自動で載る条件（プロアカウント）と、自分で登録する方法です。
+            </span>
+          </Link>
+        </li>
       </ul>
     </PageShell>
   )
