@@ -105,8 +105,9 @@ export function findSameShop<T extends { name: string; lat: number; lon: number 
 }
 
 /** 地図にないお店を運営が足して（位置は運営が確かめたもの）、そのまま承認する。同じ名前で100m 以内のお店があればそれに付ける。
+ *  route は承認の経路（グラフ用）。管理画面は memberId があれば manual。人（Claude を含む）が手で登録するときは必ず 'manual' を渡す。自動処理だけ省略（auto）
  *  承認に失敗したら、いま作ったお店は消す（地図に孤立したお店を残さない） */
-export async function addShopAndApprove(db: SupabaseClient, id: string, index: number, input: NewShopInput, memberId: string | null): Promise<{ added: number; ref: string; reused: boolean }> {
+export async function addShopAndApprove(db: SupabaseClient, id: string, index: number, input: NewShopInput, memberId: string | null, route?: 'auto' | 'manual'): Promise<{ added: number; ref: string; reused: boolean }> {
   const c = await load(db, id)
   if (c.status !== 'pending') throw new CandidateError('この候補はもう処理済みです')
   if (c.hold_reason) throw new CandidateError(`承認できません：${c.hold_reason}`)
@@ -127,7 +128,7 @@ export async function addShopAndApprove(db: SupabaseClient, id: string, index: n
   }
   const ref = `shop:${shopId}`
   try {
-    const added = await approveShops(db, id, [{ index, ref }], memberId)
+    const added = await approveShops(db, id, [{ index, ref }], memberId, route)
     return { added, ref, reused: !created }
   } catch (e) {
     if (created) await db.from('gourmet_shops').delete().eq('id', shopId)
