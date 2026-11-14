@@ -72,6 +72,8 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const [orgFilter, setOrgFilter] = useState<string>('all')  // 'all' | 'member_only' | orgId
   const [typeFilter, setTypeFilter] = useState<string | null>(null)  // null | 'civic_group' | 'business' | 'government'
   const [onlineOnly, setOnlineOnly] = useState(false)
+  // 絞り込みの開閉。居場所で絞り込んでいるとき（?tag=）は最初から開いておく
+  const [filtersOpen, setFiltersOpen] = useState(!!tag)
 
   // 一覧に「編集」リンクを出すか。ここで拾えるのは管理者と登録者本人の分だけで、
   // 団体役員など他の編集権限者にはリンクが出ない（その場合は従来どおり詳細ページの「編集」から入る）。
@@ -159,6 +161,16 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   }, [events, query, orgFilter, typeFilter, onlineOnly, orgInfo])
 
   const hasActiveFilter = !!query || orgFilter !== 'all' || typeFilter !== null || onlineOnly
+
+  // 「しぼり込む」ボタンの横に出す、いま選んでいる条件（検索の語は入力欄に見えているので入れない）
+  const filterSummary: string[] = []
+  if (tag) filterSummary.push(placeTagLabel(tag))
+  if (typeFilter) filterSummary.push(TYPE_LABEL[typeFilter] ?? typeFilter)
+  if (onlineOnly) filterSummary.push('オンラインのみ')
+  if (orgFilter === 'member_only') filterSummary.push('個人主催のみ')
+  else if (orgFilter !== 'all') filterSummary.push(orgInfo[orgFilter]?.name ?? '主催を指定')
+  // 専用ページ（/events/kodomo）は畳まない
+  const showFilters = basePath !== '/events' || filtersOpen
 
   // 月送り URL（view + 既存フィルタは URL に乗せず client state のみ）
   const router = useRouter()
@@ -264,7 +276,33 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
 
-        {/* 子どもの居場所での絞り込み（URL の ?tag=。押すとページを読み直す＝そのまま共有・埋め込みできる） */}
+        {/* イベントカレンダー本体では、絞り込みを1つのボタンに畳む（開いた直後は 月の切り替え・表示切替・検索 だけ）。
+            条件を選んでいるときは、ボタンの横に選んでいる内容を出す。専用ページ（/events/kodomo）は畳まない。 */}
+        {basePath === '/events' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              aria-expanded={filtersOpen}
+              aria-controls="events-filters"
+              data-instant="true"
+              className={`text-sm px-3 py-1.5 rounded-full border transition ${
+                filterSummary.length > 0
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              🔍 しぼり込む{filterSummary.length > 0 ? `（${filterSummary.length}）` : ''} {filtersOpen ? '▴' : '▾'}
+            </button>
+            {filterSummary.length > 0 && (
+              <span className="text-xs text-slate-600 dark:text-slate-400">{filterSummary.join('・')}</span>
+            )}
+          </div>
+        )}
+
+        {showFilters && (
+        <div id="events-filters" className="space-y-2">
+        {/* 居場所での絞り込み（URL の ?tag=。押すとページを読み直す＝そのまま共有・埋め込みできる） */}
         {basePath === '/events' ? (
           // イベントカレンダー本体：1行にまとめる（すべて／子ども／高齢者／コミュニティカフェ）。
           // 子どもの細かい分け方（居場所型・親子が集まる場）は、子どもを選んでいるときだけ後ろに出す。
@@ -350,6 +388,8 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             </optgroup>
           </select>
         </div>
+        </div>
+        )}
       </div>
 
       {/* 結果数 + クリア */}
