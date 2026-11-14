@@ -10,6 +10,7 @@ import { ImageScanField } from './_components/ImageScanField'
 import { OrganizerPicker } from './_components/OrganizerPicker'
 import { ChildPlaceField } from '../_components/ChildPlaceField'
 import { SeniorPlaceField } from '../_components/SeniorPlaceField'
+import { CafePlaceField } from '../_components/CafePlaceField'
 
 export default async function NewEventPage({ searchParams }: { searchParams: Promise<{ date?: string; error?: string }> }) {
   const sp = await searchParams
@@ -67,6 +68,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       form_url: (formData.get('form_url') as string | null) || undefined,
       child_place: String(formData.get('child_place') ?? ''),
       senior_place: String(formData.get('senior_place') ?? ''),
+      cafe_place: String(formData.get('cafe_place') ?? ''),
     }
     try {
       // チラシから複数日程を検出してチェックした場合は一括登録
@@ -116,6 +118,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
           </L>
           <ChildPlaceField />
           <SeniorPlaceField />
+          <CafePlaceField />
           <OrganizerPicker memberOrgs={memberOrgs} allOrgs={allOrgs} />
           <div className="grid md:grid-cols-2 gap-3">
             <L label="開始" req><input type="datetime-local" name="start_at" required className={inp} defaultValue={initialStart} /></L>

@@ -9,6 +9,7 @@ import { categoryLabel } from '@/lib/categories'
 import { TYPE_LABEL } from '@/lib/org-labels'
 import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 import { SENIOR_PLACE_DESC, SENIOR_PLACE_LABEL, placeTagLabel, type PlaceTag } from '@/lib/senior-place'
+import { CAFE_PLACE_DESC, CAFE_PLACE_LABEL } from '@/lib/cafe-place'
 
 const JST = 'Asia/Tokyo'
 const hmFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -34,6 +35,7 @@ export type EventRow = {
   flyer_image_url: string | null
   child_place?: 'ibasho' | 'oyako' | null
   senior_place?: boolean | null
+  cafe_place?: boolean | null
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
@@ -263,27 +265,45 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
         />
 
         {/* 子どもの居場所での絞り込み（URL の ?tag=。押すとページを読み直す＝そのまま共有・埋め込みできる） */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500 mr-0.5">🧒 子どもの居場所:</span>
-          <TagChip href={`/events?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}`} active={!tag}>
-            すべてのイベント
-          </TagChip>
-          <TagChip href={tagHref('kodomo')} active={tag === 'kodomo'}>
-            子どもの居場所（すべて）
-          </TagChip>
-          {CHILD_PLACE_KINDS.map((k) => (
-            <TagChip key={k.key} href={tagHref(k.key)} active={tag === k.key} title={k.desc}>
-              {k.label}
-            </TagChip>
-          ))}
-        </div>
-        {/* 高齢者の居場所での絞り込み（?tag=senior）。専用ページ（/events/kodomo）の中では出さない */}
-        {basePath === '/events' && (
+        {basePath === '/events' ? (
+          // イベントカレンダー本体：1行にまとめる（すべて／子ども／高齢者／コミュニティカフェ）。
+          // 子どもの細かい分け方（居場所型・親子が集まる場）は、子どもを選んでいるときだけ後ろに出す。
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-slate-500 mr-0.5">🧓 {SENIOR_PLACE_LABEL}:</span>
-            <TagChip href={tagHref('senior')} active={tag === 'senior'} title={SENIOR_PLACE_DESC}>
-              {SENIOR_PLACE_LABEL}
+            <span className="text-xs text-slate-500 mr-0.5">居場所でさがす:</span>
+            <TagChip href={`/events?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}`} active={!tag}>
+              すべて
             </TagChip>
+            <TagChip href={tagHref('kodomo')} active={tag === 'kodomo'} title="子ども食堂・おやこカフェ・おはなし会・親子講座など">
+              🧒 子ども
+            </TagChip>
+            <TagChip href={tagHref('senior')} active={tag === 'senior'} title={SENIOR_PLACE_DESC}>
+              🧓 高齢者
+            </TagChip>
+            <TagChip href={tagHref('cafe')} active={tag === 'cafe'} title={CAFE_PLACE_DESC}>
+              ☕ {CAFE_PLACE_LABEL}
+            </TagChip>
+            {(tag === 'kodomo' || tag === 'ibasho' || tag === 'oyako') &&
+              CHILD_PLACE_KINDS.map((k) => (
+                <TagChip key={k.key} href={tagHref(k.key)} active={tag === k.key} title={k.desc}>
+                  {k.label}
+                </TagChip>
+              ))}
+          </div>
+        ) : (
+          // 専用ページ（/events/kodomo）：子どもの居場所だけ
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-500 mr-0.5">🧒 子どもの居場所:</span>
+            <TagChip href={`/events?ym=${selectedYm}${view === 'list' ? '&view=list' : ''}`} active={!tag}>
+              すべてのイベント
+            </TagChip>
+            <TagChip href={tagHref('kodomo')} active={tag === 'kodomo'}>
+              子どもの居場所（すべて）
+            </TagChip>
+            {CHILD_PLACE_KINDS.map((k) => (
+              <TagChip key={k.key} href={tagHref(k.key)} active={tag === k.key} title={k.desc}>
+                {k.label}
+              </TagChip>
+            ))}
           </div>
         )}
         {tag && (
@@ -921,6 +941,9 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
                         )}
                         {e.senior_place && (
                           <span className="px-2 py-0.5 bg-teal-100 dark:bg-teal-900/40 text-teal-900 dark:text-teal-200 rounded">🧓 {SENIOR_PLACE_LABEL}</span>
+                        )}
+                        {e.cafe_place && (
+                          <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-900 dark:text-orange-200 rounded">☕ {CAFE_PLACE_LABEL}</span>
                         )}
                         <span className="text-slate-500">主催: {organizerLabel(e)}</span>
                         {info && info.type !== 'civic_group' && (

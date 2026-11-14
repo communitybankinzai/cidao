@@ -27,11 +27,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   let eventsQuery = supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place, senior_place')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place, senior_place, cafe_place')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())
   if (tag === 'senior') eventsQuery = eventsQuery.eq('senior_place', true)
+  else if (tag === 'cafe') eventsQuery = eventsQuery.eq('cafe_place', true)
   else if (tag) eventsQuery = eventsQuery.in('child_place', tagKinds(tag))
   const { data: events } = await eventsQuery.order('start_at', { ascending: true })
 

@@ -4,6 +4,7 @@
 // コミュニティカフェや地域食堂のように両方が集まる催しには、両方の目印が付く。
 
 import { parseChildPlaceTag, tagLabel, type ChildPlaceTag } from './child-place'
+import { CAFE_PLACE_LABEL } from './cafe-place'
 
 export const SENIOR_PLACE_LABEL = '高齢者の居場所'
 export const SENIOR_PLACE_DESC = 'オレンジカフェ・コミュニティカフェ・サロン・介護予防教室など'
@@ -12,15 +13,18 @@ export const SENIOR_PLACE_DESC = 'オレンジカフェ・コミュニティカ�
 // URL の ?tag=（絞り込み）
 //   kodomo／ibasho／oyako＝子どもの居場所（child-place.ts）、senior＝高齢者の居場所
 // ===========================
-export type PlaceTag = ChildPlaceTag | 'senior'
+//   cafe＝コミュニティカフェ（cafe-place.ts）
+export type PlaceTag = ChildPlaceTag | 'senior' | 'cafe'
 
 export function parsePlaceTag(raw: string | string[] | undefined | null): PlaceTag | null {
   const v = Array.isArray(raw) ? raw[0] : raw
-  return v === 'senior' ? 'senior' : parseChildPlaceTag(raw)
+  return v === 'senior' || v === 'cafe' ? v : parseChildPlaceTag(raw)
 }
 
 export function placeTagLabel(tag: PlaceTag): string {
-  return tag === 'senior' ? SENIOR_PLACE_LABEL : tagLabel(tag)
+  if (tag === 'senior') return SENIOR_PLACE_LABEL
+  if (tag === 'cafe') return CAFE_PLACE_LABEL
+  return tagLabel(tag)
 }
 
 // ===========================
