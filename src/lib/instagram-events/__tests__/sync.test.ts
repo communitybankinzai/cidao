@@ -11,6 +11,7 @@ import {
 import {
   candidateToRow,
   findDuplicateByDateTitle,
+  findDuplicateByPlaceTime,
   occurrencesOf,
   syncInstagramEvents,
   toCandidateDescription,
@@ -199,6 +200,16 @@ describe('日程と行の組み立て', () => {
     expect(findDuplicateByDateTitle('ハロウィンマルシェ', '2026-10-12', others)?.id).toBe('x')
     expect(findDuplicateByDateTitle('ハロウィンマルシェ', '2026-10-13', others)).toBeNull()
     expect(findDuplicateByDateTitle('防災講座', '2026-10-12', others)).toBeNull()
+  })
+
+  it('題名が違っても、同じ開始時刻・同じ会場なら重複（居場所系の告知を言い換えた別アカウント分）', () => {
+    const others: OtherEventRow[] = [{ id: 'k', title: 'こども食堂 木曜ごはん', start_at: '2026-11-19T08:00:00Z', location: '印西市 牧の原ふれあいセンター', organizer_name_text: null }]
+    expect(findDuplicateByPlaceTime('2026-11-19T08:00:00Z', '牧の原ふれあいセンター', false, others)?.id).toBe('k')
+    // 開始時刻が違う・会場が違う・時刻が仮置き・会場が短すぎる は重複にしない
+    expect(findDuplicateByPlaceTime('2026-11-19T09:00:00Z', '牧の原ふれあいセンター', false, others)).toBeNull()
+    expect(findDuplicateByPlaceTime('2026-11-19T08:00:00Z', '木下交流センター', false, others)).toBeNull()
+    expect(findDuplicateByPlaceTime('2026-11-19T08:00:00Z', '牧の原ふれあいセンター', true, others)).toBeNull()
+    expect(findDuplicateByPlaceTime('2026-11-19T08:00:00Z', '印西', false, others)).toBeNull()
   })
 })
 

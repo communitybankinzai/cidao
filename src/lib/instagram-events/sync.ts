@@ -289,6 +289,30 @@ export function findDuplicateByDateTitle(title: string, date: string, others: Ot
   return null
 }
 
+function normalizePlace(s: string | null | undefined): string {
+  return (s ?? '').normalize('NFKC').toLowerCase().replace(/[\s　・,，、。()（）\-ー]/g, '')
+}
+
+/**
+ * 題名が違っても、同じ日・同じ開始時刻・同じ会場なら同じ催しとみなす（2026-11-15）。
+ * 居場所系の団体が自分のアカウントで出した告知と、地域の情報アカウント（@chiba_nt_kurashi など）が
+ * 言い換えた題名で出した告知が、二重の候補にならないようにするため。会場は4文字以上で、片方がもう片方を含むときだけ。
+ * 時刻が仮置き（timeAssumed）の候補は時刻が当てにならないので、この判定には使わない。
+ */
+export function findDuplicateByPlaceTime(
+  startUtcIso: string, location: string, timeAssumed: boolean, others: OtherEventRow[],
+): OtherEventRow | null {
+  const place = normalizePlace(location)
+  if (timeAssumed || place.length < 4) return null
+  for (const o of others) {
+    if (o.start_at !== startUtcIso) continue
+    const p = normalizePlace(o.location)
+    if (p.length < 4) continue
+    if (p.includes(place) || place.includes(p)) return o
+  }
+  return null
+}
+
 function errMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
@@ -470,7 +494,10 @@ export async function processPosts(
         result.unchanged++
         continue
       }
-      const dup = findDuplicateByDateTitle(d.title, date, future) ?? findDuplicateByDateTitle(d.title, date, newRows.map((r2) => ({ id: '', title: r2.title, start_at: r2.start_at, location: r2.location, organizer_name_text: r2.organizer_name_text })))
+      const newAsOthers: OtherEventRow[] = newRows.map((r2) => ({ id: '', title: r2.title, start_at: r2.start_at, location: r2.location, organizer_name_text: r2.organizer_name_text }))
+      const startUtc = jstLocalToUtcIso(occ.start_at)
+      const dup = findDuplicateByDateTitle(d.title, date, future) ?? findDuplicateByDateTitle(d.title, date, newAsOthers)
+        ?? findDuplicateByPlaceTime(startUtc, d.location ?? '', occ.timeAssumed, future) ?? findDuplicateByPlaceTime(startUtc, d.location ?? '', occ.timeAssumed, newAsOthers)
       if (dup) {
         result.duplicates.push(`${d.title}（${date}）= 既存「${dup.title}」`)
         continue
