@@ -12,6 +12,7 @@ import { announceOrgToSns } from '@/lib/sns-announce'
 import { TYPE_LABEL } from '@/lib/org-labels'
 import { recordWrite } from '@/lib/audit'
 import { isAwaitingRepresentative } from '@/lib/org-placeholder'
+import { shouldDeleteOnReject, shouldPublishOnApprove } from '@/lib/org-visibility'
 
 /**
  * 団体への所属申告・参加申請が入ったことを CiDAO 管理者へ知らせる。
@@ -430,7 +431,7 @@ export async function approveClaim(orgId: string, memberId: string) {
   if (row?.role === 'representative') {
     const { data: org } = await supabase
       .from('organizations')
-      .select('representative_id, public_flag, name, type')
+      .select('representative_id, public_flag, hidden_by_admin, name, type')
       .eq('id', orgId)
       .single()
     if (org) {
@@ -438,7 +439,8 @@ export async function approveClaim(orgId: string, memberId: string) {
       // 代理登録された団体には placeholder の代表者IDが入っている。空のときだけ更新していると
       // 承認しても「代表者の更新をお待ちしています」の表示が残るため、placeholder も置き換える。
       if (isAwaitingRepresentative(org.representative_id)) updates.representative_id = memberId
-      if (!org.public_flag) updates.public_flag = true
+      // 運営が非公開にした団体（hidden_by_admin）は、承認しても公開に戻さない。戻すのは /admin/orgs から。
+      if (shouldPublishOnApprove(org)) updates.public_flag = true
       if (Object.keys(updates).length > 0) {
         await supabase.from('organizations').update(updates).eq('id', orgId)
       }
@@ -498,7 +500,7 @@ export async function rejectClaim(orgId: string, memberId: string) {
   // 未公開（申告中）の新規団体で、承認済のメンバーが他に居なければ団体ごと削除
   const { data: org } = await supabase
     .from('organizations')
-    .select('public_flag')
+    .select('public_flag, hidden_by_admin')
     .eq('id', orgId)
     .single()
   if (org && !org.public_flag) {
@@ -508,7 +510,8 @@ export async function rejectClaim(orgId: string, memberId: string) {
       .eq('org_id', orgId)
       .eq('status', 'confirmed')
       .limit(1)
-    if (!confirmed || confirmed.length === 0) {
+    // 運営が非公開にした団体（hidden_by_admin）は、会員が0人でも削除しない。
+    if (shouldDeleteOnReject(org, confirmed?.length ?? 0)) {
       await supabase.from('organization_categories').delete().eq('org_id', orgId)
       await supabase.from('memberships').delete().eq('org_id', orgId)
       await supabase.from('organizations').delete().eq('id', orgId)
