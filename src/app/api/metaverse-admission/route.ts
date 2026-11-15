@@ -6,8 +6,11 @@ import { createClient } from '@supabase/supabase-js'
 // 枠の単位は Google のクォータ集計日（太平洋時間の0時＝日本時間 16〜17時にリセット）に合わせる。
 // 上限は app_settings key `metaverse_admission` の { "limit": N } で変えられる（イベント日は Google 側の枠と一緒に上げる）。
 // 元は Codex セッションが「累計30回」で作ったものを、2026-09-06 に日単位へ直した（累計だと二度と入れなくなる）。
+// 2026-11-15 登録なしで試せる枠（事業主決定①）：body.guest=true の入場は 1日 guestLimit 回（既定10）まで。
+// その分は取り置きなので、登録者は limit − guestLimit 回まで。launches は全員、guests は登録なしで入った分（launches にも入る）。
 export const dynamic = 'force-dynamic'
 const DEFAULT_LIMIT = 30
+const DEFAULT_GUEST_LIMIT = 10
 const SETTINGS_KEY = 'metaverse_admission'
 const origins = new Set(['https://communitybankinzai.github.io', 'http://localhost:8765', 'http://localhost:8766', 'http://localhost:8767', 'http://127.0.0.1:8765'])
 
@@ -40,6 +43,11 @@ export async function POST(request: Request) {
     const { data: setting } = await db.from('app_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle()
     const configured = Number((setting?.value as { limit?: unknown } | null)?.limit)
     if (Number.isFinite(configured) && configured >= 0) limit = Math.floor(configured)
+    let guestLimit = DEFAULT_GUEST_LIMIT
+    const configuredGuest = (setting?.value as { guestLimit?: unknown } | null)?.guestLimit
+    if (typeof configuredGuest === 'number' && Number.isFinite(configuredGuest) && configuredGuest >= 0) guestLimit = Math.floor(configuredGuest)
+    guestLimit = Math.min(guestLimit, limit)
+    const guest = body.guest === true
     // launchId の一覧で数える。同じ launchId の再送は枠を消費しない（再試行が冪等）。
     // JSON 全体の一致を条件に update する CAS で、同時要求が同じ残り枠を二重に取れないようにする
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -52,13 +60,18 @@ export async function POST(request: Request) {
       }
       const launches: unknown = (data.value as { launches?: unknown } | null)?.launches
       if (!Array.isArray(launches) || !launches.every((id) => typeof id === 'string')) throw new Error('Invalid admission state')
-      if (launches.includes(body.launchId)) return reply({ allowed: true, count: launches.length, limit, day })
-      if (launches.length >= limit) return reply({ allowed: false, count: launches.length, limit, day }, 429)
-      const next = { launches: [...launches, body.launchId] }
+      const rawGuests: unknown = (data.value as { guests?: unknown } | null)?.guests
+      const guests: string[] = Array.isArray(rawGuests) ? rawGuests.filter((id): id is string => typeof id === 'string') : []
+      const info = { count: launches.length, limit, guestCount: guests.length, guestLimit, day }
+      if (launches.includes(body.launchId)) return reply({ allowed: true, ...info })
+      if (launches.length >= limit) return reply({ allowed: false, ...info }, 429)
+      if (guest && guests.length >= guestLimit) return reply({ allowed: false, guestFull: true, ...info }, 429)
+      if (!guest && launches.length - guests.length >= limit - guestLimit) return reply({ allowed: false, memberFull: true, ...info }, 429)
+      const next = { ...(data.value as object), launches: [...launches, body.launchId], guests: guest ? [...guests, body.launchId] : guests }
       const { data: claimed, error: claimError } = await db.from('app_settings').update({ value: next })
         .eq('key', dayKey).eq('value', JSON.stringify(data.value)).select('key')
       if (claimError) throw claimError
-      if (claimed?.length) return reply({ allowed: true, count: next.launches.length, limit, day })
+      if (claimed?.length) return reply({ allowed: true, ...info, count: next.launches.length, guestCount: next.guests.length })
     }
   } catch {
     return reply({ allowed: false, error: 'server' }, 503)
