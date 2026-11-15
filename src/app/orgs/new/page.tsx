@@ -51,7 +51,7 @@ export default async function NewOrgPage() {
         <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい団体</h1>
 
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
-          登録後、管理者の承認を経て一般公開されます。印西市市民活動推進条例 第10条で市に登録した団体は「印西市民活動団体登録番号」（例: 08-001）を入力できます（任意）。
+          登録すると、すぐに一般公開されます。印西市市民活動推進条例 第10条で市に登録した団体は「印西市民活動団体登録番号」（例: 08-001）を入力できます（任意）。
         </div>
 
         <div className="space-y-3 bg-white dark:bg-slate-900 border rounded-lg p-6">
@@ -110,7 +110,7 @@ export default async function NewOrgPage() {
                 <span>
                   <strong>私がこの団体の代表者です</strong>
                   <span className="block text-xs text-slate-500">
-                    あなたを representative_id として登録。一般ユーザーの場合は管理者承認後に確定。
+                    あなたを representative_id として登録。登録と同時に確定する。
                   </span>
                 </span>
               </label>

@@ -18,10 +18,13 @@ export default async function AdminClaimsPage() {
   const { data: isAdmin, error: rpcErr } = await supabase.rpc('is_admin')
   if (rpcErr || !isAdmin) redirect('/')
 
-  const { data: claims } = await supabase
+  // memberships から members への関係は2本ある（member_id と approved_by）。
+  // どちらかを指定しないと問い合わせがエラーになり、承認待ちが「0件」に見える
+  // （2026-11-16 発覚：新しい団体の申告3件が17〜33日のあいだ表示されなかった）。
+  const { data: claims, error: claimsError } = await supabase
     .from('memberships')
     .select(
-      'org_id, member_id, role, status, joined_at, organizations(id, name, type, representative_id, public_flag), members(display_name, residency_type, self_introduction)',
+      'org_id, member_id, role, status, joined_at, organizations(id, name, type, representative_id, public_flag), members!memberships_member_id_fkey(display_name, residency_type, self_introduction)',
     )
     .eq('status', 'claimed')
     .is('left_at', null)
@@ -60,7 +63,11 @@ export default async function AdminClaimsPage() {
           </p>
         </header>
 
-        {rows.length === 0 ? (
+        {claimsError ? (
+          <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-4">
+            承認待ちの一覧を読めませんでした。「0件」ではありません。開発担当に知らせてください：{claimsError.message}
+          </p>
+        ) : rows.length === 0 ? (
           <p className="text-slate-400 text-center py-12">承認待ちの申告はありません</p>
         ) : (
           <ul className="space-y-3">

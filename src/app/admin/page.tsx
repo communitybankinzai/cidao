@@ -21,6 +21,16 @@ export default async function AdminHomePage() {
   const draftIds = new Set((profiles.data ?? []).map(p => p.draft_version_id))
   const pendingApplications = profiles.error || reviewed.error ? 0 : (reviewed.data ?? []).filter(v => draftIds.has(v.id)).length
 
+  // 所属申告の承認待ちの件数。承認の画面を開かなくても、ここで気づけるようにする
+  // （2026-11-16：承認の画面が「0件」と出ていて、申告3件に17〜33日だれも気づかなかった）。
+  // 数えるだけで、ほかの表を引かない（引き方の間違いで0件に見えるのを避ける）。読めなかったときは「確認できません」と出す。
+  const claimCount = await supabase
+    .from('memberships')
+    .select('org_id', { count: 'exact', head: true })
+    .eq('status', 'claimed')
+    .is('left_at', null)
+  const pendingClaims = claimCount.error ? null : (claimCount.count ?? 0)
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -82,8 +92,15 @@ export default async function AdminHomePage() {
               href="/admin/claims"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
-              <h2 className="text-lg font-semibold mb-1">所属申告・新規団体キュー</h2>
-              <p className="text-sm text-slate-500">所属申告の承認/却下、新規登録された団体の公開承認</p>
+              <h2 className="text-lg font-semibold mb-1">
+                所属申告キュー
+                {pendingClaims === null ? (
+                  <span className="ml-2 inline-block rounded-full bg-amber-500 px-2 py-0.5 align-middle text-xs font-bold text-white">件数を確認できません</span>
+                ) : pendingClaims > 0 ? (
+                  <span className="ml-2 inline-block rounded-full bg-rose-600 px-2 py-0.5 align-middle text-xs font-bold text-white">承認待ち {pendingClaims}件</span>
+                ) : null}
+              </h2>
+              <p className="text-sm text-slate-500">既にある団体への所属申告の承認/却下（新しい団体の登録は、承認なしですぐ公開されます）</p>
             </Link>
           </li>
           <li>

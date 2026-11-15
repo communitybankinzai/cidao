@@ -81,17 +81,21 @@ export async function createOrganization(input: OrgInput) {
     throw new Error('プロフィール完成（本登録）後に団体を申告できます')
   }
 
-  // admin が登録する場合は即公開。一般ユーザーは申告として承認待ち。
+  // 登録した団体は、運営でも一般の会員でも、その場で公開する（自動承認・2026-11-16）。
+  // 以前は一般の会員の登録を承認待ちにしていたが、承認の画面の不具合と通知の抜けで
+  // 3件が17〜33日のあいだ誰にも気づかれなかった。待たせない形を既定にし、
+  // 問題のある登録は運営が /admin/orgs から非公開にする（後から外す）。
   const isAdmin = !!member.admin_role
   const asRep = !!input.as_representative
   const nowIso = new Date().toISOString()
 
-  // 一般ユーザーの申告は public_flag=false ・まだ所属も無いため、作った直後の行は本人から見えない。
-  // INSERT ... RETURNING（.select('id')）は SELECT の権限も要るので RLS で弾かれる。
-  // そこで ID を先に自分で決め、読み返さずに挿入する。
+  // 一般の会員は RLS のうえで「公開の団体」「承認済みの所属」を自分では作れない
+  // （orgs_insert_email_only は public_flag=false のみ）。本人確認と tier の検査を上で済ませたうえで、
+  // 一般の会員の分だけ service_role で書く。ID は先に自分で決め、読み返さずに挿入する。
+  const writer = isAdmin ? supabase : createAdminClient()
   const orgId = crypto.randomUUID()
   const org = { id: orgId }
-  const { error } = await supabase
+  const { error } = await writer
     .from('organizations')
     .insert({
       id: orgId,
@@ -102,22 +106,24 @@ export async function createOrganization(input: OrgInput) {
       inzai_registration_number: input.inzai_registration_number || null,
       contact_email: input.contact_email || null,
       contact_url: input.contact_url || null,
-      public_flag: isAdmin,
+      public_flag: true,
       // 代表者として申告した場合のみ自分を representative_id にセット。
       // そうでない場合は NULL（後から admin/me/edit で代表者が確定）。
       representative_id: asRep ? user.id : null,
     })
   if (error) throw new Error(`団体作成失敗: ${error.message}`)
 
-  await supabase.from('memberships').insert({
+  // approved_by が空＝運営の操作を経ない自動承認
+  const { error: memError } = await writer.from('memberships').insert({
     org_id: org.id,
     member_id: user.id,
     role: asRep ? 'representative' : 'member',
-    status: isAdmin ? 'confirmed' : 'claimed',
-    approved_at: isAdmin ? nowIso : null,
+    status: 'confirmed',
+    approved_at: nowIso,
     approved_by: isAdmin ? user.id : null,
     display_in_org: true,
   })
+  if (memError) throw new Error(`所属の登録失敗: ${memError.message}`)
 
   if (input.categories.length > 0) {
     // 活動分野の書込は代表者権限（is_org_representative）が要り、申告直後の本人は通らない。
@@ -128,22 +134,18 @@ export async function createOrganization(input: OrgInput) {
     if (catError) throw new Error(`活動分野の保存失敗: ${catError.message}`)
   }
 
-  // 全メンバーへ新着通知（ベル＋Webプッシュ）。
-  // 一般ユーザーの申告は承認待ち（public_flag=false）なので、ここでは通知しない。
-  // その場合は管理者が approveClaim で公開した時点で通知される
-  if (isAdmin) {
-    after(async () => {
-      await notifyAllMembers({
-        kind: 'org',
-        actorId: user.id,
-        title: `新しい団体「${input.name}」が登録されました`,
-        body: TYPE_LABEL[input.type] ?? undefined,
-        linkUrl: `/orgs/${org.id}`,
-      })
-      // SNS紹介の下書きも作る（承認制・管理者へ通知。best-effort）
-      await announceOrgToSns({ id: org.id, name: input.name })
+  // 全メンバーへ新着通知（ベル＋Webプッシュ）。運営にもここで届くので、新しい登録を見落とさない。
+  after(async () => {
+    await notifyAllMembers({
+      kind: 'org',
+      actorId: user.id,
+      title: `新しい団体「${input.name}」が登録されました`,
+      body: TYPE_LABEL[input.type] ?? undefined,
+      linkUrl: `/orgs/${org.id}`,
     })
-  }
+    // SNS紹介の下書きも作る（承認制・管理者へ通知。best-effort）
+    await announceOrgToSns({ id: org.id, name: input.name })
+  })
 
   // redirect() は例外を投げるので、記録はその前に済ませる
   await recordWrite({
@@ -157,11 +159,7 @@ export async function createOrganization(input: OrgInput) {
 
   revalidatePath('/orgs')
   revalidatePath('/admin/claims')
-  if (isAdmin) {
-    redirect(`/orgs/${org.id}`)
-  } else {
-    redirect('/me?new_org=submitted')
-  }
+  redirect(`/orgs/${org.id}`)
 }
 
 /**
