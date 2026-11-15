@@ -60,3 +60,32 @@ describe('団体の新規登録（createOrganization）', () => {
     expect(body).not.toMatch(/if \(isAdmin\) \{\s*after\(/)
   })
 })
+
+describe('所属申告の承認・却下（approveClaim・rejectClaim）', () => {
+  const actions = read('orgs/actions.ts')
+  const start = actions.indexOf('export async function approveClaim')
+  const end = actions.indexOf('export async function verifyOrgInfo')
+  const body = actions.slice(start, end)
+
+  // 運営は RLS のうえで他人の所属を更新・削除できない。利用者のセッションで書くと、
+  // 何も変わらないのにエラーも出ない（2026-11-16 発覚）。
+  it('読み書きを利用者のセッションで行わない（service_role を使う）', () => {
+    expect(body).not.toMatch(/supabase\s*\.from\(/)
+    expect(body.match(/const db = createAdminClient\(\)/g)?.length).toBe(2)
+  })
+
+  it('運営であることを確かめてから service_role を使う', () => {
+    for (const fn of ['approveClaim', 'rejectClaim']) {
+      const s = body.indexOf(`export async function ${fn}`)
+      const check = body.indexOf("throw new Error('管理者権限が必要です')", s)
+      const admin = body.indexOf('const db = createAdminClient()', s)
+      expect(check).toBeGreaterThan(s)
+      expect(admin).toBeGreaterThan(check)
+    }
+  })
+
+  it('1件も変わらなかったときは失敗として知らせる', () => {
+    expect(body).toContain('承認失敗: 対象の申告が見つかりません')
+    expect(body).toContain('却下失敗: 対象の申告が見つかりません')
+  })
+})

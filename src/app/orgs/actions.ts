@@ -410,24 +410,32 @@ export async function approveClaim(orgId: string, memberId: string) {
   const { data: isAdmin } = await supabase.rpc('is_admin')
   if (!isAdmin) throw new Error('管理者権限が必要です')
 
-  const { data: row } = await supabase
+  // 運営は RLS のうえで他人の所属（memberships）を更新・削除できず、非公開の団体も読めない。
+  // 利用者のセッションのままだと、承認・却下を押しても何も変わらないのにエラーも出ない（2026-11-16 発覚）。
+  // 上で運営であることを確かめたうえで、ここから先の読み書きは service_role で行う。
+  const db = createAdminClient()
+
+  const { data: row } = await db
     .from('memberships')
     .select('role')
     .eq('org_id', orgId)
     .eq('member_id', memberId)
     .single()
 
-  const { error } = await supabase
+  const { data: approved, error } = await db
     .from('memberships')
     .update({ status: 'confirmed', approved_at: new Date().toISOString(), approved_by: user.id })
     .eq('org_id', orgId)
     .eq('member_id', memberId)
+    .select('member_id')
   if (error) throw new Error(`承認失敗: ${error.message}`)
+  // 1件も変わらなかったら成功扱いにしない（黙って何も起きないのを防ぐ）
+  if (!approved || approved.length === 0) throw new Error('承認失敗: 対象の申告が見つかりません')
 
   // 代表者承認時、その団体に既存代表者がいなければ representative_id を更新。
   // また public_flag=false の新規団体ならここで公開する。
   if (row?.role === 'representative') {
-    const { data: org } = await supabase
+    const { data: org } = await db
       .from('organizations')
       .select('representative_id, public_flag, hidden_by_admin, name, type')
       .eq('id', orgId)
@@ -440,7 +448,7 @@ export async function approveClaim(orgId: string, memberId: string) {
       // 運営が非公開にした団体（hidden_by_admin）は、承認しても公開に戻さない。戻すのは /admin/orgs から。
       if (shouldPublishOnApprove(org)) updates.public_flag = true
       if (Object.keys(updates).length > 0) {
-        await supabase.from('organizations').update(updates).eq('id', orgId)
+        await db.from('organizations').update(updates).eq('id', orgId)
       }
       // 承認によって初めて公開された団体だけ、全メンバーへ新着通知を出す
       if (updates.public_flag) {
@@ -461,7 +469,7 @@ export async function approveClaim(orgId: string, memberId: string) {
 
   // 申請者本人へ承認を知らせる。これが無いと、承認されたことに本人が気づけない
   after(async () => {
-    const { data: o } = await supabase.from('organizations').select('name').eq('id', orgId).maybeSingle()
+    const { data: o } = await db.from('organizations').select('name').eq('id', orgId).maybeSingle()
     await insertNotification({
       recipientId: memberId,
       actorId: user.id,
@@ -487,22 +495,29 @@ export async function rejectClaim(orgId: string, memberId: string) {
   const { data: isAdmin } = await supabase.rpc('is_admin')
   if (!isAdmin) throw new Error('管理者権限が必要です')
 
-  const { error } = await supabase
+  // 運営は RLS のうえで他人の所属（memberships）を更新・削除できず、非公開の団体も読めない。
+  // 利用者のセッションのままだと、承認・却下を押しても何も変わらないのにエラーも出ない（2026-11-16 発覚）。
+  // 上で運営であることを確かめたうえで、ここから先の読み書きは service_role で行う。
+  const db = createAdminClient()
+
+  const { data: rejected, error } = await db
     .from('memberships')
     .delete()
     .eq('org_id', orgId)
     .eq('member_id', memberId)
     .eq('status', 'claimed')
+    .select('member_id')
   if (error) throw new Error(`却下失敗: ${error.message}`)
+  if (!rejected || rejected.length === 0) throw new Error('却下失敗: 対象の申告が見つかりません')
 
   // 未公開（申告中）の新規団体で、承認済のメンバーが他に居なければ団体ごと削除
-  const { data: org } = await supabase
+  const { data: org } = await db
     .from('organizations')
     .select('public_flag, hidden_by_admin')
     .eq('id', orgId)
     .single()
   if (org && !org.public_flag) {
-    const { data: confirmed } = await supabase
+    const { data: confirmed } = await db
       .from('memberships')
       .select('member_id')
       .eq('org_id', orgId)
@@ -510,9 +525,9 @@ export async function rejectClaim(orgId: string, memberId: string) {
       .limit(1)
     // 運営が非公開にした団体（hidden_by_admin）は、会員が0人でも削除しない。
     if (shouldDeleteOnReject(org, confirmed?.length ?? 0)) {
-      await supabase.from('organization_categories').delete().eq('org_id', orgId)
-      await supabase.from('memberships').delete().eq('org_id', orgId)
-      await supabase.from('organizations').delete().eq('id', orgId)
+      await db.from('organization_categories').delete().eq('org_id', orgId)
+      await db.from('memberships').delete().eq('org_id', orgId)
+      await db.from('organizations').delete().eq('id', orgId)
     }
   }
 
