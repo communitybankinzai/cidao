@@ -13,6 +13,7 @@ import { TYPE_LABEL } from '@/lib/org-labels'
 import { recordWrite } from '@/lib/audit'
 import { isAwaitingRepresentative } from '@/lib/org-placeholder'
 import { shouldDeleteOnReject, shouldPublishOnApprove } from '@/lib/org-visibility'
+import { orgSnsShareOnCreate } from '@/lib/org-sns-share'
 
 /**
  * 団体への所属申告・参加申請が入ったことを CiDAO 管理者へ知らせる。
@@ -64,6 +65,9 @@ type OrgInput = {
   // true: representative_id=user, membership role='representative'
   // false: representative_id=null, membership role='member'（情報を入れた人 / 会員扱い）
   as_representative: boolean
+  // CBI公式SNSで紹介してよいか（登録画面のチェック。初期はオン）。
+  // 運営が代表者としてではなく登録した団体は、この値を使わず「団体に聞いていない」（null）で保存する
+  sns_share?: boolean
 }
 
 export async function createOrganization(input: OrgInput) {
@@ -107,6 +111,7 @@ export async function createOrganization(input: OrgInput) {
       contact_email: input.contact_email || null,
       contact_url: input.contact_url || null,
       public_flag: true,
+      sns_share: orgSnsShareOnCreate({ isAdmin, asRepresentative: asRep, checked: input.sns_share !== false }),
       // 代表者として申告した場合のみ自分を representative_id にセット。
       // そうでない場合は NULL（後から admin/me/edit で代表者が確定）。
       representative_id: asRep ? user.id : null,

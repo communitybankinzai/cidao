@@ -14,6 +14,7 @@ import { generateSnsContent, gourmetShopUrl, type SnsMedium, type SnsTarget } fr
 import { fetchSnsTarget, gourmetSnsTarget, type GourmetReportForSns } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
+import { shouldAnnounceOrg } from '@/lib/org-sns-share'
 import { normalizeMailFrom } from '@/lib/mail'
 import { canRepostNow, HELD_WITHIN_24H_NOTE, isSameSnsContent } from '@/lib/sns-edit-compare'
 import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
@@ -137,9 +138,11 @@ export async function announceOrgToSns(org: {
     // 本文は最新のDB内容から生成（更新時は更新後の紹介文で告知するため）
     const { data: row } = await supabase
       .from('organizations')
-      .select('name, description')
+      .select('name, description, sns_share')
       .eq('id', org.id)
       .maybeSingle()
+    // 団体が「SNSでは紹介しない」を選んだときは、下書きを作らない（2026-11-16）
+    if (!shouldAnnounceOrg(row?.sns_share as boolean | null | undefined)) return { created: 0 }
     const content = generateSnsContent(
       {
         target_type: 'org',

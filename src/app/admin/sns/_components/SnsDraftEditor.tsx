@@ -16,6 +16,8 @@ export type DraftLog = {
   title: string
   mediumLabel: string
   targetLabel: string
+  // 団体の下書きだけ：団体が紹介を希望したのか、団体に聞いていない（運営が登録した）のか
+  consentNote?: { text: string; tone: 'ok' | 'warn' }
   // 編集後に紹介文が変わったが、前回の配信から24時間以内のため自動では出さず承認待ちにした下書き
   heldWithin24h?: boolean
 }
@@ -100,6 +102,17 @@ export default function SnsDraftEditor({ log }: { log: DraftLog }) {
         <span className="shrink-0">{log.targetLabel}</span>
         <span className="shrink-0">{log.mediumLabel}</span>
         <span className="flex-1 truncate font-medium text-slate-700 dark:text-slate-300">{log.title}</span>
+        {log.consentNote && (
+          <span
+            className={`shrink-0 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${
+              log.consentNote.tone === 'ok'
+                ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
+                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+            }`}
+          >
+            {log.consentNote.text}
+          </span>
+        )}
         {approved ? (
           <span className="shrink-0 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
             ✓ 承認済み — {nextDispatchLabel()}に自動配信

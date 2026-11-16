@@ -13,6 +13,7 @@ import DisasterSnsMonitorRules, { type DisasterMonitorRule } from './_components
 import TakedownList, { type TakedownItem } from './_components/TakedownList'
 import { postUrlOf } from '@/lib/sns-takedown'
 import { HELD_WITHIN_24H_NOTE } from '@/lib/sns-edit-compare'
+import { orgSnsShareNote } from '@/lib/org-sns-share'
 import type { RotationPreset } from './actions'
 
 type NextTarget = {
@@ -161,6 +162,8 @@ export default async function AdminSnsPage() {
   ;(logs ?? []).forEach((l) => idSetByType[l.target_type]?.add(l.target_id))
 
   const titles = new Map<string, string>()
+  // 団体の下書きに「団体が望んだ紹介か」を出すための値（true＝希望／null＝団体に聞いていない）
+  const orgSnsShare = new Map<string, boolean | null>()
   if (idSetByType.freefree.size > 0) {
     const { data } = await supabase.from('freefree_posts').select('id, title').in('id', Array.from(idSetByType.freefree))
     ;(data ?? []).forEach((r) => titles.set(`freefree:${r.id}`, r.title))
@@ -170,8 +173,11 @@ export default async function AdminSnsPage() {
     ;(data ?? []).forEach((r) => titles.set(`event:${r.id}`, r.title))
   }
   if (idSetByType.org.size > 0) {
-    const { data } = await supabase.from('organizations').select('id, name').in('id', Array.from(idSetByType.org))
-    ;(data ?? []).forEach((r) => titles.set(`org:${r.id}`, r.name))
+    const { data } = await supabase.from('organizations').select('id, name, sns_share').in('id', Array.from(idSetByType.org))
+    ;(data ?? []).forEach((r) => {
+      titles.set(`org:${r.id}`, r.name)
+      orgSnsShare.set(r.id, (r.sns_share as boolean | null) ?? null)
+    })
   }
   if (idSetByType.proposal.size > 0) {
     const { data } = await supabase.from('proposals').select('id, title').in('id', Array.from(idSetByType.proposal))
@@ -300,6 +306,7 @@ export default async function AdminSnsPage() {
                 title: titleOf(l.target_type, l.target_id),
                 mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
                 targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
+                consentNote: l.target_type === 'org' ? orgSnsShareNote(orgSnsShare.get(l.target_id)) : undefined,
                 heldWithin24h: typeof l.error_message === 'string' && l.error_message.startsWith(HELD_WITHIN_24H_NOTE),
               }))}
             />

@@ -40,6 +40,7 @@ export default async function NewOrgPage() {
       contact_url: (formData.get('contact_url') as string | null) ?? undefined,
       categories,
       as_representative: asRep,
+      sns_share: formData.get('sns_share') === 'on',
     })
   }
 
@@ -115,6 +116,18 @@ export default async function NewOrgPage() {
                 </span>
               </label>
             </div>
+          </L>
+
+          <L label="CBI公式SNSでの紹介">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="sns_share" defaultChecked className="mt-1" />
+              <span>
+                CBIの公式SNS（Threads など）で、この団体を紹介してよい
+                <span className="block text-xs text-slate-500">
+                  チェックを外すと、SNSでは紹介しません。CiDAO の団体一覧には、どちらでも載ります。
+                </span>
+              </span>
+            </label>
           </L>
         </div>
         <div className="flex justify-end gap-2">
