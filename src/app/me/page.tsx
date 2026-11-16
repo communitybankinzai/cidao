@@ -12,6 +12,7 @@ import { TYPE_LABEL as ORG_TYPE_LABEL } from '@/lib/org-labels'
 import DeleteAccountSection from './_components/DeleteAccountSection'
 import DisasterNotifySettings from './_components/DisasterNotifySettings'
 import RegisterConfirmSettings from './_components/RegisterConfirmSettings'
+import BroadcastNotifySettings from './_components/BroadcastNotifySettings'
 import { PushToggle } from '@/components/PushToggle'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
@@ -315,6 +316,9 @@ export default async function MyPage({
 
         {/* イベント登録の確認通知を、スマホにも鳴らすか（初期ON・押した時点で保存。通知まわりの設定の隣に置く：2026-11-09） */}
         <RegisterConfirmSettings prefs={(member.contact_preferences ?? {}) as Record<string, unknown>} />
+
+        {/* 全会員向けの自動通知（新しい団体・提案・会員の本登録など）の届け方を種類ごとに選ぶ（押した時点で保存：2026-11-16） */}
+        <BroadcastNotifySettings prefs={(member.contact_preferences ?? {}) as Record<string, unknown>} />
 
         {/* 団体メアドでログイン中の警告 */}
         {collidingOrgs.length > 0 && (

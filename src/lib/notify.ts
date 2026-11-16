@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { sendWebPush, sendWebPushToMany } from '@/lib/push'
 import { wantsDisasterNotify } from '@/lib/disaster-notify-categories'
+import { splitBroadcastRecipients, type BroadcastTopicKey } from './broadcast-notify-prefs'
 
 export type NotificationKind =
   | 'comment'
@@ -95,6 +96,8 @@ export async function insertNotification(input: {
  *   （新着イベントを『その都度』にした人だけにすぐ送り、『毎日18時にまとめて』の人は除く、など）
  * - notifications を INSERT_CHUNK 件ずつ一括 INSERT し、そのあと購読端末へまとめてプッシュ
  * - push: false ならベルのみ（更新系など、端末に鳴らすほどではない通知に使う）
+ * - topicKey を指定すると、会員が種類ごとに選んだ届け方に従う（マイページの「お知らせの届け方」）。
+ *   「受け取らない」の人には送らず、「ベルだけ」の人にはベルだけ届けてスマホは鳴らさない
  * - dedupeMinutes を指定すると、同じ kind・同じ linkUrl の全体通知が直近N分以内に
  *   出ていた場合はスキップする（団体情報の連続編集などで何通も飛ばさないため）
  * - broadcast_id を全行に付与し、1回の送信を1グループとして後から追えるようにする
@@ -110,6 +113,7 @@ export async function notifyAllMembers(input: {
   dedupeMinutes?: number
   prefKey?: string
   recipientFilter?: (prefs: Record<string, unknown>) => boolean
+  topicKey?: BroadcastTopicKey
 }): Promise<{ recipients: number; pushed: number; broadcastId: string | null }> {
   const empty = { recipients: 0, pushed: 0, broadcastId: null }
   try {
@@ -136,14 +140,18 @@ export async function notifyAllMembers(input: {
     if (error || !members) return empty
 
     const prefKey = input.prefKey
-    const recipientIds = (members as { id: string; contact_preferences: unknown }[])
-      .filter((m) => {
-        if (m.id === input.actorId) return false
-        const prefs = (m.contact_preferences ?? {}) as Record<string, unknown>
-        if (prefKey && prefs[prefKey] === false) return false // 未設定は「受け取る」
-        return input.recipientFilter ? input.recipientFilter(prefs) : true
-      })
-      .map((m) => m.id)
+    const candidates = (members as { id: string; contact_preferences: unknown }[]).filter((m) => {
+      if (m.id === input.actorId) return false
+      const prefs = (m.contact_preferences ?? {}) as Record<string, unknown>
+      if (prefKey && prefs[prefKey] === false) return false // 未設定は「受け取る」
+      return input.recipientFilter ? input.recipientFilter(prefs) : true
+    })
+    // topicKey があれば、会員が選んだ届け方で「ベルに届ける人」と「スマホにも鳴らす人」に分ける
+    const split = input.topicKey
+      ? splitBroadcastRecipients(candidates, input.topicKey, input.push !== false)
+      : null
+    const recipientIds = split ? split.bellIds : candidates.map((m) => m.id)
+    const pushIds = split ? split.pushIds : input.push !== false ? recipientIds : []
     if (recipientIds.length === 0) return empty
 
     const broadcastId = crypto.randomUUID()
@@ -166,9 +174,9 @@ export async function notifyAllMembers(input: {
     }
 
     let pushed = 0
-    if (input.push !== false) {
+    if (pushIds.length > 0) {
       pushed = await sendWebPushToMany({
-        recipientIds,
+        recipientIds: pushIds,
         title,
         body: input.body,
         url: input.linkUrl,

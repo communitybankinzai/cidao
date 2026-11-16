@@ -81,6 +81,7 @@ export async function createProposal(input: CreateInput) {
     })
     await notifyAllMembers({
       kind: 'proposal',
+      topicKey: 'notify_proposal',
       actorId: user.id,
       title: `新しい提案「${input.title}」が投稿されました`,
       body: '議論期間中です。コメントで意見を寄せられます',
@@ -267,6 +268,7 @@ export async function extendVoting(
   after(async () => {
     await notifyAllMembers({
       kind: 'proposal',
+      topicKey: 'notify_proposal',
       actorId: user.id,
       title: wasReopen
         ? `提案「${title}」の投票が再開されました`

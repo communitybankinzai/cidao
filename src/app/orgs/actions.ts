@@ -138,6 +138,7 @@ export async function createOrganization(input: OrgInput) {
   after(async () => {
     await notifyAllMembers({
       kind: 'org',
+      topicKey: 'notify_org_new',
       actorId: user.id,
       title: `新しい団体「${input.name}」が登録されました`,
       body: TYPE_LABEL[input.type] ?? undefined,
@@ -455,6 +456,7 @@ export async function approveClaim(orgId: string, memberId: string) {
         after(async () => {
           await notifyAllMembers({
             kind: 'org',
+            topicKey: 'notify_org_new',
             actorId: user.id,
             title: `新しい団体「${org.name}」が登録されました`,
             body: TYPE_LABEL[org.type] ?? undefined,
@@ -641,6 +643,7 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
     after(async () => {
       await notifyAllMembers({
         kind: 'org',
+        topicKey: 'notify_org_update',
         actorId: user.id,
         title: `団体「${org.name}」の情報が更新されました`,
         linkUrl: `/orgs/${orgId}`,

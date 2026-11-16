@@ -11,6 +11,7 @@ import { DISASTER_MAP_URL } from '@/lib/disaster-notify'
 import { DISASTER_CATEGORIES } from '@/lib/disaster-notify-categories'
 import { eventNotifyPrefs, type EventNotifyMode } from '@/lib/event-notify-mode'
 import { REGISTER_CONFIRM_PUSH_KEY } from '@/lib/register-confirm-pref'
+import { BROADCAST_CHANNEL_LABEL, findBroadcastTopic, type BroadcastChannel } from '@/lib/broadcast-notify-prefs'
 
 // 退会（ソフトデリート）。仕様書 v2.1 §4.4：退会から30日以内は復元可。
 // 30日経過後の物理削除（匿名化）バッチは未実装のため、それまでは
@@ -121,6 +122,7 @@ export async function updateProfile(input: ProfileUpdate) {
     after(async () => {
       await notifyAllMembers({
         kind: 'member',
+        topicKey: 'notify_member_new',
         actorId: user.id,
         title: `${nameWithSan(newName)}が新しく本登録しました`,
         body: '「登録メンバー」一覧に載るのは、人材バンクで紹介文を公開した人です',
@@ -271,4 +273,37 @@ export async function saveRegisterConfirmPref(input: { push: boolean }): Promise
   if (error) return { ok: false, message: `保存できませんでした：${error.message}` }
   revalidatePath('/me')
   return { ok: true, message: input.push === true ? '保存しました（スマホにも通知します）' : '保存しました（ベル🔔だけに届きます）' }
+}
+
+/**
+ * 全会員向けの自動通知（新しい団体・提案・会員の本登録など）の届け方を、種類ごとに保存する
+ * （マイページの「お知らせの届け方」・押した時点で保存）。
+ * - 種類と届け方は BROADCAST_TOPICS に挙げたものだけ受け付ける（任意のキー・値は書かせない）
+ * - contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
+ */
+export async function saveBroadcastNotifyPref(input: { key: string; channel: string }): Promise<{ ok: boolean; message: string }> {
+  const topic = findBroadcastTopic(input.key)
+  if (!topic) return { ok: false, message: '設定の種類が正しくありません' }
+  if (!topic.channels.includes(input.channel as BroadcastChannel)) {
+    return { ok: false, message: 'この種類では選べない届け方です' }
+  }
+  const channel = input.channel as BroadcastChannel
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, message: 'ログインしてください' }
+
+  const { data: current } = await (createServiceClient() ?? supabase)
+    .from('members')
+    .select('contact_preferences')
+    .eq('id', user.id)
+    .single()
+  const prefs: Record<string, unknown> = {
+    ...((current?.contact_preferences ?? {}) as Record<string, unknown>),
+    [topic.key]: channel,
+  }
+  const { error } = await supabase.from('members').update({ contact_preferences: prefs }).eq('id', user.id)
+  if (error) return { ok: false, message: `保存できませんでした：${error.message}` }
+  revalidatePath('/me')
+  return { ok: true, message: `保存しました（${topic.label}：${BROADCAST_CHANNEL_LABEL[channel]}）` }
 }
