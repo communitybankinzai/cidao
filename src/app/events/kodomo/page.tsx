@@ -93,7 +93,7 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
         主催の方へ：イベントの{' '}
         <Link href="/events/new" className="underline">登録</Link>
         {' '}・編集の画面にある「子どもの居場所」の欄で、このカレンダーに載せるかどうかを選べます。分からなければ「自動」のままで構いません。
-        開催後は、<Link href="/me/attendance" className="underline">参加者数のお願いのページ</Link>で人数を入れていただくと、この実績に反映されます。
+        開催後に<Link href="/me/attendance" className="underline">参加者数の記録のページ</Link>で人数を入れると、この実績に反映されます（任意です。入れなくても掲載は変わりません）。
       </p>
     </PageShell>
   )

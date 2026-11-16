@@ -21,7 +21,7 @@ type Row = {
 const dateFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// 開催後の参加者数のお願い（/api/cron/attendance-ask の通知の行き先）。
+// 開催後の参加者数の記録（任意）。2026-11-16 に毎日の自動の依頼を止め、入れたい人だけが入れる画面にした。
 // 自分が登録した「子どもの居場所」の催しのうち、終わったものを並べ、その場で人数を入れられる。
 export default async function AttendancePage() {
   const supabase = await createClient()
@@ -60,12 +60,12 @@ export default async function AttendancePage() {
     <PageShell feature="events" width="narrow">
       <PageHeader
         feature="events"
-        title="参加者数のお願い"
-        description="開かれた「子どもの居場所」の催しに、実際に来た人数を入れてください。「こどもの居場所カレンダー」の実績の根拠になります。"
+        title="参加者数の記録（任意）"
+        description="開かれた「子どもの居場所」の催しに、実際に来た人数を入れられます。入力は任意です。入れていただいた回は「こどもの居場所カレンダー」の実績に反映されます。"
       />
 
       <section className="mb-6 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed dark:border-amber-900 dark:bg-amber-950/30">
-        <p>来た人数（スタッフを除く目安で構いません）を入れて「保存」を押してください。</p>
+        <p>入れたい催しだけ、来た人数（スタッフを除く目安で構いません）を入れて「保存」を押してください。入れなくても、掲載には影響しません。</p>
         <p className="text-xs text-slate-600 dark:text-slate-400">
           分からない催しは空のままで大丈夫です。空は「0人」ではなく「不明」と数えます。入れ間違えたら、数を直して保存し直せます（空にして保存すると未報告に戻ります）。
         </p>
@@ -74,7 +74,7 @@ export default async function AttendancePage() {
       <section aria-labelledby="attendance-pending" className="mb-8">
         <h2 id="attendance-pending" className="mb-2 text-base font-semibold">人数がまだの催し（{pending.length}件）</h2>
         {pending.length === 0 ? (
-          <p className="rounded-lg border bg-white p-4 text-center text-sm text-slate-500 dark:bg-slate-900">いま、人数をお願いしたい催しはありません。ありがとうございます。</p>
+          <p className="rounded-lg border bg-white p-4 text-center text-sm text-slate-500 dark:bg-slate-900">いま、人数を入れられる催しはありません。</p>
         ) : (
           <ul className="space-y-2">
             {pending.map((r) => (
