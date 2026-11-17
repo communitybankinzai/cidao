@@ -173,6 +173,16 @@ describe('日程と行の組み立て', () => {
     expect(occs[1].end_at).toBe('2026-11-14T12:00')
   })
 
+  it('巡回先の投稿は today を渡すと公開、渡さなければ下書き。下書きのままの巡回先・ハッシュタグ検索は公開しない', () => {
+    const acct = { id: 'a1', username: 'kokonowa', label: 'ここのわ', kind: '団体' as const, orgId: null }
+    const occ = occurrencesOf(base)[0]
+    const today = occ.start_at.slice(0, 10)
+    expect(candidateToRow(base, occ, media({ id: 'p9', account: acct }), BOT, '印西', today).status).toBe('open')
+    expect(candidateToRow(base, occ, media({ id: 'p9', account: acct }), BOT, '印西').status).toBe('draft')
+    expect(candidateToRow(base, occ, media({ id: 'p9', account: { ...acct, autoPublish: false } }), BOT, '印西', today).status).toBe('draft')
+    expect(candidateToRow(base, occ, media({ id: 'p9' }), BOT, '印西', today).status).toBe('draft')
+  })
+
   it('行は draft・bot 名義・出典に投稿リンク・画像は転載しない', () => {
     const m = media({ id: 'p1', caption: '10/12 マルシェ' })
     const row = candidateToRow(base, occurrencesOf(base)[0], m, BOT, '印西')

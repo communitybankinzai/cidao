@@ -29,6 +29,8 @@ export type MonitorAccount = {
   useGourmet?: boolean
   /** 空でなければ、この理由の確認が済むまで、このアカウント由来の食レポの候補は承認できない */
   gourmetHold?: string
+  /** 取り込んだ催しを自動で公開する（既定 true）。false＝下書きのまま・2026-11-18 */
+  autoPublish?: boolean
 }
 
 export type AccountFetchResult =

@@ -172,7 +172,7 @@ export function buildReportMail(input: ReportInput): { subject: string; html: st
         ['読んだ投稿', `${ar.fetched.list} 件（新しく未読み取り ${(ar.accounts ?? []).reduce((s, a) => s + a.fresh, 0)} 件）`],
         ['一次ふるい通過（AI 不使用）', `${ar.fetched.calendar} 件${prefilterNote(ar.prefilter) ? `（${prefilterNote(ar.prefilter)}）` : ''}`],
         ['AI に読ませた画像', `${ar.fetched.details} 枚（失敗 ${ar.fetched.detailFailed}）`],
-        ['候補として登録（下書き）', `${ar.inserted.length} 件`],
+        ['登録（〔公開〕の印は自動で公開・ほかは下書き）', `${ar.inserted.length} 件`],
         ['重複のため登録せず', `${ar.duplicates.length} 件`],
         ['見送り・未読み取り', `${ar.skipped.length} 件`],
         ['エラー', `${ar.errors.length} 件`],

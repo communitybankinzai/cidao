@@ -2,8 +2,9 @@
 //
 // モニタ対象アカウント（団体の sns_links.instagram ＋ sns_monitor_accounts）の直近の投稿を
 // Graph API の business_discovery で読み、チラシ画像を AI で読み取って events に
-// external_source='instagram-account'・status='draft' で入れる（運営決定 2026-10-01：登録したアカウントが
-// イベントを告知したら自動で候補に。公開は運営が管理画面で）。
+// external_source='instagram-account' で入れる（運営決定 2026-10-01：登録したアカウントがイベントを告知したら自動で候補に）。
+// 2026-11-18 事業主決定A：読み取りに欠けがない催しは status='open'（自動で公開）で入れ、手で公開した時と同じ新着の通知を出す。
+// 欠けがあるもの・「下書きのまま」の巡回先（sns_monitor_accounts.auto_publish=false）は status='draft'（公開は運営が管理画面で）。
 //
 // 毎朝 06:32 JST。結果は同じ朝の /api/cron/instagram-events-sync（06:35）の報告メールに合わせて載る
 // （このルート自体はメールを送らない）。一時停止・費用の上限・読み取り済みの記憶はハッシュタグ側と共通。
@@ -12,12 +13,14 @@
 // 環境変数: ハッシュタグ側と同じ。任意: INSTAGRAM_ACCOUNT_LOOKBACK_DAYS（既定 45）
 
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { emptyFailedResult, recordSyncRun } from '@/lib/event-sync/record-run'
 import { INSTAGRAM_ACCOUNT_SOURCE } from '@/lib/instagram-events/accounts'
 import { describePauseState, readPauseState } from '@/lib/instagram-events/pause'
 import { makeIgSyncDb } from '@/lib/instagram-events/db-supabase'
 import { runGourmetCrawl } from '@/lib/gourmet-crawl-run'
+import { notifyPublishedExternalEvents, type PublishedEvent } from '@/lib/event-external-notify'
 import {
   ACCOUNT_LOOKBACK_DAYS,
   DEFAULT_BUDGET_JPY,
@@ -100,8 +103,29 @@ async function handle(request: Request) {
   await recordSyncRun(supabase, INSTAGRAM_ACCOUNT_SOURCE, startedAt, result, {
     scanned: result.scanned, costJpy: result.costJpy, budget: result.budget, prefilter: result.prefilter, model, accounts: result.accounts ?? [],
   })
+  // 自動で公開した催しを、会員へ知らせる（手で公開した時と同じ通知。失敗しても取り込みは成立させる）
+  let autoPublished = 0
+  if (!dryRun && result.inserted.length > 0) {
+    try {
+      const { data } = await supabase
+        .from('events')
+        .select('id, title, start_at, location, online_flag')
+        .eq('external_source', INSTAGRAM_ACCOUNT_SOURCE)
+        .eq('status', 'open')
+        .gte('created_at', startedAt.toISOString())
+        .limit(50)
+      const published = (data ?? []) as PublishedEvent[]
+      autoPublished = published.length
+      if (published.length > 0) {
+        await notifyPublishedExternalEvents(published)
+        revalidatePath('/events')
+      }
+    } catch (e) {
+      console.error('[instagram-accounts-sync] notify failed:', e instanceof Error ? e.message : String(e))
+    }
+  }
   console.log(
-    `[instagram-accounts-sync] ${dryRun ? '(dry) ' : ''}accounts=${(result.accounts ?? []).length} posts=${result.fetched.list} passed=${result.fetched.calendar} scanned=${result.fetched.details} cost=${result.costJpy.toFixed(1)}JPY inserted=${result.inserted.length} duplicates=${result.duplicates.length} skipped=${result.skipped.length} errors=${result.errors.length}`,
+    `[instagram-accounts-sync] ${dryRun ? '(dry) ' : ''}autoPublished=${autoPublished} accounts=${(result.accounts ?? []).length} posts=${result.fetched.list} passed=${result.fetched.calendar} scanned=${result.fetched.details} cost=${result.costJpy.toFixed(1)}JPY inserted=${result.inserted.length} duplicates=${result.duplicates.length} skipped=${result.skipped.length} errors=${result.errors.length}`,
   )
   return NextResponse.json(result, { status: result.ok ? 200 : 500 })
 }

@@ -28,6 +28,7 @@ import {
   pickImageUrl,
   type IgMedia,
 } from './hashtag'
+import { autoPublishMark, decideAutoPublish, type AutoPublishDecision } from './auto-publish'
 import { INSTAGRAM_ACCOUNT_SOURCE, fetchAccountMedia, matchesAccountKeywords, mediaSince, type MonitorAccount } from './accounts'
 
 /** api_usage の purpose。管理画面の費用表示とここの予算判定が同じ値を見る */
@@ -253,7 +254,25 @@ export function toCandidateDescription(d: FlyerExtract, media: IgMedia, hashtag:
   return lines.join('\n')
 }
 
-export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia, botMemberId: string, hashtag: string): EventRow {
+/**
+ * 取り込む催しを自動で公開するか（2026-11-18）。today（JST の日付）を渡さない呼び出しは、従来どおり下書き。
+ * 判定の中身は auto-publish.ts（巡回先の投稿で、読み取りに欠けがないものだけ公開）。
+ */
+export function autoPublishDecisionOf(d: FlyerExtract, occ: Occurrence, media: IgMedia, today?: string): AutoPublishDecision {
+  if (!today) return { publish: false, reason: '判定なし' }
+  return decideAutoPublish({
+    fromAccount: !!media.account,
+    accountAutoPublish: media.account?.autoPublish,
+    title: d.title || '',
+    location: d.location ?? '',
+    onlineFlag: !!d.online_flag,
+    timeAssumed: occ.timeAssumed,
+    date: occ.start_at.slice(0, 10),
+    today,
+  })
+}
+
+export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia, botMemberId: string, hashtag: string, today?: string): EventRow {
   const organizer = d.organizer_name?.trim() || media.account?.label?.trim() || '主催者不明'
   // 居場所系のアカウントは、種別を『子ども・教育・若者支援』、目印をアカウントの設定に固定する（題名の判定に頼らない）
   const fixedPlace = media.account?.childPlace ?? null
@@ -275,7 +294,7 @@ export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia,
     external_source: media.account ? INSTAGRAM_ACCOUNT_SOURCE : INSTAGRAM_HASHTAG_SOURCE,
     external_source_id: `ig:${media.id}:${occ.start_at.slice(0, 10)}`,
     flyer_image_url: null,
-    status: 'draft',
+    status: autoPublishDecisionOf(d, occ, media, today).publish ? 'open' : 'draft',
     ...(fixedPlace ? { child_place: fixedPlace, child_place_checked: true } : {}),
   }
 }
@@ -502,9 +521,10 @@ export async function processPosts(
         result.duplicates.push(`${d.title}（${date}）= 既存「${dup.title}」`)
         continue
       }
-      const row = candidateToRow(d, occ, m, botMemberId, r.hashtag)
+      const row = candidateToRow(d, occ, m, botMemberId, r.hashtag, r.today)
       newRows.push(row)
-      newLabels.push(`${row.title}（${date}）${m.account ? ` @${m.account.username}` : ''}`)
+      // アカウント由来は、自動で公開したか・下書きに残した理由を印で残す（報告メールで運営が読む）
+      newLabels.push(`${row.title}（${date}）${m.account ? `${autoPublishMark(autoPublishDecisionOf(d, occ, m, r.today))} @${m.account.username}` : ''}`)
     }
   })
 

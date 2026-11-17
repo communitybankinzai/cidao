@@ -37,6 +37,8 @@ export type IgMedia = {
     useEvents?: boolean
     useGourmet?: boolean
     gourmetHold?: string
+    /** 取り込んだ催しを自動で公開する（既定 true）。accounts.ts の MonitorAccount と同じ・2026-11-18 */
+    autoPublish?: boolean
   }
 }
 

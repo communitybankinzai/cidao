@@ -148,9 +148,9 @@ describe('syncInstagramAccounts', () => {
     expect(r.ok).toBe(true)
     expect(r.accounts).toEqual([{ username: 'inzai_shokokai', label: '印西市商工会', kind: '企業', orgId: null, posts: 2, fresh: 1, error: null }])
     expect(r.fetched).toMatchObject({ list: 2, calendar: 1, details: 1 })
-    expect(r.inserted).toEqual(['AI活用セミナー（2026-11-09） @inzai_shokokai'])
+    expect(r.inserted).toEqual(['AI活用セミナー（2026-11-09）〔公開〕 @inzai_shokokai'])
     expect(db.rows[0]).toMatchObject({
-      external_source: 'instagram-account', external_source_id: 'ig:m1:2026-11-09', status: 'draft',
+      external_source: 'instagram-account', external_source_id: 'ig:m1:2026-11-09', status: 'open',
       organizer_name_text: '千葉県商工会連合会・印西市商工会（Instagram @inzai_shokokai の投稿より）',
     })
     expect(db.rows[0].description).toContain('出典：Instagram @inzai_shokokai（印西市商工会）の投稿 https://www.instagram.com/p/m1/')
@@ -172,7 +172,7 @@ describe('syncInstagramAccounts', () => {
     expect(r.prefilter).toMatchObject({ noDate: 0, noEventWord: 1, passed: 1 })
     expect(r.scanned).toEqual(['z1'])
     expect(extract).toHaveBeenCalledTimes(1)
-    expect(db.rows[0]).toMatchObject({ external_source: 'instagram-account', external_source_id: 'ig:z1:2026-11-09', status: 'draft' })
+    expect(db.rows[0]).toMatchObject({ external_source: 'instagram-account', external_source_id: 'ig:z1:2026-11-09', status: 'open' })
   })
 
   it('権限エラーなら残りのアカウントは読まず、errors に案内を残す', async () => {
@@ -203,7 +203,7 @@ describe('syncInstagramAccounts', () => {
     expect(r.accounts?.[0]).toMatchObject({ posts: 2, fresh: 1, skippedByKeyword: 1 })
     expect(extract).toHaveBeenCalledTimes(1) // 食堂以外の投稿は AI に読ませない（費用も出さない）
     expect(db.rows).toHaveLength(1)
-    expect(db.rows[0]).toMatchObject({ category: 'kodomo', child_place: 'ibasho', child_place_checked: true, status: 'draft', external_source: 'instagram-account' })
+    expect(db.rows[0]).toMatchObject({ category: 'kodomo', child_place: 'ibasho', child_place_checked: true, status: 'open', external_source: 'instagram-account' })
   })
 
   it('目印を設定していないアカウントは、種別も目印も固定しない（従来どおり）', async () => {
