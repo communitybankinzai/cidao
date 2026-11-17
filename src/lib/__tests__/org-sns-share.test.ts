@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { orgSnsShareNote, orgSnsShareOnCreate, shouldAnnounceOrg } from '../org-sns-share'
+import { orgSnsShareNote, orgSnsShareOnCreate, shouldAnnounceOrg, orgSnsAutoApprove } from '../org-sns-share'
 
 describe('orgSnsShareOnCreate', () => {
   it('会員が登録したときは、チェックの値をそのまま保存する', () => {
@@ -74,5 +74,11 @@ describe('pick_next_sns_targets のいちばん新しい定義', () => {
 
   it('FreeFree は紹介を許可した掲載だけ', () => {
     expect(body).toContain('p.sns_share')
+  })
+  it('承認なしで配信に回すのは、団体が紹介してよいと答えたときだけ', () => {
+    expect(orgSnsAutoApprove(true)).toBe(true)
+    expect(orgSnsAutoApprove(null)).toBe(false)
+    expect(orgSnsAutoApprove(undefined)).toBe(false)
+    expect(orgSnsAutoApprove(false)).toBe(false)
   })
 })

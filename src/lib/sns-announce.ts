@@ -14,7 +14,7 @@ import { generateSnsContent, gourmetShopUrl, type SnsMedium, type SnsTarget } fr
 import { fetchSnsTarget, gourmetSnsTarget, type GourmetReportForSns } from '@/lib/sns-target'
 import { dispatchLogs } from '@/lib/sns-dispatch'
 import { insertNotification } from '@/lib/notify'
-import { shouldAnnounceOrg } from '@/lib/org-sns-share'
+import { orgSnsAutoApprove, shouldAnnounceOrg } from '@/lib/org-sns-share'
 import { normalizeMailFrom } from '@/lib/mail'
 import { canRepostNow, HELD_WITHIN_24H_NOTE, isSameSnsContent } from '@/lib/sns-edit-compare'
 import { notifyPendingSnsTakedowns } from '@/lib/sns-takedown'
@@ -112,7 +112,9 @@ export async function announceProposalToSns(
   }
 }
 
-// 団体の新規登録・紹介内容更新時のSNS告知下書きを作成する（Threads のみ・常に承認制）。
+// 団体の新規登録・紹介内容更新時のSNS告知下書きを作成する（Threads のみ）。
+// 2026-11-18 事業主決定A：団体が「紹介してよい」と答えている（sns_share=true）ときは承認済みで作り、毎日18時台の配信に回す。
+// 団体に聞いていない（null）ときは、これまでどおり承認待ち。
 // ローテーション廃止（2026-08-15）に伴い、団体はイベントドリブンで告知する。
 // orgs/actions.ts の after() から呼ばれる best-effort。
 export async function announceOrgToSns(org: {
@@ -152,21 +154,22 @@ export async function announceOrgToSns(org: {
       },
       'threads',
     )
+    const orgAuto = orgSnsAutoApprove(row?.sns_share as boolean | null | undefined)
     const { error } = await supabase.from('sns_post_logs').insert({
       target_type: 'org',
       target_id: org.id,
       medium: 'threads',
       status: 'pending',
       content,
-      approved_at: null,
-      error_message: 'org announce: awaiting approval',
+      approved_at: orgAuto ? new Date().toISOString() : null,
+      error_message: orgAuto ? 'org announce: auto approved (org consented)' : 'org announce: awaiting approval',
     })
     if (error) {
       console.error('[sns-announce] org insert failed:', error.message)
       return { created: 0 }
     }
 
-    await notifyAdminsOfPendingDrafts(supabase, `団体「${org.name}」`, 1)
+    await notifyAdminsOfPendingDrafts(supabase, orgAuto ? `団体「${org.name}」（団体の同意あり・承認済み。18時台に自動で配信されます。止めるときは見送りを押してください）` : `団体「${org.name}」`, 1)
     return { created: 1 }
   } catch (e) {
     console.error('[sns-announce] org failed:', e instanceof Error ? e.message : e)
@@ -596,7 +599,8 @@ async function notifyAdminsOfPendingDrafts(
 // ── 食レポマップ（2026-11-12・事業主決定：通知＋同意つきだけ承認制で紹介）────────────────
 // 食レポが登録されたら、運営へベル（＋Webプッシュ）とメールで必ず知らせる（すぐ公開なので、伏せる判断にも使う）。
 // 「CBIのSNSで紹介してよい」に同意した食レポだけ、Threads・Facebook・Instagram の下書きを作る。
-// 下書きは全自動モード（sns_auto_post）でも常に承認待ち。運営が /admin/sns で承認するとその場で配信される。
+// 2026-11-18 事業主決定A：同意つきの食レポの下書きは承認済みで作り、毎日18時台の配信に回す（運営の承認は不要）。
+// 止めたいときは、運営が配信の前に /admin/sns で見送る。伏せた食レポは、配信の直前の確認で出ない。
 // Instagram の画像は /api/og/gourmet/[id] のカード（店名だけ・投稿の写真は転載しない）。
 // 呼び出し元は食レポ登録 API の after()（best-effort。失敗しても登録は成立させる）
 const GOURMET_MEDIA: SnsMedium[] = ['threads', 'facebook', 'instagram']
@@ -621,8 +625,8 @@ export async function announceGourmetReport(report: GourmetReportForSns): Promis
           medium,
           status: 'pending',
           content: generateSnsContent(target, medium),
-          approved_at: null,
-          error_message: 'gourmet announce: awaiting approval',
+          approved_at: new Date().toISOString(),
+          error_message: 'gourmet announce: auto approved (reporter consented)',
         }))
         const { data: inserted, error } = await supabase.from('sns_post_logs').insert(rows).select('id')
         if (error) console.error('[sns-announce] gourmet insert failed:', error.message)
@@ -638,9 +642,9 @@ export async function announceGourmetReport(report: GourmetReportForSns): Promis
 
 async function notifyAdminsOfGourmet(supabase: SupabaseClient, report: GourmetReportForSns, drafts: number) {
   const shop = report.shop_name
-  const title = drafts > 0 ? `食レポが届きました（SNSで紹介の承認待ち ${drafts} 件）` : '食レポが届きました'
+  const title = drafts > 0 ? `食レポが届きました（SNSで紹介 ${drafts} 件・18時台に自動で配信）` : '食レポが届きました'
   const body = drafts > 0
-    ? `「${shop}」に食レポが登録されました。登録した人は CBI の SNS での紹介に同意しています。管理画面で確認・承認すると配信されます`
+    ? `「${shop}」に食レポが登録されました。登録した人は CBI の SNS での紹介に同意しています。18時台に自動で配信されます。止めるときは、管理画面で見送りを押してください`
     : `「${shop}」に食レポが登録されました（SNS での紹介には同意していません）。すぐ公開されているので、内容を確認してください`
   const linkUrl = drafts > 0 ? '/admin/sns' : gourmetShopUrl(report.shop_ref)
   try {
@@ -675,7 +679,7 @@ async function notifyAdminsOfGourmet(supabase: SupabaseClient, report: GourmetRe
         `ひとこと：${report.comment ?? '（なし）'}`,
         ``,
         `地図で見る：${gourmetShopUrl(report.shop_ref)}`,
-        drafts > 0 ? `SNS の承認：${SITE_BASE}/admin/sns` : '',
+        drafts > 0 ? `SNS の配信予定（止めるときはここで見送り）：${SITE_BASE}/admin/sns` : '',
       ].filter((l) => l !== '').join('\n'),
     })
   } catch (e) {

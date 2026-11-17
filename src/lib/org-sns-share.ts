@@ -22,6 +22,14 @@ export function shouldAnnounceOrg(snsShare: OrgSnsShare | undefined): boolean {
   return snsShare !== false
 }
 
+/**
+ * 紹介の下書きを、運営の承認なしで配信に回してよいか（2026-11-18 事業主決定A）。
+ * 団体（登録した会員）が「紹介してよい」と答えたときだけ。聞いていない団体（null）は、これまでどおり承認待ち。
+ */
+export function orgSnsAutoApprove(snsShare: OrgSnsShare | undefined): boolean {
+  return snsShare === true
+}
+
 /** 運営の承認画面の下書きに出す一言。承認する人が「団体が望んだ紹介か」を見分けるため */
 export function orgSnsShareNote(snsShare: OrgSnsShare | undefined): { text: string; tone: 'ok' | 'warn' } {
   if (snsShare === true) return { text: '団体が紹介を希望', tone: 'ok' }

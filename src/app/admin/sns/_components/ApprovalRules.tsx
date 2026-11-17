@@ -48,7 +48,7 @@ export default function ApprovalRules({ freefreeAuto, proposalAuto }: { freefree
     proposalAuto
       ? { tone: 'auto', situation: '提案を作った', result: '承認なしで、すぐ出ます（提案の全自動モードがオンのため）' }
       : { tone: 'approval', situation: '提案を作った', result: '承認待ちの下書きになります（提案の全自動モードがオフのため）' },
-    { tone: 'approval', situation: '団体を登録した', result: '常に承認待ちです' },
+    { tone: 'approval', situation: '団体を登録した', result: '団体が「紹介してよい」と答えていれば、承認済みで作られ、18時台に自動で配信されます。団体に聞いていないときは承認待ちです' },
   ]
 
   return (
