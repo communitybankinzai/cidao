@@ -34,7 +34,7 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
   const { fetchStart, fetchEnd } = fetchWindow(y, m, view)
   const { data: events } = await supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, child_place')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())

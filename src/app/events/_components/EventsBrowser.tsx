@@ -10,6 +10,7 @@ import { TYPE_LABEL } from '@/lib/org-labels'
 import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 import { SENIOR_PLACE_DESC, SENIOR_PLACE_LABEL, placeTagLabel, type PlaceTag } from '@/lib/senior-place'
 import { CAFE_PLACE_DESC, CAFE_PLACE_LABEL } from '@/lib/cafe-place'
+import { groupByEventName, isSameEventName, memberSourceLinks } from '@/lib/event-name-groups'
 
 const JST = 'Asia/Tokyo'
 const hmFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: JST, hour: '2-digit', minute: '2-digit', hour12: false })
@@ -36,6 +37,8 @@ export type EventRow = {
   child_place?: 'ibasho' | 'oyako' | null
   senior_place?: boolean | null
   cafe_place?: boolean | null
+  /** 情報元（どこから入った情報か）。同じ名称の催しをまとめたときの内訳に使う */
+  external_source?: string | null
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
@@ -728,7 +731,7 @@ function CalendarView({
       })
     })
   }
-  const selectedItems = byDate.get(selected) ?? []
+  const selectedItems = useMemo(() => byDate.get(selected) ?? [], [byDate, selected])
   // 選択日の会期中にかかる期間イベント（開始日の昇順）
   const selectedPeriodItems = useMemo(
     () => periodEvents
@@ -736,6 +739,17 @@ function CalendarView({
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()),
     [periodEvents, selected],
   )
+  // 同じ名称の催しは1つにまとめる。期間の催しが、その日の催しと同じ名称なら、その内訳に入れる
+  const { dayGroups, periodGroups } = useMemo(() => {
+    const dg = groupByEventName(selectedItems)
+    const rest: EventRow[] = []
+    for (const p of selectedPeriodItems) {
+      const hit = dg.find((g) => g.members.some((m) => isSameEventName(m.title, p.title)))
+      if (hit) hit.members.push(p)
+      else rest.push(p)
+    }
+    return { dayGroups: dg, periodGroups: groupByEventName(rest) }
+  }, [selectedItems, selectedPeriodItems])
   const selectedLabel = (() => {
     const [sy, sm, sd] = selected.split('-').map(Number)
     const dow = ['日', '月', '火', '水', '木', '金', '土'][new Date(sy, sm - 1, sd).getDay()]
@@ -760,6 +774,8 @@ function CalendarView({
           const isToday = ymd === today
           const isSelected = ymd === selected
           const items = byDate.get(ymd) ?? []
+          // 同じ名称の催し（情報元ちがい）は、マスの中では1つにまとめる
+          const cellGroups = groupByEventName(items)
           return (
             <div
               key={ymd}
@@ -773,7 +789,7 @@ function CalendarView({
                 )}
               </div>
               <ul className="flex flex-col gap-0.5 overflow-hidden">
-                {items.slice(0, 3).map((e) => (
+                {cellGroups.slice(0, 3).map(({ main: e }) => (
                   <li key={e.id}>
                     <span title={`${hmFmt.format(new Date(e.start_at))} ${e.title} / ${organizerLabel(e)}`} className="block truncate text-[11px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100">
                       {e.flyer_image_url && <span className="mr-0.5" aria-hidden>📎</span>}
@@ -781,8 +797,8 @@ function CalendarView({
                     </span>
                   </li>
                 ))}
-                {items.length > 3 && (
-                  <li className="text-[10px] text-slate-500 px-1">+{items.length - 3} 件</li>
+                {cellGroups.length > 3 && (
+                  <li className="text-[10px] text-slate-500 px-1">+{cellGroups.length - 3} 件</li>
                 )}
               </ul>
             </div>
@@ -793,9 +809,9 @@ function CalendarView({
 
     {(selectedItems.length > 0 || selectedPeriodItems.length > 0) && (
       <div key={selected} ref={panelRef} className="cidao-panel-flash scroll-my-4 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{selectedItems.length + selectedPeriodItems.length}件）</p>
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{dayGroups.length + periodGroups.length}件）</p>
         <ul className="space-y-1.5">
-          {selectedItems.map((e) => (
+          {dayGroups.map(({ main: e, members }) => (
             <li key={e.id}>
               <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">{hmFmt.format(new Date(e.start_at))}</span>
@@ -807,9 +823,17 @@ function CalendarView({
                   <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{organizerLabel(e)}</span>
                 </span>
               </Link>
+              {members.length > 1 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1 pl-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>情報元（{members.length}）：</span>
+                  {memberSourceLinks(members).map((s) => (
+                    <Link key={s.id} href={`/events/${s.id}`} className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 underline-offset-2 hover:underline">{s.label}</Link>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
-          {selectedPeriodItems.map((e) => (
+          {periodGroups.map(({ main: e, members }) => (
             <li key={e.id}>
               <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">期間</span>
@@ -823,6 +847,14 @@ function CalendarView({
                   </span>
                 </span>
               </Link>
+              {members.length > 1 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1 pl-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>情報元（{members.length}）：</span>
+                  {memberSourceLinks(members).map((s) => (
+                    <Link key={s.id} href={`/events/${s.id}`} className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 underline-offset-2 hover:underline">{s.label}</Link>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -931,9 +963,24 @@ function RevealItem({
 
 function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean }) {
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
-  const groups = useMemo(() => {
+  const { groups, membersOf } = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
+    // 同じ日・同じ名称の催し（情報元ちがい）は1つにまとめ、代表の1件だけを並べる（内訳は membersOf で引く）
+    const membersOf = new Map<string, EventRow[]>()
+    const byDay = new Map<string, EventRow[]>()
     for (const e of events) {
+      const k = ymdFmt.format(new Date(e.start_at))
+      byDay.set(k, [...(byDay.get(k) ?? []), e])
+    }
+    const mains: EventRow[] = []
+    for (const dayItems of byDay.values()) {
+      for (const g of groupByEventName(dayItems)) {
+        mains.push(g.main)
+        membersOf.set(g.main.id, g.members)
+      }
+    }
+    mains.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    for (const e of mains) {
       const d = new Date(e.start_at)
       const key = new Intl.DateTimeFormat('en-CA', { timeZone: JST, year: 'numeric', month: '2-digit' }).format(d)
       const label = `${new Intl.DateTimeFormat('ja-JP', { timeZone: JST, year: 'numeric', month: 'long' }).format(d)}`
@@ -941,7 +988,7 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
       g.items.push(e)
       m.set(key, g)
     }
-    return Array.from(m.entries())
+    return { groups: Array.from(m.entries()), membersOf }
   }, [events])
 
   const itemsRef = useRef(new Map<string, { el: HTMLLIElement; fromLeft: boolean }>())
@@ -956,6 +1003,7 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
   // 1件分の行（今月の「終了した分」と「今日以降」で同じ見た目を使う）
   const renderItem = (e: EventRow) => {
               const info = e.organizer_type === 'org' ? orgInfo[e.organizer_id] : undefined
+              const members = membersOf.get(e.id) ?? [e]
               return (
                 <RevealItem key={e.id} id={e.id} fromLeft={false} itemsRef={itemsRef}>
                   <div className="relative">
@@ -1002,6 +1050,14 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
                       {e.flyer_image_url ? '編集' : '編集（画像なし）'}
                     </Link>
                   )}
+                  {members.length > 1 && (
+                <div className="-mt-2 pb-3 flex flex-wrap items-center gap-1 pl-4 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>情報元（{members.length}）：</span>
+                  {memberSourceLinks(members).map((s) => (
+                    <Link key={s.id} href={`/events/${s.id}`} className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 underline-offset-2 hover:underline">{s.label}</Link>
+                  ))}
+                </div>
+              )}
                   </div>
                 </RevealItem>
               )
