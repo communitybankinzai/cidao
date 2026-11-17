@@ -339,7 +339,7 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
             </p>
           ) : (
             <form action={async () => { 'use server'; await requestJoinOrg(id) }}>
-              <Button type="submit">{hasLeftBefore ? '再加入を申請する' : '参加を申請する'}</Button>
+              <Button type="submit">{hasLeftBefore ? 'もう一度参加する' : 'この団体に参加する'}</Button>
             </form>
           )}
 

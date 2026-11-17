@@ -20,7 +20,7 @@ import { orgSnsShareOnCreate } from '@/lib/org-sns-share'
  * これが無かったため /admin/claims に7件の申請が42〜46日たまっていた（2026-09-09 発覚）。
  * 申請は本人の生活時間で起きるので、管理画面を見に行く運用に依存させない。
  */
-async function notifyAdminsOfClaim(orgIds: string[], actorId: string) {
+async function notifyAdminsOfClaim(orgIds: string[], actorId: string, autoConfirmed = false) {
   if (orgIds.length === 0) return
   let admin: ReturnType<typeof createAdminClient>
   try {
@@ -44,9 +44,13 @@ async function notifyAdminsOfClaim(orgIds: string[], actorId: string) {
           recipientId: a.id,
           actorId,
           kind: 'system',
-          title: `${who}から団体「${names}」への所属申告が届きました`,
-          body: '管理画面の「所属申告」から承認・却下できます',
-          linkUrl: '/admin/claims',
+          title: autoConfirmed
+            ? `${who}の団体「${names}」への所属申告を、自動で承認しました`
+            : `${who}から団体「${names}」への所属申告が届きました`,
+          body: autoConfirmed
+            ? '運営の操作は要りません。内容に心当たりがないときだけ、団体ページをご確認ください'
+            : '管理画面の「所属申告」から承認・却下できます（すでに代表者がいる団体への代表者の申告です）',
+          linkUrl: autoConfirmed && orgIds.length === 1 ? `/orgs/${orgIds[0]}` : '/admin/claims',
         }),
       ),
   )
@@ -318,6 +322,73 @@ export async function leaveOrg(orgId: string) {
   revalidatePath(`/orgs/${orgId}`)
 }
 
+type AutoClaim = { org_id: string; role: 'representative' | 'member' }
+
+/**
+ * 所属の申告・参加の申請を、運営の操作を待たずにその場で承認済みにする（2026-11-18 事業主決定「全ていったん自動化」）。
+ * 会員が登録したのに、運営が気づくまで何も起きない、という止まり方をなくすため。
+ * 例外：すでに別の代表者（承認済み）がいる団体への「代表者としての申告」は、代表の交代にあたるので承認待ちに残す
+ * （個人の認証と、団体の代表権の確認は別の話。乗っ取りを防ぐ）。
+ * 戻り値は、承認済みにできた団体と、承認待ちに残した団体の id。
+ */
+async function autoConfirmClaims(claims: AutoClaim[], memberId: string): Promise<{ confirmed: string[]; held: string[] }> {
+  const confirmed: string[] = []
+  const held: string[] = []
+  let db: ReturnType<typeof createAdminClient>
+  try {
+    db = createAdminClient()
+  } catch {
+    return { confirmed, held: claims.map((c) => c.org_id) }  // service role 未設定なら、従来どおり承認待ち
+  }
+  for (const c of claims) {
+    try {
+      if (c.role === 'representative') {
+        const { data: reps } = await db
+          .from('memberships')
+          .select('member_id')
+          .eq('org_id', c.org_id)
+          .eq('role', 'representative')
+          .eq('status', 'confirmed')
+          .is('left_at', null)
+          .neq('member_id', memberId)
+          .limit(1)
+        if (reps && reps.length > 0) {
+          held.push(c.org_id)
+          continue
+        }
+      }
+      const { data: ok } = await db
+        .from('memberships')
+        .update({ status: 'confirmed', approved_at: new Date().toISOString(), approved_by: null })
+        .eq('org_id', c.org_id)
+        .eq('member_id', memberId)
+        .eq('status', 'claimed')
+        .select('member_id')
+      if (!ok || ok.length === 0) {
+        held.push(c.org_id)
+        continue
+      }
+      confirmed.push(c.org_id)
+      if (c.role === 'representative') {
+        const { data: org } = await db
+          .from('organizations')
+          .select('representative_id, public_flag, hidden_by_admin')
+          .eq('id', c.org_id)
+          .single()
+        if (org) {
+          const updates: { representative_id?: string; public_flag?: boolean } = {}
+          if (isAwaitingRepresentative(org.representative_id)) updates.representative_id = memberId
+          if (shouldPublishOnApprove(org)) updates.public_flag = true
+          if (Object.keys(updates).length > 0) await db.from('organizations').update(updates).eq('id', c.org_id)
+        }
+      }
+    } catch {
+      held.push(c.org_id)
+    }
+  }
+  return { confirmed, held }
+}
+
 export async function requestJoinOrg(orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -352,8 +423,10 @@ export async function requestJoinOrg(orgId: string) {
       .eq('org_id', orgId)
       .eq('member_id', user.id)
     if (error) throw new Error(`再加入申請失敗: ${error.message}`)
+    const rejoin = await autoConfirmClaims([{ org_id: orgId, role: 'member' }], user.id)
+    after(async () => { await notifyAdminsOfClaim([orgId], user.id, rejoin.confirmed.length > 0) })
     revalidatePath(`/orgs/${orgId}`)
-    return { alreadyExists: false, status: 'claimed' as const, role: 'member' as const }
+    return { alreadyExists: false, status: rejoin.confirmed.length > 0 ? ('confirmed' as const) : ('claimed' as const), role: 'member' as const }
   }
 
   const { error } = await supabase.from('memberships').insert({
@@ -363,10 +436,11 @@ export async function requestJoinOrg(orgId: string) {
     status: 'claimed',
   })
   if (error) throw new Error(`参加申請失敗: ${error.message}`)
-  after(async () => { await notifyAdminsOfClaim([orgId], user.id) })
+  const joined = await autoConfirmClaims([{ org_id: orgId, role: 'member' }], user.id)
+  after(async () => { await notifyAdminsOfClaim([orgId], user.id, joined.confirmed.length > 0) })
   revalidatePath(`/orgs/${orgId}`)
   revalidatePath('/admin/claims')
-  return { alreadyExists: false, status: 'claimed' as const, role: 'member' as const }
+  return { alreadyExists: false, status: joined.confirmed.length > 0 ? ('confirmed' as const) : ('claimed' as const), role: 'member' as const }
 }
 
 export type OrgClaim = { org_id: string; as_representative: boolean }
@@ -402,10 +476,15 @@ export async function claimMemberships(claims: OrgClaim[]) {
   const { error } = await supabase.from('memberships').insert(toInsert)
   if (error) throw new Error(`所属申告失敗: ${error.message}`)
 
-  after(async () => { await notifyAdminsOfClaim(toInsert.map((t) => t.org_id), user.id) })
+  const auto = await autoConfirmClaims(toInsert.map((t) => ({ org_id: t.org_id, role: t.role })), user.id)
+  after(async () => {
+    await notifyAdminsOfClaim(auto.confirmed, user.id, true)
+    await notifyAdminsOfClaim(auto.held, user.id, false)
+  })
   revalidatePath('/me')
+  revalidatePath('/orgs')
   revalidatePath('/admin/claims')
-  return { inserted: toInsert.length, skipped: claims.length - toInsert.length }
+  return { inserted: toInsert.length, skipped: claims.length - toInsert.length, confirmed: auto.confirmed.length, held: auto.held.length }
 }
 
 export async function approveClaim(orgId: string, memberId: string) {

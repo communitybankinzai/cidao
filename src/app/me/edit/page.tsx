@@ -360,7 +360,7 @@ export default async function EditProfilePage({
           <div>
             <h2 className="text-lg font-semibold">所属団体（任意）</h2>
             <p className="text-xs text-slate-500 mt-1">
-              既に印西市内の団体に所属している場合はここから申告できます。代表者として申告した場合、管理者の承認後に <code className="text-[10px]">organizations.representative_id</code> が更新されます。
+              既に印西市内の団体に所属している場合はここから申告できます。申告はその場で反映されます（運営の承認を待つ必要はありません）。すでに別の代表者がいる団体に、代表者として申告した場合だけ、運営の確認をお待ちください。
             </p>
           </div>
 
