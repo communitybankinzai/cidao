@@ -172,11 +172,13 @@ function timeTextFor(text: string, date: string): string {
 }
 
 const LONG_PERIOD_DAYS = 5
+/** 初日〜最終日のうち、開催日がこの割合以上を占めれば会期つきの1件にまとめる（休みの日が少し挟まっても1件。週1回の講座などは日ごとのまま）・2026-11-18 */
+export const PERIOD_DENSITY = 0.7
 
 /**
  * カレンダーの1項目＋詳細から候補を作る。
  * - 日付はカレンダーの日付を正とする（詳細の和暦は時間の抽出にだけ使う）
- * - 連続 LONG_PERIOD_DAYS 日を超える催し（イルミネーション等）は初日〜最終日の1件（会期つき）にまとめ periodEnd を持つ。
+ * - LONG_PERIOD_DAYS 日を超えて、ほぼ毎日（PERIOD_DENSITY 以上）開かれる催し（イルミネーション等）は初日〜最終日の1件（会期つき）にまとめ periodEnd を持つ。
  *   カレンダー上部の「開催中の期間イベント」欄に出るよう end を最終日にする。読み込み範囲（当月から3か月）が
  *   月ごとにずれても同じ行を指すよう、sourceId は日付を含めず `city:<pageId>:period` にする
  */
@@ -188,7 +190,7 @@ export function cityItemToCandidates(item: CityCalendarItem, detail: CityDetail 
     const first = new Date(`${dates[0]}T00:00:00Z`).getTime()
     const last = new Date(`${dates[dates.length - 1]}T00:00:00Z`).getTime()
     const span = Math.round((last - first) / 86_400_000) + 1
-    if (span === dates.length) {
+    if (dates.length / span >= PERIOD_DENSITY) {
       periodEnd = dates[dates.length - 1]
       dates = [dates[0]]
     }

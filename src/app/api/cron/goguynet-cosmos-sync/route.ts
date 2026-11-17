@@ -8,6 +8,8 @@
 // 環境変数: CRON_SECRET / NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / INGEST_BOT_MEMBER_ID
 
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
+import { notifyAutoPublishedSince } from '@/lib/event-external-notify'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GOGUYNET_COSMOS_SOURCE } from '@/lib/goguynet/cosmos'
 import { syncGoguynetCosmos, type CosmosExistingRow, type CosmosSyncDb } from '@/lib/goguynet/sync'
@@ -86,6 +88,11 @@ async function handle(request: Request) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
   await recordSyncRun(supabase, GOGUYNET_COSMOS_SOURCE, startedAt, result)
+  // 自動で公開した催しを会員へ知らせる（2026-11-18・手で公開した時と同じ通知）
+  if (!dryRun && result.inserted.length > 0) {
+    const n = await notifyAutoPublishedSince(supabase, GOGUYNET_COSMOS_SOURCE, startedAt)
+    if (n > 0) revalidatePath('/events')
+  }
   console.log(
     `[goguynet-cosmos-sync] ${dryRun ? '(dry) ' : ''}articles=${result.fetched.list} withCandidates=${result.fetched.details} merged=${result.fetched.merged} future=${result.fetched.future} inserted=${result.inserted.length} updated=${result.updated.length} unchanged=${result.unchanged} duplicates=${result.duplicates.length} errors=${result.errors.length}`,
   )

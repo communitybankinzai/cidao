@@ -5,6 +5,8 @@
 // AI は使わない。認証・?dry=1・実行記録は他の取り込み cron と同じ。
 
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
+import { notifyAutoPublishedSince } from '@/lib/event-external-notify'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { INZAI_CITY_SOURCE } from '@/lib/inzai-city/calendar'
 import { syncInzaiCity } from '@/lib/inzai-city/sync'
@@ -78,6 +80,11 @@ async function handle(request: Request) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
   await recordSyncRun(supabase, INZAI_CITY_SOURCE, startedAt, result)
+  // 自動で公開した催しを会員へ知らせる（2026-11-18・手で公開した時と同じ通知）
+  if (!dryRun && result.inserted.length > 0) {
+    const n = await notifyAutoPublishedSince(supabase, INZAI_CITY_SOURCE, startedAt)
+    if (n > 0) revalidatePath('/events')
+  }
   console.log(
     `[inzai-city-sync] ${dryRun ? '(dry) ' : ''}pages=${result.fetched.list} details=${result.fetched.details}/${result.fetched.detailFailed}fail merged=${result.fetched.merged} future=${result.fetched.future} inserted=${result.inserted.length} updated=${result.updated.length} unchanged=${result.unchanged} duplicates=${result.duplicates.length} errors=${result.errors.length}`,
   )

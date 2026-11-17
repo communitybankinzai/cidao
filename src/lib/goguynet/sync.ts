@@ -75,7 +75,8 @@ export function candidateToRow(c: CosmosCandidate, botMemberId: string): EventRo
     external_source: GOGUYNET_COSMOS_SOURCE,
     external_source_id: c.sourceId,
     flyer_image_url: null,
-    status: 'draft',
+    // 2026-11-18 事業主決定A：新しく見つけた催しは公開で入れる（既に下書きの行は下書きのまま更新）
+    status: 'open',
   }
 }
 

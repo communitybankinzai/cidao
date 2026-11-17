@@ -94,6 +94,32 @@ export function planExternalEventNotices(events: PublishedEvent[], now: Date): E
  * best-effort：失敗しても、取り込み・公開の処理は成立させる（例外は投げない）。
  * actorId を渡すと、その人（取り込みを操作した運営）には送らない。
  */
+/**
+ * 定期の取り込みが自動で公開した催し（startedAt 以降に作られた、その出どころの公開中の行）を会員へ知らせる。
+ * best-effort。知らせた催しの数を返す（2026-11-18）。supabase は service role のクライアント。
+ */
+export async function notifyAutoPublishedSince(
+  supabase: { from: (table: string) => any }, // eslint-disable-line @typescript-eslint/no-explicit-any
+  source: string,
+  startedAt: Date,
+): Promise<number> {
+  try {
+    const { data } = await supabase
+      .from('events')
+      .select('id, title, start_at, location, online_flag')
+      .eq('external_source', source)
+      .eq('status', 'open')
+      .gte('created_at', startedAt.toISOString())
+      .limit(100)
+    const published = (data ?? []) as PublishedEvent[]
+    if (published.length > 0) await notifyPublishedExternalEvents(published)
+    return published.length
+  } catch (e) {
+    console.error('[event-external-notify] auto-published notify failed:', e instanceof Error ? e.message : String(e))
+    return 0
+  }
+}
+
 export async function notifyPublishedExternalEvents(
   events: PublishedEvent[],
   opts: { actorId?: string | null; now?: Date } = {},

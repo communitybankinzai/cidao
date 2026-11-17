@@ -145,7 +145,7 @@ describe('syncGoguynetCosmos', () => {
     expect(ids).toContain('goguynet:50251:2026-12-13')
     expect(ids).not.toContain('goguynet:50208:2026-09-13') // 先行予約記事は開催直前記事に吸収
     for (const row of inserted) {
-      expect(row.status).toBe('draft')
+      expect(row.status).toBe('open')
       expect(row.proxy_registration).toBe(true)
       expect(row.external_source).toBe('goguynet-cosmos')
       expect(row.flyer_image_url).toBeNull()

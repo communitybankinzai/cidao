@@ -1,4 +1,5 @@
-// 印西市サイトの催しを CiDAO の events に「下書き」として入れる本体（号外NET の同期と同じ流儀）。
+// 印西市サイトの催しを CiDAO の events に入れる本体（号外NET の同期と同じ流儀）。
+// 2026-11-18 事業主決定A：新しく見つけた催しは公開（status='open'）で入れる。既に下書きで入っている行は下書きのまま更新する。
 //   月別カレンダー（当月＋2か月）→ 各ページ → 候補 → 今日以降
 //   → 無ければ status='draft' で insert／draft なら市ページの変更を反映／open・cancelled は触らない
 //   → 他の経路（広報いんざい取り込み・手動）で同日・似た題名があれば insert しない
@@ -65,7 +66,7 @@ export function cityCandidateToRow(c: CityCandidate, botMemberId: string): Event
     external_source: INZAI_CITY_SOURCE,
     external_source_id: c.sourceId,
     flyer_image_url: null,
-    status: 'draft',
+    status: 'open',
   }
 }
 

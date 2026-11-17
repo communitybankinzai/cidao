@@ -127,6 +127,19 @@ describe('cityItemToCandidates', () => {
     expect(cs[0].sourceId).toBe('city:1:period')
     expect(toCityDescription(cs[0])).toContain('※会期：2026/11/14〜2026/11/30')
   })
+  it('休みの日が少し挟まっても、ほぼ毎日なら会期つきの1件にまとめる（週1回の講座は日ごとのまま）', () => {
+    // 11/14〜11/30 の17日のうち、月曜（16・23・30日）を除く14日 → 14/15 で会期つき（最終日は29日）
+    const dates = Array.from({ length: 17 }, (_, i) => 14 + i).filter((d) => ![16, 23, 30].includes(d)).map((d) => `2026-11-${d}`)
+    const cs = cityItemToCandidates({ pageId: '2', url: 'https://www.city.inzai.lg.jp/2.html', title: '駅前の利活用', kind: '講座・催し', dates }, null)
+    expect(cs).toHaveLength(1)
+    expect(cs[0].sourceId).toBe('city:2:period')
+    expect(cs[0].periodEnd).toBe('2026-11-29')
+    // 週1回・8回（8/50）は日ごとのまま
+    const weekly = Array.from({ length: 8 }, (_, i) => new Date(Date.UTC(2026, 9, 6 + i * 7)).toISOString().slice(0, 10))
+    const ws = cityItemToCandidates({ pageId: '3', url: 'https://www.city.inzai.lg.jp/3.html', title: '週1回の講座', kind: '講座・催し', dates: weekly }, null)
+    expect(ws).toHaveLength(8)
+    expect(ws[0].periodEnd).toBeNull()
+  })
   it('期間でない日ごとの催しは日付つきの sourceId のまま、終了も同じ日', () => {
     const it = parseCityCalendarHtml(fixture('calendar-2026-09.html'), 2026, 9).find((i) => i.pageId === '0000020551')!
     const cs = cityItemToCandidates(it, null)
@@ -180,7 +193,7 @@ describe('syncInzaiCity', () => {
     expect(ids).toContain('city:0000020551:2026-09-19')
     expect(ids).not.toContain('city:0000020551:2026-09-05') // 過去
     for (const row of inserted) {
-      expect(row.status).toBe('draft')
+      expect(row.status).toBe('open')
       expect(row.external_source).toBe('inzai-city-calendar')
     }
   })
