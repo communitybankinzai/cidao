@@ -224,7 +224,7 @@ export function candidateFingerprint(c: CosmosCandidate): string {
 
 /** events.description（本文は転記せず、事実の定型行と記事URLだけ） */
 export function toCandidateDescription(c: CosmosCandidate): string {
-  const lines: string[] = [`地域メディア「${c.mediaName}」の記事から自動で拾った候補です。詳しくは記事をご覧ください。`]
+  const lines: string[] = [`地域メディア「${c.mediaName}」の記事に掲載された情報をもとに、自動でご紹介しています。詳しくは記事をご覧ください。`]
   if (c.infoLines.length > 0) lines.push(c.infoLines.map((l) => `■${l}`).join('\n'))
   if (c.timeAssumed) lines.push('※時間は記事に明記が無いため仮置きです。')
   lines.push(`記事：${c.articleTitle}\n${c.articleUrl}`)

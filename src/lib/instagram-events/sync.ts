@@ -250,7 +250,7 @@ export function toCandidateDescription(d: FlyerExtract, media: IgMedia, hashtag:
   if (d.organizer_name?.trim()) lines.push(`主催：${d.organizer_name.trim()}`)
   if (timeAssumed) lines.push(`※ 時間はチラシから読み取れなかったため ${ASSUMED_START}〜${ASSUMED_END} を仮置きしています`)
   lines.push(`出典：${sourceWording(media, hashtag).source} ${media.permalink}`)
-  lines.push('※ Instagram の公開投稿の画像から AI が読み取った候補です。日時・会場・料金は元の投稿で確認してください。')
+  lines.push('※ Instagram の公開投稿の画像から AI が読み取った情報です。日時・会場・料金は元の投稿で確認してください。')
   return lines.join('\n')
 }
 

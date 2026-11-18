@@ -245,7 +245,7 @@ export function cityKindToCategory(kind: string): string {
 }
 
 export function toCityDescription(c: CityCandidate): string {
-  const lines: string[] = ['印西市公式サイトの「イベント・お知らせ」から自動で拾った候補です。詳しくは市のページをご覧ください。']
+  const lines: string[] = ['印西市公式サイトの「イベント・お知らせ」に掲載された情報をもとに、自動でご紹介しています。詳しくは市のページをご覧ください。']
   if (c.infoLines.length > 0) lines.push(c.infoLines.map((l) => `■${l}`).join('\n'))
   if (c.periodEnd) lines.push(`※会期：${c.date.replace(/-/g, '/')}〜${c.periodEnd.replace(/-/g, '/')}`)
   if (c.timeAssumed) lines.push('※時間は市のページから読み取れなかったため仮置きです。')
