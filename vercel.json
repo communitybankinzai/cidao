@@ -29,6 +29,10 @@
       "schedule": "20 21 * * *"
     },
     {
+      "path": "/api/cron/goguynet-cosmos-sync",
+      "schedule": "25 21 * * 0"
+    },
+    {
       "path": "/api/cron/inzai-city-sync",
       "schedule": "30 21 * * 0"
     },
