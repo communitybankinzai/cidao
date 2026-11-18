@@ -1,6 +1,6 @@
 // 食レポの SNS 巡回：照合と候補づくり（2026-11-13）
 import { describe, expect, it } from 'vitest'
-import { buildCandidateShops, captionHash, hintIsOutOfRange, matchShop, normShopName, type ShopEntry } from '@/lib/gourmet-crawl'
+import { addressKey, buildCandidateShops, captionHash, hintIsOutOfRange, matchShop, matchShopByAddress, normShopName, type ShopEntry } from '@/lib/gourmet-crawl'
 
 const shop = (ref: string, name: string, municipality = '印西市', area: 'inzai' | 'near' = 'inzai', extra: Partial<ShopEntry> = {}): ShopEntry =>
   ({ ref, name, lat: 35.8, lon: 140.15, area, municipality, ...extra })
@@ -64,5 +64,41 @@ describe('候補づくり', () => {
   it('本文はハッシュだけ（空白の違いは同じ）', () => {
     expect(captionHash('おいしい  ランチ')).toBe(captionHash('おいしい ランチ'))
     expect(captionHash('a')).toHaveLength(64)
+  })
+})
+
+describe('店名が無く住所だけの投稿（2026-11-19）', () => {
+  const ADDR: ShopEntry[] = [
+    shop('poi:0000000000a1', 'Bakery Cornet', '印西市', 'inzai', { address: '千葉県印西市Nishinohara, 2 Chome−５−22' }),
+    shop('poi:0000000000a2', '大海飯店 カスミ印西西の原店', '印西市', 'inzai', { address: '千葉県印西市西の原２－２－２' }),
+    shop('poi:0000000000a3', 'べつの店', '白井市', 'near', { address: '千葉県白井市根2-5-22' }),
+  ]
+  const ex = (name: string, area_hint: string) => ({
+    is_food_report: true, more_than_10: false, note: '',
+    shops: [{ name, area_hint, tone: 'positive' as const, confidence: 'mid' as const, reason: '' }],
+  })
+  it('住所から町名と番地を取り出す（丁目・全角・英字の表記をそろえる）', () => {
+    expect(addressKey('千葉県印西市西の原2-5-22')).toEqual({ town: '西の原', nums: '2-5-22' })
+    expect(addressKey('印西市西の原二丁目5番22号')).toEqual({ town: '西の原', nums: '2-5-22' })
+    expect(addressKey('千葉県印西市Nishinohara, 2 Chome−５−22')).toEqual({ town: null, nums: '2-5-22' })
+    expect(addressKey('印西市')).toBeNull()
+  })
+  it('町名と番地が合えば自動で選ぶ／番地と市だけなら候補に出して運営が選ぶ', () => {
+    expect(matchShopByAddress('千葉県印西市西の原2-2-2', ADDR)[0]).toMatchObject({ ref: 'poi:0000000000a2', score: 90 })
+    const m = matchShopByAddress('千葉県印西市西の原2-5-22', ADDR)
+    expect(m.map((x) => x.ref)).toEqual(['poi:0000000000a1']) // 白井市の同じ番地は出さない
+    expect(m[0].score).toBe(70)
+  })
+  it('店名なし・住所ありは候補に残す（以前は落としていた）', () => {
+    const c = buildCandidateShops(ex('', '千葉県印西市西の原2-5-22'), ADDR)
+    expect(c).toHaveLength(1)
+    expect(c[0]).toMatchObject({ name: '店名なし（千葉県印西市西の原2-5-22）', status: 'ok', chosen_ref: null })
+    const d = buildCandidateShops(ex('', '千葉県印西市西の原2-2-2'), ADDR)
+    expect(d[0].chosen_ref).toBe('poi:0000000000a2')
+    const u = buildCandidateShops(ex('', '千葉県印西市大森1-2-3'), ADDR)
+    expect(u[0].status).toBe('unmatched')
+  })
+  it('店名も番地も無いお店は、これまでどおり入れない', () => {
+    expect(buildCandidateShops(ex('', '印西'), ADDR)).toEqual([])
   })
 })

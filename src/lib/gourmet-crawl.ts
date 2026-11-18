@@ -67,6 +67,7 @@ const SYSTEM_PROMPT = [
   '- 1つの投稿で複数のお店を紹介していることがあります。お店ごとに分けて、出てくる順に最大10店まで答えます。',
   '- 論調はお店ごとに判断します。批判・不満・二度と行かない等は negative。PR・案件の表記があっても、紹介なら positive か neutral。',
   '- 店名は投稿の表記のまま書きます。推測で店名を作らないこと。ハッシュタグの地名（#印西 など）は area_hint に使ってよい。',
+  '- 店名が本文に書かれていなくても、そのお店の住所（番地まで）が書かれている食レポなら、shops に入れます。name は空文字にし、area_hint に住所をそのまま書きます（お店のアカウント名があれば reason に書きます）。住所も店名も無いお店は入れません。',
   '- 投稿が飲食店の紹介でない（イベント告知・求人・お店自身の宣伝だけ・料理教室・自炊・飲食と無関係）なら is_food_report を false にし、shops は空にします。',
 ].join('\n')
 
@@ -146,6 +147,47 @@ export function matchShop(name: string, hint: string, shops: ShopEntry[], limit 
   return out.slice(0, limit)
 }
 
+// ---------- 住所での照合（店名が本文に無い投稿用・2026-11-19） ----------
+// 例：「📍千葉県印西市西の原2-5-22 bc_20121214」＝店名は無いが住所はある。以前は候補から落としていた（取りこぼし）。
+
+const KANJI_NUM: Record<string, string> = { 一: '1', 二: '2', 三: '3', 四: '4', 五: '5', 六: '6', 七: '7', 八: '8', 九: '9' }
+
+/** 住所から、町名と番地の数字の並び（'2-5-22'）を取り出す。番地が無ければ null */
+export function addressKey(raw: string): { town: string | null; nums: string } | null {
+  const s = String(raw || '').normalize('NFKC').replace(/\s+/g, '')
+    .replace(/([一二三四五六七八九])丁目/g, (_, k: string) => `${KANJI_NUM[k]}丁目`)
+    .replace(/(\d+)chome/gi, '$1-').replace(/丁目|番地の|番地|番/g, '-').replace(/号/g, '')
+    .replace(/[−‐–—―ー]/g, '-').replace(/-{2,}/g, '-')
+  const m = s.match(/(\d+(?:-\d+){1,3})(?!.*\d+-\d+)/)
+  if (!m || m.index === undefined) return null
+  const before = s.slice(0, m.index)
+  const t = before.match(/(?:[市町村区])([^\d,市町村区]{1,12})$/)
+  const town = t && /[ぁ-んァ-ヶ一-龠]/.test(t[1]) ? t[1] : null
+  return { town, nums: m[1].replace(/-$/, '') }
+}
+
+/** 住所でお店を探す。町名も番地も合えば 90、番地（3つ以上の数字）と市町だけ合えば 70（運営が確かめる） */
+export function matchShopByAddress(hint: string, shops: ShopEntry[], limit = 5): ShopMatch[] {
+  const key = addressKey(hint)
+  if (!key) return []
+  const h = hint.normalize('NFKC')
+  const out: ShopMatch[] = []
+  for (const s of shops) {
+    if (!s.address) continue
+    const k = addressKey(s.address)
+    if (!k || k.nums !== key.nums) continue
+    const muni = s.municipality?.replace(/[市町]$/, '') ?? ''
+    const muniOk = !!muni && h.includes(muni)
+    let score = 0
+    if (key.town && k.town && key.town === k.town && (muniOk || !/[市町]/.test(h))) score = 90
+    else if (muniOk && !(key.town && k.town) && key.nums.split('-').length >= 3) score = 70
+    if (!score) continue
+    out.push({ ref: s.ref, name: s.branch ? `${s.name} ${s.branch}` : s.name, area: s.area, municipality: s.municipality, score })
+  }
+  out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ja'))
+  return out.slice(0, limit)
+}
+
 export type CandidateShop = {
   name: string
   area_hint: string
@@ -163,11 +205,13 @@ export type CandidateShop = {
 /** AI の答えを、照合つきの候補のお店の並びにする */
 export function buildCandidateShops(extraction: GourmetExtraction, shops: ShopEntry[]): CandidateShop[] {
   if (!extraction.is_food_report) return []
-  return extraction.shops.filter((s) => s.name.trim()).map((s) => {
-    const base = { name: s.name.trim().slice(0, 60), area_hint: s.area_hint.trim().slice(0, 60), tone: s.tone, confidence: s.confidence, reason: s.reason.slice(0, 120) }
+  // 店名が無くても、住所（番地まで）があれば候補に残す（運営が元の投稿で店を確かめる。2026-11-19）
+  return extraction.shops.filter((s) => s.name.trim() || addressKey(s.area_hint)).map((s) => {
+    const nameless = !s.name.trim()
+    const base = { name: (nameless ? `店名なし（${s.area_hint.trim()}）` : s.name.trim()).slice(0, 60), area_hint: s.area_hint.trim().slice(0, 60), tone: s.tone, confidence: s.confidence, reason: s.reason.slice(0, 120) }
     if (s.tone === 'negative') return { ...base, matches: [], chosen_ref: null, status: 'negative' as const }
     if (hintIsOutOfRange(s.area_hint)) return { ...base, matches: [], chosen_ref: null, status: 'out_of_area' as const }
-    const matches = matchShop(s.name, s.area_hint, shops)
+    const matches = nameless ? matchShopByAddress(s.area_hint, shops) : matchShop(s.name, s.area_hint, shops)
     // 1位がはっきり上（完全一致か前方一致・2位と差がある）なら自動で選ぶ。同点（チェーン店など）は運営が選ぶ
     const top = matches[0]
     const clear = top && top.score >= 75 && (!matches[1] || top.score - matches[1].score >= 10)
