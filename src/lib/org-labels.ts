@@ -20,6 +20,7 @@ export const LEGAL_FORM_LABEL: Record<string, string> = {
   social_welfare_corporation: '社会福祉法人',
   nintei_chien_dantai_or_unincorp: '町内会・自治会等（地縁団体）',
   kabushiki_kaisha: '株式会社・合同会社等',
+  sole_proprietor: '個人事業主',
   unincorporated: '任意団体（法人格なし）',
   other: 'その他法人',
 }
@@ -35,6 +36,7 @@ export const LEGAL_FORM_ORDER: string[] = [
   'social_welfare_corporation',
   'nintei_chien_dantai_or_unincorp',
   'kabushiki_kaisha',
+  'sole_proprietor',
   'other',
 ]
 
@@ -61,4 +63,23 @@ export function orgTypeLabel(org: { type: string; inzai_registration_number?: st
 export function legalFormLabel(legalForm: string | null | undefined): string | null {
   if (!legalForm) return null
   return LEGAL_FORM_LABEL[legalForm] ?? legalForm
+}
+
+// 一覧で見分けるための区分（2026-11-22 事業主指示：市民活動団体・企業・個人事業主を分けて出す）。
+// 条例上の種別（type）はそのままにし、事業者（business）のうち法人格が「個人事業主」のものを分ける。
+export type OrgKind = 'civic_group' | 'company' | 'sole_proprietor' | 'government'
+
+export const ORG_KIND_LABEL: Record<OrgKind, string> = {
+  civic_group: '市民活動団体',
+  company: '企業',
+  sole_proprietor: '個人事業主',
+  government: '行政',
+}
+
+export const ORG_KIND_ORDER: OrgKind[] = ['civic_group', 'company', 'sole_proprietor', 'government']
+
+export function orgKindOf(org: { type: string; legal_form?: string | null }): OrgKind {
+  if (org.type === 'government') return 'government'
+  if (org.type === 'business') return org.legal_form === 'sole_proprietor' ? 'sole_proprietor' : 'company'
+  return 'civic_group'
 }

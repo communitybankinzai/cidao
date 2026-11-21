@@ -6,7 +6,7 @@ import { PROPOSAL_CATEGORIES, categoryLabel } from '@/lib/categories'
 import { Avatar } from '@/components/ui/avatar'
 import { OrgLogo } from '@/components/ui/org-logo'
 import { Sheet } from '@/components/ui/sheet'
-import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, TYPE_LABEL, TYPE_ORDER } from '@/lib/org-labels'
+import { LEGAL_FORM_LABEL, LEGAL_FORM_ORDER, ORG_KIND_LABEL, ORG_KIND_ORDER, orgKindOf, type OrgKind } from '@/lib/org-labels'
 import { matchesSearch } from '@/lib/search-normalize'
 
 const MEMBERS_PREVIEW = 5
@@ -59,10 +59,11 @@ const STATUS_BADGE_CLASS: Record<OrgStatus, string> = {
   verified: 'bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-200',
 }
 
-type SortKey = 'name' | 'updated' | 'created'
+type SortKey = 'name' | 'kind' | 'updated' | 'created'
 
 const SORT_LABEL: Record<SortKey, string> = {
   name: '名前順',
+  kind: '区分ごと',
   updated: '情報更新順',
   created: '登録順',
 }
@@ -90,7 +91,7 @@ type RegFilter = 'all' | 'registered' | 'unregistered'
 
 export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
   const [query, setQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [typeFilter, setTypeFilter] = useState<OrgKind | null>(null)
   const [legalFormFilter, setLegalFormFilter] = useState<string | null>(null)
   const [regFilter, setRegFilter] = useState<RegFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
@@ -102,7 +103,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
 
   const typeCounts = useMemo(() => {
     const c: Record<string, number> = {}
-    for (const o of orgs) c[o.type] = (c[o.type] ?? 0) + 1
+    for (const o of orgs) { const k = orgKindOf(o); c[k] = (c[k] ?? 0) + 1 }
     return c
   }, [orgs])
 
@@ -143,7 +144,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = orgs.filter((o) => {
-      if (typeFilter && o.type !== typeFilter) return false
+      if (typeFilter && orgKindOf(o) !== typeFilter) return false
       if (legalFormFilter && o.legal_form !== legalFormFilter) return false
       if (regFilter === 'registered' && !o.inzai_registration_number) return false
       if (regFilter === 'unregistered' && o.inzai_registration_number) return false
@@ -162,6 +163,10 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
       list.sort((a, b) => time(b.updated_at) - time(a.updated_at) || a.name.localeCompare(b.name, 'ja'))
     } else if (sortKey === 'created') {
       list.sort((a, b) => time(b.created_at) - time(a.created_at) || a.name.localeCompare(b.name, 'ja'))
+    } else if (sortKey === 'kind') {
+      // 区分ごと（市民活動団体→企業→個人事業主→行政）にまとめ、その中は名前順
+      const rank = (o: Org) => ORG_KIND_ORDER.indexOf(orgKindOf(o))
+      list.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ja'))
     } else {
       list.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
     }
@@ -181,7 +186,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
 
   // 適用中の条件。シートを閉じたあとも「何で絞っているか」が一覧の上に残るようにする
   const activeChips: { label: string; clear: () => void }[] = []
-  if (typeFilter) activeChips.push({ label: TYPE_LABEL[typeFilter] ?? typeFilter, clear: () => setTypeFilter(null) })
+  if (typeFilter) activeChips.push({ label: ORG_KIND_LABEL[typeFilter], clear: () => setTypeFilter(null) })
   if (regFilter !== 'all') {
     activeChips.push({
       label: regFilter === 'registered' ? '市登録あり' : '市登録なし',
@@ -220,6 +225,23 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
           placeholder="団体名・説明文・登録番号で検索"
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
+
+        {/* 区分の切り替え：いつも見える所に置く（市民活動団体・企業・個人事業主が混ざって見えるため。2026-11-22） */}
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="団体の区分">
+          <FilterChip active={typeFilter === null} onClick={() => setTypeFilter(null)}>
+            すべて <span className="text-slate-400">{orgs.length}</span>
+          </FilterChip>
+          {ORG_KIND_ORDER.map((t) => {
+            const count = typeCounts[t] ?? 0
+            // 行政は登録があるときだけ出す。ほかの3つは0件でも出す（分けて見られることが分かるように）
+            if (!count && t === 'government') return null
+            return (
+              <FilterChip key={t} active={typeFilter === t} onClick={() => setTypeFilter(typeFilter === t ? null : t)}>
+                {ORG_KIND_LABEL[t]} <span className="text-slate-400">{count}</span>
+              </FilterChip>
+            )
+          })}
+        </div>
 
         <div className="flex items-center gap-2">
           <button
@@ -302,16 +324,16 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
         }
       >
         <div className="space-y-4">
-          <FilterGroup title="種別">
+          <FilterGroup title="区分">
             <FilterChip active={typeFilter === null} onClick={() => setTypeFilter(null)}>
-              すべての種別
+              すべての区分
             </FilterChip>
-            {TYPE_ORDER.map((t) => {
+            {ORG_KIND_ORDER.map((t) => {
               const count = typeCounts[t] ?? 0
               if (!count) return null
               return (
                 <FilterChip key={t} active={typeFilter === t} onClick={() => setTypeFilter(typeFilter === t ? null : t)}>
-                  {TYPE_LABEL[t]} <span className="text-slate-400">{count}</span>
+                  {ORG_KIND_LABEL[t]} <span className="text-slate-400">{count}</span>
                 </FilterChip>
               )
             })}
@@ -410,7 +432,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
                       <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
                         <h2 className="text-base font-semibold leading-snug">{o.name}</h2>
                         <span className="shrink-0 text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
-                          {TYPE_LABEL[o.type] ?? o.type}
+                          {ORG_KIND_LABEL[orgKindOf(o)]}
                         </span>
                       </div>
                     </div>

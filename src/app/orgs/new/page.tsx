@@ -65,7 +65,7 @@ export default async function NewOrgPage() {
             </select>
             <p className="text-xs text-slate-500 mt-1">
               市民活動団体: 営利目的でない市民活動を主目的とする団体（NPO法人/任意団体/町内会等の法人格は問わない）。
-              事業者: 営利事業を行うが市民活動も行うもの。
+              事業者: 営利事業を行うが市民活動も行うもの。個人で事業をしている方は、種別を「事業者」、法人格を「個人事業主」にしてください。
             </p>
           </L>
           <L label="法人格">

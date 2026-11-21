@@ -118,7 +118,7 @@ export default async function Home() {
         <p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-center text-sm text-slate-600 dark:text-slate-300">
           {orgCount ? (
             <span className="whitespace-nowrap">
-              団体 <b className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{orgCount}</b> 件
+              市民活動団体 <b className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{orgCount}</b> 件
             </span>
           ) : null}
           {memberCount ? (
@@ -200,7 +200,7 @@ export default async function Home() {
                 → 活動・募集を探す
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                印西市内{orgCount ? ` ${orgCount} ` : 'の'}団体の情報とイベントを、登録なしでもそのまま見られます。
+                印西市内{orgCount ? `の市民活動団体 ${orgCount} 件` : 'の団体'}の情報とイベントを、登録なしでもそのまま見られます。
               </p>
             </Link>
             </div>
