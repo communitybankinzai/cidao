@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createTalentBankClient } from '@/lib/talent-bank/db'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export default async function AdminHomePage() {
   const supabase = await createClient()
@@ -30,6 +31,26 @@ export default async function AdminHomePage() {
     .eq('status', 'claimed')
     .is('left_at', null)
   const pendingClaims = claimCount.error ? null : (claimCount.count ?? 0)
+
+  // 投稿の審査待ち（自動類別で引っかかったもの）の件数。content_reviews は service_role 専用の表なので、運営であることを確かめた上で読む。
+  // 読めなかったときは0件扱いにせず「件数を確認できません」と出す（所属申告のバッジと同じ作法）
+  let pendingReviews: { total: number; held: number } | null = null
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    if (url && key) {
+      const reviewDb = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+      const { data: reviewRows, error: reviewErr } = await reviewDb
+        .from('content_reviews')
+        .select('verdict, held')
+        .eq('status', 'open')
+        .in('verdict', ['notify', 'hold', 'error'])
+        .limit(2000)
+      if (!reviewErr) pendingReviews = { total: (reviewRows ?? []).length, held: (reviewRows ?? []).filter((r) => r.held === true).length }
+    }
+  } catch {
+    pendingReviews = null
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 md:p-12">
@@ -101,6 +122,24 @@ export default async function AdminHomePage() {
                 ) : null}
               </h2>
               <p className="text-sm text-slate-500">既にある団体への所属申告の承認/却下（新しい団体の登録は、承認なしですぐ公開されます）</p>
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/review"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">
+                投稿の審査
+                {pendingReviews === null ? (
+                  <span className="ml-2 inline-block rounded-full bg-amber-500 px-2 py-0.5 align-middle text-xs font-bold text-white">件数を確認できません</span>
+                ) : pendingReviews.total > 0 ? (
+                  <span className="ml-2 inline-block rounded-full bg-rose-600 px-2 py-0.5 align-middle text-xs font-bold text-white">
+                    投稿の審査待ち {pendingReviews.total}件{pendingReviews.held > 0 ? `（止めているもの ${pendingReviews.held}件）` : ''}
+                  </span>
+                ) : null}
+              </h2>
+              <p className="text-sm text-slate-500">AI が見つけた、問題のありそうな投稿の確認。確かな疑いのあるものは公開を止めています</p>
             </Link>
           </li>
           <li>

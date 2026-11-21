@@ -14,6 +14,7 @@ import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions
 
 const STATUS_LABEL: Record<string, string> = {
   cancelled: '中止',
+  draft: '確認中（まだ公開されていません）',
 }
 
 export default async function EventDetailPage({

@@ -21,6 +21,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { normalizeMailFrom } from '@/lib/mail'
+import { notifyAdminsOfOpenReviews } from '@/lib/content-review-notify'
 
 const SITE_URL = 'https://cidao.vercel.app'
 const WINDOW_HOURS = 72 // voting_started / finalized の遡り窓（初回・障害復帰時の大量送信防止）
@@ -66,6 +67,10 @@ async function handle(request: Request) {
   const admin = createSupabaseClient(supaUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
+
+  // 投稿の審査待ちが残っていれば、運営へ毎朝1回まとめて再通知する（ベル＋プッシュ＋メール1通。0件なら何も出さない）。
+  // 本体の通知とは別の仕事なので、失敗しても止めない（2026-11-22）
+  if (!dryRun) await notifyAdminsOfOpenReviews(admin).catch(() => undefined)
 
   const now = Date.now()
   const windowStart = new Date(now - WINDOW_HOURS * 3600_000).toISOString()

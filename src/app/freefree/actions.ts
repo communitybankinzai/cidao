@@ -22,6 +22,8 @@ import { recordWrite } from '@/lib/audit'
 import { hideSupersededImports } from '@/lib/freefree-import-supersede'
 import { geocodeAddress, isNearInzai } from '@/lib/geocode'
 import { normalizeVideoUrl } from '@/lib/freefree-video'
+import { buildReviewText } from '@/lib/content-review'
+import { reviewPost } from '@/lib/content-review-run'
 
 type CouponInput = {
   content: string
@@ -190,36 +192,37 @@ export async function createFreefreePost(input: CreateInput) {
     })
   }
 
-  // 全メンバーへ新着通知（ベル＋Webプッシュ）。
-  // after() でレスポンス後に回すので、掲載者を待たせない。失敗しても掲載は成立する。
+  // 投稿の自動類別（2026-11-22）のあと、全メンバーへの新着通知・取込掲載の整理・SNS 紹介の下書きを出す。
+  // 確度の高い重い区分は status='pending' で止め、通知・取込掲載の整理・SNS は出さない（運営が「問題なし」とするまで公開しない）。
+  // after() でレスポンス後に回すので、掲載者を待たせない。失敗しても掲載は成立する
   after(async () => {
-    await notifyAllMembers({
-      kind: 'freefree',
-      actorId: user.id,
-      prefKey: 'notify_freefree',
-      title: `FreeFree掲示板に新しい掲載「${input.title}」`,
-      body: [freefreeCategoryLabel(input.category), input.location?.trim()]
-        .filter(Boolean)
-        .join(' / ') || undefined,
-      linkUrl: `/freefree/${data.id}`,
+    const review = await reviewPost({
+      targetType: 'freefree', targetId: data.id, action: 'create', authorId: user.id,
+      title: input.title, text: buildReviewText([input.title, input.body, input.location]),
     })
+    if (review.held) return
+    await Promise.allSettled([
+      // 全メンバーへ新着通知（ベル＋Webプッシュ）
+      notifyAllMembers({
+        kind: 'freefree',
+        actorId: user.id,
+        prefKey: 'notify_freefree',
+        title: `FreeFree掲示板に新しい掲載「${input.title}」`,
+        body: [freefreeCategoryLabel(input.category), input.location?.trim()]
+          .filter(Boolean)
+          .join(' / ') || undefined,
+        linkUrl: `/freefree/${data.id}`,
+      }),
+      // 運営が先に作った取込掲載（同じお店）があれば、自動で非公開にする
+      hideSupersededImports(
+        { id: data.id, title: input.title, body: input.body, address: pin?.address ?? null, location: input.location ?? null, lat: pin?.lat ?? null, lon: pin?.lon ?? null, links: mergedLinks },
+        user.id,
+      ),
+      // SNS 紹介を許可した掲載は、告知の下書きをすぐ作って運営にベル通知で知らせる（2026-09-15）。
+      // 運営が承認するとその場で配信され、以後は定期紹介が繰り返し告知する
+      input.sns_share !== false ? announceFreefreeToSns({ id: data.id, title: input.title }) : Promise.resolve(),
+    ])
   })
-
-  // 運営が先に作った取込掲載（同じお店）があれば、自動で非公開にする。失敗しても掲載は成立する
-  after(async () => {
-    await hideSupersededImports(
-      { id: data.id, title: input.title, body: input.body, address: pin?.address ?? null, location: input.location ?? null, lat: pin?.lat ?? null, lon: pin?.lon ?? null, links: mergedLinks },
-      user.id,
-    )
-  })
-
-  // SNS 紹介を許可した掲載は、告知の下書きをすぐ作って運営にベル通知で知らせる（2026-09-15）。
-  // 運営が承認するとその場で配信され、以後は定期紹介が繰り返し告知する。失敗しても掲載は成立する
-  if (input.sns_share !== false) {
-    after(async () => {
-      await announceFreefreeToSns({ id: data.id, title: input.title })
-    })
-  }
 
   // redirect() は例外を投げるので、記録はその前に済ませる
   await recordWrite({
@@ -332,9 +335,19 @@ export async function updateFreefreePost(postId: string, input: UpdateInput) {
 
   // SNS 紹介の下書きを新しい中身で作り直し、運営の承認待ちに戻す。失敗しても編集は成立する。
   // 動画だけを変えたときは作り直さない（動画は SNS の文面にも画像カードにも出ないため、同じ中身の下書きが増えるだけ）
-  if (changed.some((k) => k !== 'video_url')) {
+  // 題名・本文が変わったときは、先に自動類別する（2026-11-22）。止めた（status='pending'）ときは SNS の下書きも作り直さない
+  const needsReannounce = changed.some((k) => k !== 'video_url')
+  const needsReview = changed.includes('title') || changed.includes('body')
+  if (needsReannounce || needsReview) {
     after(async () => {
-      await reannounceFreefreeAfterEdit({ id: postId, title: patch.title, snsShare: patch.sns_share })
+      if (needsReview) {
+        const review = await reviewPost({
+          targetType: 'freefree', targetId: postId, action: 'update', authorId: user.id,
+          title: patch.title, text: buildReviewText([patch.title, patch.body, patch.location]),
+        })
+        if (review.held) return
+      }
+      if (needsReannounce) await reannounceFreefreeAfterEdit({ id: postId, title: patch.title, snsShare: patch.sns_share })
     })
   }
 
@@ -446,8 +459,9 @@ export async function commentFreefree(postId: string, body: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
   if (body.trim().length < 1) throw new Error('応援メッセージを入力してください')
+  const commentId = crypto.randomUUID() // 自動類別の記録に使う（挿入の結果を読み返さずに済むよう先に決める）
   const { error } = await supabase.from('supports').insert({
-    post_id: postId, member_id: user.id, kind: 'comment', body: body.trim(),
+    id: commentId, post_id: postId, member_id: user.id, kind: 'comment', body: body.trim(),
   })
   if (error) throw new Error(`コメント失敗: ${error.message}`)
   await recordWrite({
@@ -460,6 +474,13 @@ export async function commentFreefree(postId: string, body: string) {
   // 掲載者へ通知（ベル＋Webプッシュ）。レスポンス後に回し、失敗しても応援メッセージは成立させる
   after(async () => {
     await notifyFreefreeComment({ postId, commenterId: user.id, body: body.trim() })
+  })
+  // 投稿の自動類別（2026-11-22）。コメントには止める列が無いので、重い区分でも公開のまま運営に知らせるだけ
+  after(async () => {
+    await reviewPost({
+      targetType: 'freefree_comment', targetId: commentId, parentId: postId, action: 'create', authorId: user.id,
+      title: null, text: buildReviewText([body]),
+    })
   })
   revalidatePath(`/freefree/${postId}`)
 }

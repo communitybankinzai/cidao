@@ -9,6 +9,8 @@ import { nameWithSan } from '@/lib/honorific'
 import { insertNotification, notifyAllMembers } from '@/lib/notify'
 import { announceProposalToSns } from '@/lib/sns-announce'
 import { recordWrite } from '@/lib/audit'
+import { buildReviewText } from '@/lib/content-review'
+import { reviewPost } from '@/lib/content-review-run'
 
 type CreateInput = {
   title: string
@@ -70,6 +72,13 @@ export async function createProposal(input: CreateInput) {
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。議論期間に参加してもらうための入口
   after(async () => {
+    // 投稿の自動類別（2026-11-22）。確度の高い重い区分は status='draft' で止める（一般には見えなくなる）。
+    // 止めたときは「公開しました」の知らせ・全会員への通知・SNS の下書きは出さない（投稿者には類別の中で「確認中です」と知らせる）
+    const review = await reviewPost({
+      targetType: 'proposal', targetId: data.id, action: 'create', authorId: user.id,
+      title: input.title, text: buildReviewText([input.title, input.body]),
+    })
+    if (review.held) return
     // 提案者本人へ「このあとの流れ」を返す（actorId を付けない：付けると自分宛が除外される）。
     // 運営の承認は不要で投稿と同時に公開される。承認が入るのは SNS 告知の下書きだけ
     await insertNotification({
@@ -315,7 +324,9 @@ export async function postComment(input: CommentInput) {
     throw new Error('本文を入力してください')
   }
 
+  const commentId = crypto.randomUUID() // 自動類別の記録に使う（挿入の結果を読み返さずに済むよう先に決める）
   const { error } = await supabase.from('comments').insert({
+    id: commentId,
     proposal_id: input.proposalId,
     author_id: user.id,
     kind: input.kind,
@@ -383,6 +394,14 @@ export async function postComment(input: CommentInput) {
       })
     }
   }
+
+  // 投稿の自動類別（2026-11-22）。コメントには止める列が無いので、重い区分でも公開のまま運営に知らせるだけ
+  after(async () => {
+    await reviewPost({
+      targetType: 'proposal_comment', targetId: commentId, parentId: input.proposalId, action: 'create', authorId: user.id,
+      title: null, text: buildReviewText([trimmed]),
+    })
+  })
 
   revalidatePath(`/proposals/${input.proposalId}`)
 }

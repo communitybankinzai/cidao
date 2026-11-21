@@ -28,6 +28,8 @@ export type AuditAction =
   | 'message.send'
   | 'org.create'
   | 'org.delete'
+  | 'review.clear'   // 投稿の審査：運営が「問題なし」とした（止めていれば公開に戻した）
+  | 'review.remove'  // 投稿の審査：運営が非公開にした／コメントを削除した
 
 function adminClient() {
   const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''

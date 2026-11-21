@@ -13,6 +13,8 @@ import { recordWrite } from '@/lib/audit'
 import { childPlaceColumns, decideAttendeeColumns, type AttendeeColumns } from '@/lib/child-place'
 import { seniorPlaceColumns } from '@/lib/senior-place'
 import { cafePlaceColumns } from '@/lib/cafe-place'
+import { buildReviewText, textChanged } from '@/lib/content-review'
+import { reviewPost } from '@/lib/content-review-run'
 
 type CreateInput = {
   title: string
@@ -163,6 +165,12 @@ export async function createEvent(input: CreateInput) {
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。after() でレスポンス後に回す
   after(async () => {
+    // 投稿の自動類別（2026-11-22）。確度の高い重い区分は status='draft' で止め、全会員への通知は出さない
+    const review = await reviewPost({
+      targetType: 'event', targetId: data.id, action: 'create', authorId: user.id,
+      title: input.title, text: buildReviewText([input.title, input.description]),
+    })
+    if (review.held) return
     const result = await notifyAllMembers({
       kind: 'event',
       actorId: user.id,
@@ -203,6 +211,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
   const list = occurrences.length > 0 ? occurrences : [{ start_at: input.start_at, end_at: input.end_at }]
 
   let firstId: string | null = null
+  const createdIds: string[] = [] // 止めるときは、同じ内容の全日程をまとめて止める
   for (const occ of list) {
     const { data, error } = await supabase
       .from('events')
@@ -231,6 +240,7 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
       .single()
     if (error) throw new Error(`イベント作成失敗: ${error.message}`)
     firstId = firstId ?? data.id
+    createdIds.push(data.id)
 
     if (!isUnknownOrganizer && !isProxy) {
       await supabase.from('event_participants').insert({
@@ -245,6 +255,13 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
   const bulkId = firstId
   after(async () => {
     if (!bulkId) return
+    // 投稿の自動類別（2026-11-22）。止めたときは全日程を止め、全会員への通知は出さない
+    const review = await reviewPost({
+      targetType: 'event', targetId: bulkId, action: 'create', authorId: user.id,
+      title: input.title, text: buildReviewText([input.title, input.description]),
+      extraTargetIds: createdIds.slice(1),
+    })
+    if (review.held) return
     const when = shortJst(list[0].start_at)
     const result = await notifyAllMembers({
       kind: 'event',
@@ -340,6 +357,9 @@ export async function updateEvent(input: UpdateInput) {
 
   const attendeeColumns = await resolveAttendee(supabase, input)
 
+  // 編集前の題名・本文（変わったときだけ自動類別するため）
+  const { data: beforeText } = await supabase.from('events').select('title, description').eq('id', input.id).maybeSingle()
+
   const { error } = await supabase
     .from('events')
     .update({
@@ -385,6 +405,16 @@ export async function updateEvent(input: UpdateInput) {
     if (rpcError || (rpcResult && rpcResult.ok === false)) {
       throw new Error(`参加者ロールの更新失敗: ${rpcError?.message ?? rpcResult?.error}`)
     }
+  }
+
+  // 投稿の自動類別（2026-11-22）。題名・本文が変わったときだけ。運営の編集は類別しない。止めたときは status='draft'
+  if (textChanged([beforeText?.title, beforeText?.description], [input.title, input.description])) {
+    after(async () => {
+      await reviewPost({
+        targetType: 'event', targetId: input.id, action: 'update', authorId: user.id,
+        title: input.title, text: buildReviewText([input.title, input.description]),
+      })
+    })
   }
 
   revalidatePath('/events')

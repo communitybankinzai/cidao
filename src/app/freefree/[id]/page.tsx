@@ -100,6 +100,11 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
               </span>
             )}
           </div>
+          {post.status === 'pending' && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              この掲載は確認中です。運営が内容を確かめています。問題がなければ公開されます（いまは、ほかの会員には見えていません）。
+            </p>
+          )}
           <h1 className="text-2xl md:text-3xl font-serif font-bold">{post.title}</h1>
           {orgInfo && (
             <p className="text-sm text-slate-600 dark:text-slate-400">

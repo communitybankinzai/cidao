@@ -14,6 +14,8 @@ import { recordWrite } from '@/lib/audit'
 import { isAwaitingRepresentative } from '@/lib/org-placeholder'
 import { shouldDeleteOnReject, shouldPublishOnApprove } from '@/lib/org-visibility'
 import { orgSnsShareOnCreate } from '@/lib/org-sns-share'
+import { buildReviewText, textChanged } from '@/lib/content-review'
+import { reviewPost } from '@/lib/content-review-run'
 
 /**
  * 団体への所属申告・参加申請が入ったことを CiDAO 管理者へ知らせる。
@@ -145,6 +147,12 @@ export async function createOrganization(input: OrgInput) {
 
   // 全メンバーへ新着通知（ベル＋Webプッシュ）。運営にもここで届くので、新しい登録を見落とさない。
   after(async () => {
+    // 投稿の自動類別（2026-11-22）。確度の高い重い区分は運営非公開（hidden_by_admin）で止め、全会員への通知・SNS の下書きは出さない
+    const review = await reviewPost({
+      targetType: 'org', targetId: org.id, action: 'create', authorId: user.id,
+      title: input.name, text: buildReviewText([input.name, input.description]),
+    })
+    if (review.held) return
     await notifyAllMembers({
       kind: 'org',
       topicKey: 'notify_org_new',
@@ -674,7 +682,7 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id, representative_id, contact_email, name, public_flag')
+    .select('id, representative_id, contact_email, name, public_flag, description, activity_detail, activity_area')
     .eq('id', orgId)
     .single()
   if (!org) throw new Error('団体が見つかりません')
@@ -724,7 +732,22 @@ export async function updateOrgInfo(orgId: string, input: OrgEditInput) {
   // 更新は編集のたびに起きるので Webプッシュは鳴らさず（push: false）、
   // さらに同じ団体は6時間に1回までに抑える（連続編集で通知が埋まるのを防ぐ）
   if (org.public_flag) {
+    // 紹介文（説明・活動の詳しい内容・活動地域）が変わったときだけ、先に自動類別する（2026-11-22）。
+    // 止めた（運営非公開にした）ときは、更新の通知も SNS の下書きも出さない
+    const nextText = [
+      typeof updates.description === 'string' ? updates.description : (updates.description === null ? null : org.description),
+      typeof updates.activity_detail === 'string' ? updates.activity_detail : (updates.activity_detail === null ? null : org.activity_detail),
+      typeof updates.activity_area === 'string' ? updates.activity_area : (updates.activity_area === null ? null : org.activity_area),
+    ]
+    const needsReview = textChanged([org.description, org.activity_detail, org.activity_area], nextText)
     after(async () => {
+      if (needsReview) {
+        const review = await reviewPost({
+          targetType: 'org', targetId: orgId, action: 'update', authorId: user.id,
+          title: String(org.name), text: buildReviewText([String(org.name), ...nextText]),
+        })
+        if (review.held) return
+      }
       await notifyAllMembers({
         kind: 'org',
         topicKey: 'notify_org_update',
