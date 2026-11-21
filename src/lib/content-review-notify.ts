@@ -56,6 +56,20 @@ export async function notifyAuthorOfHold(authorId: string, linkUrl: string): Pro
   }
 }
 
+/** 運営が「問題なし」として公開に戻したとき、投稿者へ（待たせたので、公開されたことを知らせる） */
+export async function notifyAuthorOfCleared(authorId: string, linkUrl: string): Promise<void> {
+  try {
+    await insertNotification({
+      recipientId: authorId, kind: 'system',
+      title: '投稿を公開しました',
+      body: '運営の確認が終わり、投稿を公開しました。お待たせしました。',
+      linkUrl,
+    })
+  } catch (e) {
+    console.error('[content-review] author cleared notify failed:', e instanceof Error ? e.message : e)
+  }
+}
+
 /**
  * 審査待ち（open の notify・hold・error）が残っているあいだ、毎朝1回まとめて運営に知らせる。
  * 新しい定期実行は足さず、毎朝動いている /api/cron/notify から呼ぶ。0件なら何も出さない。

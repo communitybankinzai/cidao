@@ -13,6 +13,7 @@ import { restoreHold, serviceClient, type HoldState } from '@/lib/content-review
 import { canHoldTarget, type ReviewTargetType } from '@/lib/content-review'
 import { buildVisibilityUpdate } from '@/lib/org-visibility'
 import { hideFreefreePost } from '@/app/admin/freefree/actions'
+import { notifyAuthorOfCleared } from '@/lib/content-review-notify'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -29,6 +30,7 @@ type ReviewRow = {
   id: string
   target_type: ReviewTargetType
   target_id: string
+  author_id: string | null
   held: boolean
   prev_state: HoldState | null
   status: string
@@ -40,7 +42,7 @@ async function loadOpenReview(reviewId: string) {
   if (!db) throw new Error('サーバー設定エラー（service role 未設定）')
   const { data, error } = await db
     .from('content_reviews')
-    .select('id, target_type, target_id, held, prev_state, status')
+    .select('id, target_type, target_id, author_id, held, prev_state, status')
     .eq('id', reviewId)
     .maybeSingle()
   if (error) throw new Error(`審査を読み込めませんでした: ${error.message}`)
@@ -84,6 +86,14 @@ export async function clearReview(reviewId: string): Promise<void> {
     actorId: operatorId, action: 'review.clear', targetType: row.target_type, targetId: row.target_id,
     detail: { review_id: row.id, restored: restored?.changed ?? null }, isAdmin: true,
   })
+  // 止めていた投稿を公開に戻したときだけ、投稿者へ知らせる（操作した運営本人の投稿なら出さない）
+  if (restored?.changed && row.author_id && row.author_id !== operatorId) {
+    const path = row.target_type === 'event' ? `/events/${row.target_id}`
+      : row.target_type === 'freefree' ? `/freefree/${row.target_id}`
+      : row.target_type === 'org' ? `/orgs/${row.target_id}`
+      : `/proposals/${row.target_id}`
+    await notifyAuthorOfCleared(row.author_id, path)
+  }
   revalidateAll(row)
 }
 

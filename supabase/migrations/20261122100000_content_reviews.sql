@@ -58,3 +58,13 @@ grant all on table public.content_reviews to service_role;
 
 comment on table public.content_reviews is
   '投稿の自動類別と運営の審査の記録。notify・hold・error だけを作る。service_role のみ。本文は保存しない';
+
+-- 個人事業として出した FreeFree の掲載は、止まる（status='pending'）と本人にも見えなくなっていた
+-- （freefree_select_own が member と org だけだった）。本人には見えるようにする。
+drop policy if exists freefree_select_own on public.freefree_posts;
+create policy freefree_select_own on public.freefree_posts
+  for select using (
+    (poster_type = 'member' and poster_id = auth.uid())
+    or (poster_type = 'org' and public.is_org_member(poster_id))
+    or (poster_type = 'individual_business' and poster_id = auth.uid())
+  );
