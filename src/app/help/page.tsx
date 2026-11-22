@@ -64,6 +64,20 @@ export default function HelpPage() {
         </li>
         <li>
           <Link
+            href="/hospitals"
+            className="flex h-full min-h-24 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-500"
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="text-2xl leading-none">🏥</span>
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">病院マップ（印西市）</span>
+            </span>
+            <span className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              印西市の病院・診療所を地図でさがせます。休日・夜間に具合が悪くなったときの電話の案内つき。
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/help/notifications"
             className="flex h-full min-h-24 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-500"
           >
