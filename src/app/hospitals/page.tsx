@@ -11,7 +11,7 @@ import { HOSPITALS, HOSPITALS_AS_OF, HOSPITALS_CITY_URL, HOSPITALS_EMERGENCY_URL
 
 export const metadata: Metadata = {
   title: '病院マップ（印西市） | CiDAO',
-  description: '印西市の病院・診療所を地図でさがせます。休日・夜間に具合が悪くなったときの電話の案内つき。',
+  description: '印西市の病院・診療所・歯科を地図でさがせます。休日・夜間に具合が悪くなったときの電話の案内つき。',
 }
 
 type Call = { label: string; tel: string; show: string; note?: string }
@@ -56,13 +56,14 @@ const VISIT: Call[] = [
 
 export default function HospitalsPage() {
   const cityCount = HOSPITALS.filter((h) => !h.natOnly).length
+  const dentalCount = HOSPITALS.filter((h) => h.kind === '歯科').length
   return (
     <PageShell feature="help">
       <PageHeader
         feature="help"
         title="病院マップ（印西市）"
         back={{ href: '/', label: 'ホーム' }}
-        description="印西市の病院・診療所を、地図と一覧でさがせます。休日や夜に具合が悪くなったときは、下の電話の案内を先に見てください。"
+        description="印西市の病院・診療所・歯科を、地図と一覧でさがせます。休日や夜に具合が悪くなったときは、下の電話の案内を先に見てください。"
       />
 
       <section aria-labelledby="hospitals-emergency" className="space-y-3 rounded-lg border-2 border-rose-300 bg-rose-50 p-4 dark:border-rose-800 dark:bg-rose-950">
@@ -96,7 +97,7 @@ export default function HospitalsPage() {
 
       <section aria-labelledby="hospitals-map" className="space-y-3">
         <h2 id="hospitals-map" className="text-lg font-bold text-slate-900 dark:text-slate-100">
-          地図と一覧でさがす（医科・{HOSPITALS.length}件）
+          地図と一覧でさがす（医科{HOSPITALS.length - dentalCount}件・歯科{dentalCount}件）
         </h2>
         <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
           診療日と診療時間は、変わりやすいため載せていません。受診の前に、電話か公式サイトで確かめてください。
@@ -114,10 +115,10 @@ export default function HospitalsPage() {
             <a href={HOSPITALS_CITY_URL} target="_blank" rel="noopener noreferrer" className="mx-1 text-blue-600 hover:underline">
               「印西市内の医療機関」
             </a>
-            （{HOSPITALS_AS_OF}現在）。市のホームページでの公開に、医療機関が了解したものが載っています。休診日、土曜の午後・日曜・祝日の診療、歯科は、市の一覧をご覧ください。
+            （{HOSPITALS_AS_OF}現在）。市のホームページでの公開に、医療機関が了解したものが載っています。休診日、土曜の午後・日曜・祝日の診療は、市の一覧をご覧ください。
           </li>
           <li>
-            位置・公式サイトと、市の一覧に無い{HOSPITALS.length - cityCount}件：厚生労働省
+            位置・公式サイト・歯科の診療科と、市の一覧に無い{HOSPITALS.length - cityCount}件：厚生労働省
             <a href={HOSPITALS_MHLW_URL} target="_blank" rel="noopener noreferrer" className="mx-1 text-blue-600 hover:underline">
               「医療情報ネット」のオープンデータ
             </a>

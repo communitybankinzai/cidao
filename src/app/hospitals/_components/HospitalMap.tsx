@@ -1,6 +1,6 @@
 'use client'
 
-// 病院マップ（2026-11-23）。印西市の医療機関（医科）を地図と一覧で出す。
+// 病院マップ（2026-11-23）。印西市の医療機関（医科・歯科）を地図と一覧で出す。
 // 地図は食レポの候補画面（NewShopPanel）と同じ Leaflet（CDN）＋国土地理院の標準地図。サーバーの処理は使わない（データは src/lib/hospitals.ts）。
 // 同じ建物に入っている医療機関は、1つのピンにまとめて出す（重なって押せなくなるため）。
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -177,6 +177,7 @@ export function HospitalMap() {
             <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
               {h.name}
               {h.kind === '病院' ? <span className="ml-2 rounded bg-rose-100 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-900 dark:text-rose-200">病院</span> : null}
+              {h.kind === '歯科' ? <span className="ml-2 rounded bg-teal-100 px-1.5 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-900 dark:text-teal-200">歯科</span> : null}
             </p>
             <p className="mt-0.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{h.dept.join('、')}</p>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
