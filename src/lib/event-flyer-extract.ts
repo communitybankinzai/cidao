@@ -6,6 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { classifyScanError, type ScanFailReason } from '@/lib/event-scan'
+import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 
 export type FlyerMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
@@ -23,6 +24,10 @@ export type FlyerExtract = {
   capacity: number | null
   fee: number | null
   occurrences: { start_at: string; end_at: string }[]
+  /** 催しの分野（categories.ts のキー）。古い呼び出しや読み取り失敗では無いことがある */
+  category?: string
+  /** チラシの QR コードの用途。form＝申込・参加登録・予約、website＝案内ページ・SNS、none＝QR なし・不明 */
+  qr_purpose?: 'form' | 'website' | 'none'
   confidence: number
 }
 
@@ -95,6 +100,22 @@ export async function extractFromFlyer(
                   additionalProperties: false,
                 },
               },
+              category: {
+                type: 'string',
+                enum: PROPOSAL_CATEGORIES.map((c) => c.key),
+                description:
+                  '催しの主な分野を1つ。' + PROPOSAL_CATEGORIES.map((c) => `${c.key}＝${c.label}`).join('／') +
+                  '。防災訓練・避難・消防・防犯・交通安全・救命講習は bosai。子ども向け・親子向け・学習・子育ては kodomo。' +
+                  '健康・介護・認知症・障がい・医療は fukushi。自然観察・清掃・里山・環境は kankyo。' +
+                  'コンサート・展示・映画・祭り・スポーツ・手仕事の講座は bunka。国際交流・日本語教室・人権は tabunka。' +
+                  'マルシェ・創業・商店・就労は sangyo。議会・市の説明会・パブリックコメントは gyosei。' +
+                  'machizukuri は、地域の活性化・まちの将来を話し合う催しなど、ほかに当てはまらないときだけ。どれにも当たらなければ other。',
+              },
+              qr_purpose: {
+                type: 'string',
+                enum: ['form', 'website', 'none'],
+                description: 'チラシに QR コード（二次元コード）があるとき、そのそばに書かれた用途。申込・参加登録・予約・応募・チケットなら form、案内ページ・公式サイト・SNS・地図なら website、QR コードが無い・用途が分からないなら none。',
+              },
               confidence: { type: 'number', description: '0〜1の抽出自信度' },
             },
             required: [
@@ -108,6 +129,8 @@ export async function extractFromFlyer(
               'capacity',
               'fee',
               'occurrences',
+              'category',
+              'qr_purpose',
               'confidence',
             ],
             additionalProperties: false,

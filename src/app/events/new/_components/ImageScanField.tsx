@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { FilePickButton } from '@/components/ui/file-pick-button'
+import { PROPOSAL_CATEGORIES } from '@/lib/categories'
+import { assignQrUrls, type QrPurpose } from '@/lib/flyer-qr'
 
 type Occurrence = { start_at: string; end_at: string }
 
@@ -17,7 +19,53 @@ type Extracted = {
   fee?: number | null
   occurrences?: Occurrence[]
   flyer_image_url?: string | null
+  category?: string
+  qr_purpose?: QrPurpose
+  // QR コードから読んだリンク（画面側で読み取って足す）
+  form_url?: string | null
+  website_url?: string | null
   confidence?: number
+}
+
+// チラシの画像から QR コードを読み取る（端末の中だけで行い、どこにも送らない）。
+// 小さな QR は全体では読めないことがあるので、全体 → 4分割 → 9分割の順に探す。読めなければ空の配列。
+async function readQrCodes(file: File): Promise<string[]> {
+  try {
+    const { default: jsQR } = await import('jsqr')
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height))
+    const w = Math.max(1, Math.round(bmp.width * scale))
+    const h = Math.max(1, Math.round(bmp.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return []
+    ctx.drawImage(bmp, 0, 0, w, h)
+    bmp.close?.()
+    const found: string[] = []
+    const scan = (x: number, y: number, cw: number, ch: number) => {
+      if (cw < 40 || ch < 40) return
+      const img = ctx.getImageData(x, y, cw, ch)
+      const r = jsQR(img.data, cw, ch)
+      const text = r?.data?.trim()
+      if (text && !found.includes(text)) found.push(text)
+    }
+    scan(0, 0, w, h)
+    for (const n of [2, 3]) {
+      // 区切りの上にある QR も拾えるよう、半分ずつ重ねてずらす
+      const cw = Math.floor(w / n)
+      const ch = Math.floor(h / n)
+      for (let iy = 0; iy <= (n - 1) * 2; iy++) {
+        for (let ix = 0; ix <= (n - 1) * 2; ix++) {
+          scan(Math.floor((ix * cw) / 2), Math.floor((iy * ch) / 2), cw, ch)
+        }
+      }
+    }
+    return found
+  } catch {
+    return []
+  }
 }
 
 // "YYYY-MM-DDTHH:MM" → "YYYY/MM/DD HH:MM"（表示用の軽い整形。パースできなければそのまま返す）
@@ -127,6 +175,8 @@ export function ImageScanField({
         : `「${file.name}」をアップロード中…`,
     )
     try {
+      // QR コードの読み取りは、アップロードと並行して端末の中で行う（AI を使うときだけ。失敗しても登録は続ける）
+      const qrPromise: Promise<string[]> = scanWithAi ? readQrCodes(file) : Promise.resolve([])
       const fd = new FormData()
       fd.append('image', file)
       // AI を使わないときはサーバー側で抽出を行わない（本文が上書きされず、AI 利用料もかからない）
@@ -161,7 +211,16 @@ export function ImageScanField({
         setMessage((REASON_MESSAGES[reason] ?? REASON_MESSAGES.unknown) + attached)
         return
       }
-      applyCandidate(data, '保存完了', 'チラシ画像はイベントに添付されました。')
+      // QR コードのリンクを、申込フォーム／サイトの欄へ（チラシの案内が「申込」なら申込フォームへ）
+      const qr = assignQrUrls(await qrPromise, data.qr_purpose)
+      const qrNote = qr.form_url
+        ? 'QRコードのリンクを「申込フォームリンク」に入れました。'
+        : qr.website_url
+          ? 'QRコードのリンクを「サイトリンク」に入れました。'
+          : data.qr_purpose && data.qr_purpose !== 'none'
+            ? 'QRコードは読み取れませんでした。リンクは手で入れてください。'
+            : ''
+      applyCandidate({ ...data, ...qr }, '保存完了', `チラシ画像はイベントに添付されました。${qrNote}`)
     } catch {
       // 通信断など。エラー表示ではなくお知らせとして手入力を促す
       setStatus('notice')
@@ -198,6 +257,13 @@ export function ImageScanField({
     setField('start_at', d.start_at ?? undefined)
     setField('end_at', d.end_at ?? undefined)
     setField('location', d.location ?? undefined)
+    // 分野（AI がチラシから読んだもの。一覧にある値のときだけ）
+    if (d.category && PROPOSAL_CATEGORIES.some((c) => c.key === d.category)) setField('category', d.category)
+    // QR コードのリンク（すでに入っている欄は上書きしない）
+    for (const name of ['form_url', 'website_url'] as const) {
+      const cur = (form.querySelector(`[name="${name}"]`) as HTMLInputElement | null)?.value?.trim()
+      if (!cur) setField(name, d[name] ?? undefined)
+    }
     if (d.capacity != null) setField('capacity', String(d.capacity))
     if (d.fee != null) setField('fee', String(d.fee))
 

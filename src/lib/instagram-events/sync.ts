@@ -16,6 +16,7 @@
 import { createHash } from 'node:crypto'
 import type Anthropic from '@anthropic-ai/sdk'
 import { jstLocalToUtcIso } from '@/lib/datetime'
+import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { extractFromFlyer, type FlyerExtract, type FlyerMediaType } from '@/lib/event-flyer-extract'
 import { isSimilarTitle, todayJst, type EventRow, type OtherEventRow, type SyncOptions, type SyncResult } from '@/lib/inzai-bunka/sync'
 import type { AIUsage } from '@/lib/ai/types'
@@ -279,7 +280,8 @@ export function candidateToRow(d: FlyerExtract, occ: Occurrence, media: IgMedia,
   return {
     title: clip(d.title || '（題名なし）', TITLE_MAX),
     description: toCandidateDescription(d, media, hashtag, occ.timeAssumed),
-    category: fixedPlace ? 'kodomo' : 'machizukuri',
+    // 分野は AI がチラシから読んだもの（2026-11-22。以前は常に『まちづくり』だった）。読めなければ従来どおり
+    category: fixedPlace ? 'kodomo' : (PROPOSAL_CATEGORIES.some((c) => c.key === d.category) ? (d.category as string) : 'machizukuri'),
     start_at: jstLocalToUtcIso(occ.start_at),
     end_at: jstLocalToUtcIso(occ.end_at),
     location: d.location?.trim() || '',
