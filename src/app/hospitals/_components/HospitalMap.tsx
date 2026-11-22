@@ -4,7 +4,19 @@
 // 地図は食レポの候補画面（NewShopPanel）と同じ Leaflet（CDN）＋国土地理院の標準地図。サーバーの処理は使わない（データは src/lib/hospitals.ts）。
 // 同じ建物に入っている医療機関は、1つのピンにまとめて出す（重なって押せなくなるため）。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HOSPITALS, HOSPITAL_FILTERS, matchesHospitalFilter, type Hospital } from '@/lib/hospitals'
+import { HOSPITALS, HOSPITAL_FILTERS, HOSPITAL_OPEN_MARKS, matchesHospitalFilter, type Hospital } from '@/lib/hospitals'
+
+// 土曜午後・日曜・祝日の印を言葉にする（市の一覧の ●＝診療、▲＝要確認）
+function openLabels(h: Hospital): { text: string; sure: boolean }[] {
+  const m = HOSPITAL_OPEN_MARKS[h.id]
+  if (!m) return []
+  const out: { text: string; sure: boolean }[] = []
+  for (const [k, label] of [['satPm', '土曜午後'], ['sun', '日曜'], ['hol', '祝日']] as const) {
+    const v = m[k]
+    if (v) out.push({ text: v === 'o' ? `${label}も診療` : `${label}は要確認`, sure: v === 'o' })
+  }
+  return out
+}
 
 const LEAFLET_JS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
 const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'
@@ -64,7 +76,9 @@ function popupHtml(list: Hospital[]): string {
       ? `<a href="${telHref(h.tel)}" style="display:inline-block;margin-top:4px;padding:6px 10px;border-radius:8px;background:#0369a1;color:#fff;font-weight:700;text-decoration:none">📞 ${esc(h.tel)}</a>`
       : ''
     const site = h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener noreferrer" style="margin-left:8px">公式サイト</a>` : ''
-    return `<div style="padding:6px 0;border-top:1px solid #e2e8f0"><div style="font-weight:700;font-size:14px">${esc(h.name)}</div><div style="font-size:12px;color:#475569">${esc(h.dept.join('、'))}</div><div>${tel}${site}</div></div>`
+    const ol = openLabels(h)
+    const open = ol.length ? `<div style="font-size:11px;color:#0f766e;margin-top:2px">${esc(ol.map((x) => x.text).join('・'))}（行く前に電話で確認）</div>` : ''
+    return `<div style="padding:6px 0;border-top:1px solid #e2e8f0"><div style="font-weight:700;font-size:14px">${esc(h.name)}</div><div style="font-size:12px;color:#475569">${esc(h.dept.join('、'))}</div>${open}<div>${tel}${site}</div></div>`
   })
   const head = list[0]
   const approx = list.some((h) => h.approx) ? '<div style="font-size:11px;color:#b45309">※ピンの位置はおおよそです</div>' : ''
@@ -180,6 +194,20 @@ export function HospitalMap() {
               {h.kind === '歯科' ? <span className="ml-2 rounded bg-teal-100 px-1.5 py-0.5 text-xs font-medium text-teal-700 dark:bg-teal-900 dark:text-teal-200">歯科</span> : null}
             </p>
             <p className="mt-0.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{h.dept.join('、')}</p>
+            {openLabels(h).length ? (
+              <p className="mt-1 flex flex-wrap gap-1">
+                {openLabels(h).map((x) => (
+                  <span
+                    key={x.text}
+                    className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                      x.sure ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100'
+                    }`}
+                  >
+                    {x.text}
+                  </span>
+                ))}
+              </p>
+            ) : null}
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               {h.addr}
               {h.bld ? `（${h.bld}）` : ''}

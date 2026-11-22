@@ -100,7 +100,7 @@ export default function HospitalsPage() {
           地図と一覧でさがす（医科{HOSPITALS.length - dentalCount}件・歯科{dentalCount}件）
         </h2>
         <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          診療日と診療時間は、変わりやすいため載せていません。受診の前に、電話か公式サイトで確かめてください。
+          「土曜午後も診療」「日曜も診療」「祝日も診療」の印は、市の一覧（{HOSPITALS_AS_OF}現在）のとおりに付けています。「要確認」は、日や週によって違う所です。診療の時間は載せていません。診療日は急に変わることがあるので、受診の前に、必ず電話か公式サイトで確かめてください。
         </p>
         <HospitalMap />
       </section>
@@ -111,11 +111,11 @@ export default function HospitalsPage() {
         </h2>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            名前・電話・所在地・診療科（{cityCount}件）：印西市
+            名前・電話・所在地・診療科と、土曜午後・日曜・祝日の印（{cityCount}件）：印西市
             <a href={HOSPITALS_CITY_URL} target="_blank" rel="noopener noreferrer" className="mx-1 text-blue-600 hover:underline">
               「印西市内の医療機関」
             </a>
-            （{HOSPITALS_AS_OF}現在）。市のホームページでの公開に、医療機関が了解したものが載っています。休診日、土曜の午後・日曜・祝日の診療は、市の一覧をご覧ください。
+            （{HOSPITALS_AS_OF}現在）。市のホームページでの公開に、医療機関が了解したものが載っています。休診日は、市の一覧をご覧ください。
           </li>
           <li>
             位置・公式サイト・歯科の診療科と、市の一覧に無い{HOSPITALS.length - cityCount}件：厚生労働省

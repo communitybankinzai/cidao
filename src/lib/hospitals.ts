@@ -3,7 +3,7 @@
 //   ・印西市「印西市内の医療機関」（令和8年8月1日現在）＝名前・電話・所在地・診療科。市のホームページでの公開に医療機関が了解したものだけが載っている
 //   ・厚生労働省「医療情報ネット」のオープンデータ（2026年6月1日時点・CC BY 4.0）＝位置・公式サイト
 //   ・位置が国のデータに無いものは、同じ建物の医療機関の位置か、国土地理院の住所検索で補った（approx＝丁目までしか分からず、おおよその位置）
-// 診療日・診療時間は載せない（変わりやすく、古い時間を見て行くと閉まっていることがあるため）。歯科は 2026-11-23 に足した（位置・公式サイト・診療科は国の歯科診療所のデータ）。
+// 診療時間は載せない（変わりやすく、古い時間を見て行くと閉まっていることがあるため）。土曜午後・日曜・祝日の印だけ、市の一覧のとおりに載せる（2026-11-23 事業主指示）。歯科は 2026-11-23 に足した（位置・公式サイト・診療科は国の歯科診療所のデータ）。
 // 直すとき：市の一覧が新しくなったら HOSPITALS_AS_OF を変え、名前・電話・所在地を照らし合わせる。作り直しの道具は C:/Temp/oneoff/iryo/build.py・build_dental.py（控え）。
 
 export const HOSPITALS_AS_OF = '2026年8月1日'
@@ -133,6 +133,84 @@ export const HOSPITALS: Hospital[] = [
   { id: 'd38', name: "滝野歯科医院", kind: '歯科', tel: "0476-80-9511", addr: "印西市滝野2-1-3", bld: "", dept: ["歯科"], url: "", lat: 35.807957, lon: 140.178635, approx: false, natOnly: false },
 ]
 
+// 土曜の午後・日曜・祝日の診療の印（市の一覧 令和8年8月1日現在）。o＝診療可（●）、t＝要確認（▲）。印の無い所は載せない。
+// 診療日は急に変わることがあるので、画面では必ず「受診の前に電話で確かめてください」を添える。
+export type OpenMark = 'o' | 't'
+export const HOSPITAL_OPEN_MARKS: Record<string, { satPm?: OpenMark; sun?: OpenMark; hol?: OpenMark }> = {
+  d01: { satPm: 'o' }, // いんざい歯科医院
+  d02: { satPm: 'o', sun: 'o' }, // 印西森のはいしゃさん
+  d03: { satPm: 'o' }, // うちだ歯科
+  d04: { satPm: 'o' }, // 大越歯科医院
+  d06: { satPm: 'o', sun: 'o' }, // コスモス三国歯科
+  d07: { satPm: 'o' }, // 高花歯科クリニック
+  d08: { satPm: 'o' }, // ほりえ歯科医院
+  d09: { satPm: 'o' }, // 印西歯科クリニック
+  d10: { satPm: 'o' }, // グリーン歯科
+  d11: { satPm: 'o' }, // クローバー歯科
+  d12: { satPm: 'o' }, // ココロデンタルクリニック
+  d13: { satPm: 't', sun: 'o' }, // 千葉ニュータウン河合歯科矯正歯科
+  d14: { satPm: 'o', sun: 't', hol: 'o' }, // 千葉ニュータウンごう歯科クリニック
+  d15: { satPm: 'o', hol: 'o' }, // 千葉ニュータウン中央つきのわ歯科
+  d16: { satPm: 'o' }, // 千葉ニュータウン中央ひの歯科
+  d17: { satPm: 'o', sun: 'o', hol: 't' }, // ニュータウン中央歯科室
+  d18: { satPm: 'o' }, // 大沢歯科医院
+  d20: { satPm: 'o' }, // 杉田歯科医院
+  d21: { satPm: 'o' }, // 千葉ニュータウンデンタルクリニック
+  d22: { satPm: 'o' }, // 宮本歯科医院
+  d23: { sun: 't' }, // ユキ・デンタルクリニック
+  d24: { satPm: 'o' }, // いいづか歯科クリニック
+  d25: { satPm: 'o' }, // 印西牧の原歯科
+  d26: { satPm: 'o' }, // おがわ歯科
+  d27: { satPm: 'o', sun: 't', hol: 'o' }, // ガーデンモール印西歯科
+  d28: { satPm: 'o' }, // かめだ歯科医院
+  d29: { satPm: 'o', sun: 't' }, // 鈴木歯科クリニック
+  d30: { satPm: 'o' }, // 千葉ニュータウンおとなこども歯科
+  d31: { sun: 'o' }, // 西の原歯科クリニック
+  d32: { satPm: 'o' }, // のざき歯科クリニック
+  d33: { satPm: 'o', hol: 'o' }, // 牧の原モアはとがい歯科
+  d34: { satPm: 'o' }, // もとうち歯科医院
+  d35: { satPm: 'o' }, // いだいまえ歯科医院
+  d36: { satPm: 'o' }, // 印旛日本医大前佐藤歯科
+  d37: { satPm: 'o', sun: 'o' }, // FM歯科クリニック印西牧の原
+  d38: { satPm: 'o' }, // 滝野歯科医院
+  h08: { satPm: 't' }, // 印西千葉ニュータウン頭痛・脳神経内科クリニック
+  h10: { satPm: 't', sun: 't' }, // コスモス皮膚科
+  h11: { satPm: 'o', sun: 't' }, // 斉藤おとな＆こどもクリニック
+  h12: { satPm: 'o' }, // 千葉ニュータウン駅前こどもクリニック
+  h13: { satPm: 'o' }, // 千葉ニュータウン駅前耳鼻咽喉科クリニック
+  h14: { satPm: 'o' }, // 千葉ニュータウン駅前つかだクリニック
+  h15: { satPm: 'o' }, // 千葉ニュータウン整形外科リハビリテーションクリニック
+  h16: { satPm: 'o', sun: 'o', hol: 't' }, // 千葉れいわ眼科
+  h17: { satPm: 'o' }, // 豊田眼科
+  h18: { satPm: 'o' }, // 北総メンタルクリニック
+  h20: { satPm: 'o' }, // 千葉ニュータウンレディースクリニック
+  h22: { satPm: 'o', sun: 'o', hol: 'o' }, // 印西花の丘整形外科
+  h23: { sun: 'o' }, // 内野診療所
+  h24: { satPm: 'o', sun: 'o', hol: 'o' }, // キャップスクリニック千葉ニュータウン中央
+  h27: { satPm: 'o' }, // 千葉ニュータウンサザンクリニック
+  h28: { satPm: 't', sun: 'o', hol: 't' }, // 千葉ニュータウン中央ヒフ科クリニック
+  h29: { satPm: 'o' }, // みらいウィメンズ駅前クリニック
+  h35: { satPm: 'o', hol: 't' }, // スマイル心療内科クリニック
+  h36: { satPm: 'o' }, // 清宮クリニック
+  h39: { satPm: 'o' }, // つちや耳鼻咽喉科医院
+  h40: { satPm: 'o' }, // 奈良整形外科
+  h43: { satPm: 'o' }, // 牧の原いとうクリニック
+  h45: { sun: 't', hol: 't' }, // 牧の原なのはな耳鼻咽喉科
+  h46: { satPm: 'o', sun: 'o' }, // マハナレディースクリニック
+  h47: { satPm: 'o', hol: 't' }, // みらいウィメンズクリニック
+  h48: { satPm: 't', sun: 't', hol: 't' }, // DKスポーツ＆整形クリニック
+  h51: { satPm: 'o' }, // 西佐倉印西病院
+  h53: { satPm: 't' }, // 日本医科大学千葉北総病院
+  h54: { satPm: 'o', sun: 't' }, // あんべこどもクリニック
+  h58: { satPm: 'o' }, // 印西総合病院
+}
+
+/** 日曜か祝日に診療している（要確認を含む） */
+export function opensOnHoliday(h: Hospital): boolean {
+  const m = HOSPITAL_OPEN_MARKS[h.id]
+  return Boolean(m && (m.sun || m.hol))
+}
+
 // 絞り込みのボタン。診療科の名前にこの言葉が入っていれば当てはまる
 export const HOSPITAL_FILTERS: { key: string; label: string; words: string[] }[] = [
   { key: 'naika', label: '内科', words: ['内科'] },
@@ -144,11 +222,13 @@ export const HOSPITAL_FILTERS: { key: string; label: string; words: string[] }[]
   { key: 'sanfujinka', label: '産科・婦人科', words: ['産科', '婦人科', '産婦人科', '女性'] },
   { key: 'kokoro', label: '心療内科・精神科', words: ['心療内科', '精神'] },
   { key: 'shika', label: '歯科', words: ['歯科'] },
+  { key: 'holiday', label: '日曜・祝日に診療', words: [] },
 ]
 
 export function matchesHospitalFilter(h: Hospital, key: string): boolean {
   const f = HOSPITAL_FILTERS.find((x) => x.key === key)
   if (!f) return true
+  if (key === 'holiday') return opensOnHoliday(h)
   // 歯科は「歯科」のボタンだけに出す（「歯科口腔外科」が外科に、「小児歯科」が小児科に混ざらないように）
   if (key === 'shika') return h.kind === '歯科' || h.dept.includes('歯科')
   if (h.kind === '歯科') return false
