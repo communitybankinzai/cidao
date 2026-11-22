@@ -14,6 +14,7 @@ import {
   Building2,
   CalendarDays,
   CircleHelp,
+  Hospital,
   LogIn,
   Megaphone,
   ShieldAlert,
@@ -94,7 +95,7 @@ export default async function Home() {
   const isLight = member?.tier === 'light'
   const tierInfo = member ? (TIER_LABEL[member.tier] ?? TIER_LABEL.light) : null
 
-  // やりたいことを、絵と短い言葉で選ぶ（9個まで）。ログイン前は見出しの直下、ログイン後は会員証の下に置く
+  // やりたいことを、絵と短い言葉で選ぶ（10個まで）。ログイン前は見出しの直下、ログイン後は会員証の下に置く
   const tiles = (
     <section aria-label="できること" className="space-y-3">
       <TileGrid label="CiDAOでできること">
@@ -107,6 +108,8 @@ export default async function Home() {
         <Tile href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
         {/* 防災マップ（CBI サイト・2026-11-13）。事業主の指示で「ぐるめ」の後ろ（防災は主役ではない）。CiDAO の外なので新しいタブ */}
         <Tile href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="cyan" external />
+        {/* 病院マップ（2026-11-23）。休日に病院を探して困る人のため。事業主決定でタイルを10個に */}
+        <Tile href="/hospitals" icon={Hospital} label="病院" color="teal" />
         <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
         {userId ? (
           <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />

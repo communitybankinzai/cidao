@@ -32,6 +32,7 @@ export const HEADER_COLORS: Record<TileColor, { chip: string; eyebrow: string }>
   amber: { chip: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200', eyebrow: 'text-amber-700 dark:text-amber-300' },
   rose: { chip: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200', eyebrow: 'text-rose-700 dark:text-rose-300' },
   cyan: { chip: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200', eyebrow: 'text-cyan-700 dark:text-cyan-300' },
+  teal: { chip: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-200', eyebrow: 'text-teal-700 dark:text-teal-300' },
   sky: { chip: 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-200', eyebrow: 'text-sky-700 dark:text-sky-300' },
   navy: { chip: 'bg-slate-200 text-[#1e3a5f] dark:bg-slate-700 dark:text-sky-200', eyebrow: 'text-[#1e3a5f] dark:text-sky-300' },
 }

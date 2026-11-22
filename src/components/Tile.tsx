@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react'
  * ホームなどに並べる「アイコン付きの大きなタイル」。
  *
  * 初めて使う人が、文章を読まずに「何ができるか」を絵と短い言葉で選べるようにする。
- * 1画面に並べるのは9個まで、ラベルは5〜6文字までを目安にする。
+ * 1画面に並べるのは10個まで、ラベルは5〜6文字までを目安にする（2026-11-23 事業主決定で「病院」を足し、9個→10個）。
  *
  * - アイコンは lucide-react（ISC ライセンス）。他社アプリの絵はそのまま使わない
  * - prefetch={false}：タイルは常に画面内にあるため、既定の先読みだと開くたびに
@@ -61,6 +61,11 @@ const COLORS = {
   cyan: {
     box: 'border-cyan-100 bg-cyan-50 hover:border-cyan-300 hover:bg-cyan-100 dark:border-cyan-900 dark:bg-cyan-950 dark:hover:bg-cyan-900',
     icon: 'text-cyan-700 dark:text-cyan-300',
+    label: SOFT_LABEL,
+  },
+  teal: {
+    box: 'border-teal-100 bg-teal-50 hover:border-teal-300 hover:bg-teal-100 dark:border-teal-900 dark:bg-teal-950 dark:hover:bg-teal-900',
+    icon: 'text-teal-700 dark:text-teal-300',
     label: SOFT_LABEL,
   },
   sky: {
