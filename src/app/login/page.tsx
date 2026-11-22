@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -221,6 +222,11 @@ export default function LoginPage() {
           )}
           <p className="text-[11px] text-slate-500 text-center">
             パスワード不要。初めての方は自動でアカウントが作られます
+          </p>
+          {/* 2026-11-22 利用者の声：LINE の画面で4けたの数字を聞かれて、登録をあきらめた方がいた */}
+          <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+            LINE の画面で4けたの数字が出たら、スマホの LINE アプリを開いて、その数字を入れてください（LINE の本人確認です）。
+            <Link href="/help/faq#line-4digits" className="ml-1 text-blue-600 hover:underline">くわしく見る</Link>
           </p>
 
           <details className="rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
