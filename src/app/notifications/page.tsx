@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { KIND_ICON, KIND_LABEL } from '@/lib/notification-kinds'
 import { MarkAllRead } from './_components/MarkAllRead'
+import { PushNudge } from '@/components/PushNudge'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,9 @@ export default async function NotificationsPage() {
     <PageShell feature="account" width="narrow">
       <MarkAllRead hasUnread={hasUnread} />
       <PageHeader feature="account" title="通知" description="自分宛の通知を新しい順に最大100件表示します。" />
+
+      {/* ベルを開いた人に、スマホへの通知の案内を出す（2026-11-22）。出る・出ないの判定は PushNudge の中 */}
+      <PushNudge />
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-400 bg-white dark:bg-slate-900 border rounded-lg p-6 text-center">
