@@ -39,6 +39,7 @@ export default function FreefreeFlyerScan({
   const [message, setMessage] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
     setStatus('loading')
@@ -87,20 +88,36 @@ export default function FreefreeFlyerScan({
     <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-lg p-4 space-y-2">
       <p className="text-sm font-medium">📷 チラシや店頭の写真から自動入力する（任意）</p>
       <p className="text-xs text-slate-600 dark:text-slate-400">
-        写真を1枚選ぶと、AIが読み取ってタイトル・本文・カテゴリ・場所を下の欄に入れます。
+        写真を1枚選ぶか、その場でカメラで撮ると、AIが読み取ってタイトル・本文・カテゴリ・場所を下の欄に入れます。
         読み取った内容はそのまま掲載されるわけではないので、必ずご自身で確認・修正してください。
       </p>
-      <FilePickButton
-        ref={inputRef}
-        label="📷 チラシ・写真を選ぶ"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        disabled={status === 'loading'}
-        onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (inputRef.current) inputRef.current.value = ''
-          if (f) handleFile(f)
-        }}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        {/* カメラで撮ってそのまま読み取る（2026-11-22）。capture を付けると、スマホではカメラが直接開く。
+            パソコンなどカメラの無い端末では、ふつうの画像の選択画面になる */}
+        <FilePickButton
+          ref={cameraRef}
+          label="📸 カメラで撮る"
+          accept="image/*"
+          capture="environment"
+          disabled={status === 'loading'}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (cameraRef.current) cameraRef.current.value = ''
+            if (f) handleFile(f)
+          }}
+        />
+        <FilePickButton
+          ref={inputRef}
+          label="📷 チラシ・写真を選ぶ"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          disabled={status === 'loading'}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (inputRef.current) inputRef.current.value = ''
+            if (f) handleFile(f)
+          }}
+        />
+      </div>
       {message && (
         <p
           className={`text-xs ${
