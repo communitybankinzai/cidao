@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { FilePickButton } from '@/components/ui/file-pick-button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { assignQrUrls, type QrPurpose } from '@/lib/flyer-qr'
+import { resizeImagePreserveAspect } from '@/lib/image-resize'
 
 type Occurrence = { start_at: string; end_at: string }
 
@@ -102,6 +103,7 @@ export function ImageScanField({
   defaultScan?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>('')
   const [flyerUrl, setFlyerUrl] = useState<string | null>(initialFlyerUrl)
@@ -177,8 +179,19 @@ export function ImageScanField({
     try {
       // QR コードの読み取りは、アップロードと並行して端末の中で行う（AI を使うときだけ。失敗しても登録は続ける）
       const qrPromise: Promise<string[]> = scanWithAi ? readQrCodes(file) : Promise.resolve([])
+      // 送れるのは 5MB まで。カメラで撮ったままの写真は超えることが多いので、大きいときだけ先に縮める
+      // （QR コードは上で元の写真から読むので、縮めても読み取りには影響しない）
+      let upload: File = file
+      if (file.size > 4_500_000) {
+        try {
+          const r = await resizeImagePreserveAspect(file, { maxEdge: 2400, quality: 0.85, preferWebp: false })
+          upload = new File([r.blob], `flyer.${r.extension}`, { type: r.extension === 'webp' ? 'image/webp' : 'image/jpeg' })
+        } catch {
+          // 縮められなければ元のまま送る（大きすぎるときはサーバーが案内を返す）
+        }
+      }
       const fd = new FormData()
-      fd.append('image', file)
+      fd.append('image', upload)
       // AI を使わないときはサーバー側で抽出を行わない（本文が上書きされず、AI 利用料もかからない）
       if (!scanWithAi) fd.append('skip_ai', '1')
       const res = await fetch('/api/events/scan', { method: 'POST', body: fd })
@@ -309,6 +322,7 @@ export function ImageScanField({
     setOccurrences([])
     setCheckedOcc([])
     if (inputRef.current) inputRef.current.value = ''
+    if (cameraRef.current) cameraRef.current.value = ''
   }
 
   const statusColor =
@@ -341,6 +355,18 @@ export function ImageScanField({
             ? 'チラシ画像（アップロード + AI 自動入力、ドラッグ&ドロップ可）'
             : 'チラシ画像（アップロードのみ、ドラッグ&ドロップ可）'}
         </label>
+        {/* カメラで撮ってそのまま登録・読み取り（2026-11-22）。スマホではカメラが直接開く */}
+        <FilePickButton
+          ref={cameraRef}
+          label="📸 カメラで撮る"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void handleFile(f)
+          }}
+          disabled={status === 'loading'}
+        />
         <FilePickButton
           ref={inputRef}
           label="📷 チラシ画像を選ぶ"
