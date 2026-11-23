@@ -1,6 +1,7 @@
 import { PageShell } from '@/components/layout/PageShell'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { PostingRules } from '@/components/PostingRules'
+import { MarkSeen } from '@/components/HomeTileEffects'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -78,6 +79,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       />
 
       <PostingRules variant="line" />
+      <MarkSeen seenKey="events" />
 
       <EventsBrowser
         events={rows}

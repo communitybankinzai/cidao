@@ -20,8 +20,8 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
   return (
     <PageShell feature="talent" width="default">
       <PageHeader feature="talent"
-        title="登録メンバー"
-        description="スキル・経験を活かしたい人と募集する人をつなぐ。"
+        title="人材をさがす"
+        description="登録メンバーの一覧です。スキル・経験を活かしたい人と募集する人をつなぐ。"
         actions={
           user && (
             <Link href="/me/talent"><Button variant="outline">自分の紹介を作る・直す</Button></Link>

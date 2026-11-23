@@ -52,7 +52,7 @@ const MENU_GROUPS: {
       { href: GOURMET_MAP_URL, icon: Utensils, label: 'ぐるめ', note: '食レポマップ（地域のお店を応援）・新しいタブで開く', external: true },
       { href: DISASTER_MAP_URL, icon: ShieldAlert, label: '防災', note: '防災マップ（CBIの試作）・新しいタブで開く', external: true },
       { href: '/proposals', icon: Vote, label: '提案・投票', note: 'まちへの提案を見る・投票する' },
-      { href: '/talent', icon: Users, label: 'メンバー一覧', note: '登録した人のPRを見る' },
+      { href: '/talent', icon: Users, label: '人材をさがす', note: '登録メンバーのPRを見る' },
     ],
   },
   {

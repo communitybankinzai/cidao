@@ -33,6 +33,47 @@ function subscribe(onChange: () => void): () => void {
   }
 }
 
+function markSeen(key: string): void {
+  try {
+    window.localStorage.setItem(SEEN_PREFIX + key, String(Date.now()))
+    window.dispatchEvent(new Event(SEEN_EVENT))
+  } catch {
+    // 覚えられなくても、ページの移動は止めない
+  }
+}
+
+/**
+ * 下段（「あったらいいな」の実例）が押された回数を数える（2026-11-23 事業主決定）。
+ * 閲覧数と同じ仕組み（/api/track/view → page_views）に、/go/<名前> という仮のパスで1件入れる。
+ * 管理画面の「アクセス分析」のページ別に /go/3dmap などとして出る。
+ * 端末の匿名IDは PageViewTracker が作ったもの（cidao_visitor_id）を使う。無ければ数えない
+ */
+function trackGo(name: string): void {
+  try {
+    const visitorId = window.localStorage.getItem('cidao_visitor_id')
+    if (!visitorId) return
+    void fetch('/api/track/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: `/go/${name}`, visitorId }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    // 数えられなくても、ページの移動は止めない
+  }
+}
+
+/**
+ * 一覧ページ（掲示板・イベント）を開いたら「見た」と覚える。
+ * 下のメニューなど、ホームのタイル以外から開いたときも新着の印が消えるようにする
+ */
+export function MarkSeen({ seenKey }: { seenKey: string }) {
+  useEffect(() => {
+    markSeen(seenKey)
+  }, [seenKey])
+  return null
+}
+
 export function HomeTileEffects() {
   useEffect(() => {
     const tileOf = (e: Event): HTMLElement | null => {
@@ -52,14 +93,10 @@ export function HomeTileEffects() {
     }
 
     const onClick = (e: MouseEvent) => {
-      const key = tileOf(e)?.dataset.seenKey
-      if (!key) return
-      try {
-        window.localStorage.setItem(SEEN_PREFIX + key, String(Date.now()))
-        window.dispatchEvent(new Event(SEEN_EVENT))
-      } catch {
-        // 覚えられなくても、ページの移動は止めない
-      }
+      const tile = tileOf(e)
+      if (!tile) return
+      if (tile.dataset.seenKey) markSeen(tile.dataset.seenKey)
+      if (tile.dataset.track) trackGo(tile.dataset.track)
     }
 
     document.addEventListener('pointerdown', onPointerDown, true)

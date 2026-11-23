@@ -16,6 +16,7 @@ import {
   CalendarDays,
   CircleHelp,
   Hospital,
+  Lightbulb,
   LogIn,
   Map as MapIcon,
   Megaphone,
@@ -176,14 +177,23 @@ export default async function Home() {
         <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">「あったらいいな」を形にしました</h2>
         <RoundRow label="「あったらいいな」を形にした実例">
           {/* 3Dマップ（CBI サイトの3Dワールド）。CiDAO の外なので新しいタブで開く */}
-          <RoundLink href={METAVERSE_URL} icon={MapIcon} label="3Dマップ" color="blue" external />
+          <RoundLink href={METAVERSE_URL} icon={MapIcon} label="3Dマップ" color="blue" external track="3dmap" />
           {/* 食レポマップ（CBI サイト・2026-11-13）。名前は事業主の希望で短く「ぐるめ」 */}
-          <RoundLink href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
+          <RoundLink href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external track="gourmet" />
           {/* 防災マップ（CBI サイト・2026-11-13）。事業主の指示で「ぐるめ」の後ろ（防災は主役ではない） */}
-          <RoundLink href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="yellow" external />
+          <RoundLink href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="yellow" external track="bousai" />
           {/* 病院マップ（2026-11-23）。休日に病院を探して困る人のため */}
-          <RoundLink href="/hospitals" icon={Hospital} label="病院" color="teal" />
+          <RoundLink href="/hospitals" icon={Hospital} label="病院" color="teal" track="hospitals" />
         </RoundRow>
+        {/* 実例を見た人を、次の「あったらいいな」の提案へつなぐ（2026-11-23 事業主決定）。未ログインはログイン後に投稿画面へ */}
+        <Link
+          href="/proposals/new"
+          prefetch={false}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-sm font-semibold text-indigo-800 transition hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 dark:hover:bg-indigo-900"
+        >
+          <Lightbulb aria-hidden className="size-4" />
+          あなたの「あったらいいな」を送る
+        </Link>
       </div>
       {orgCount || memberCount ? (
         <p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-center text-sm text-slate-600 dark:text-slate-300">

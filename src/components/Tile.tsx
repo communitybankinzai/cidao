@@ -217,6 +217,7 @@ export function RoundLink({
   label,
   color,
   external = false,
+  track,
 }: {
   href: string
   icon: LucideIcon
@@ -224,6 +225,8 @@ export function RoundLink({
   color: RoundColor
   /** CiDAO の外のページ。新しいタブで開き、ラベルに小さな矢印を付ける */
   external?: boolean
+  /** 押された回数を数えるときの名前（英数字）。/go/<名前> として閲覧数の表に入る（HomeTileEffects が送る） */
+  track?: string
 }) {
   const c = ROUND_COLORS[color]
   const className =
@@ -242,11 +245,11 @@ export function RoundLink({
   return (
     <li>
       {external ? (
-        <a href={href} target="_blank" rel="noopener noreferrer" className={className} aria-label={`${label}（新しいタブで開く）`}>
+        <a href={href} target="_blank" rel="noopener noreferrer" className={className} aria-label={`${label}（新しいタブで開く）`} data-track={track}>
           {inner}
         </a>
       ) : (
-        <Link href={href} prefetch={false} className={className}>
+        <Link href={href} prefetch={false} className={className} data-track={track}>
           {inner}
         </Link>
       )}

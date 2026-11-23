@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { faqByGroup } from '@/lib/faq'
+import { OpenDetailsFromHash } from '@/components/OpenDetailsFromHash'
 
 // よくある質問（Q&A）。利用者からいただいた質問・要望と解決策をまとめる（2026-11-22）。
 // 中身は src/lib/faq.ts に1件ずつ足す。ログインしていなくても読める（LINE ログインでつまずいた人が見るため）。
@@ -35,6 +36,8 @@ export default function HelpFaqPage() {
           </>
         }
       />
+
+      <OpenDetailsFromHash />
 
       <nav className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
         <p className="text-xs font-semibold text-slate-500 mb-2">もくじ</p>
