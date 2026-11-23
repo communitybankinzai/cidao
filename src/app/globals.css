@@ -265,6 +265,75 @@
     }
   }
 
+  /* ---------- ホームのボタンの動き（2026-11-23 事業主決定。Tile.tsx・HomeTileEffects.tsx） ----------
+     1. 順番に現れる（開いたとき1回）  2. 押すと弾む  3. アイコンが揺れる  4. 新着の印が脈打つ
+     「動きを減らす」設定の端末では、どれも動かさない（印は止まったまま出る） */
+  .cidao-round-disc {
+    transition: transform 0.15s ease-out;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    /* 1. 段の中で左上から順に。段ごとの遅れは --stagger-base（page.tsx）で決める */
+    .cidao-stagger > * {
+      animation: cidaoTileIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      animation-delay: calc(var(--stagger-base, 0ms) + var(--stagger-i, 0) * 60ms);
+    }
+    .cidao-stagger > :nth-child(2) { --stagger-i: 1; }
+    .cidao-stagger > :nth-child(3) { --stagger-i: 2; }
+    .cidao-stagger > :nth-child(4) { --stagger-i: 3; }
+    .cidao-stagger > :nth-child(5) { --stagger-i: 4; }
+    .cidao-stagger > :nth-child(6) { --stagger-i: 5; }
+    /* 2. 押すと弾む（HomeTileEffects が is-popped を付けて、少しあとで外す） */
+    .cidao-tile.is-popped {
+      animation: cidaoTilePop 0.4s ease-out;
+    }
+    /* 3. アイコンが揺れる（押したとき。PC ではカーソルを乗せたときも） */
+    .cidao-tile.is-popped > svg,
+    .cidao-tile.is-popped > .cidao-round-disc > svg {
+      animation: cidaoIconWiggle 0.5s ease-in-out;
+    }
+    @media (hover: hover) {
+      .cidao-tile:hover > svg,
+      .cidao-tile:hover > .cidao-round-disc > svg {
+        animation: cidaoIconWiggle 0.5s ease-in-out;
+      }
+      .cidao-round:hover > .cidao-round-disc {
+        transform: translateY(-3px);
+      }
+    }
+    .cidao-round:active > .cidao-round-disc {
+      transform: scale(0.92);
+    }
+    /* 4. 新着の印 */
+    .cidao-new-dot {
+      animation: cidaoNewDot 1.4s ease-out infinite;
+    }
+  }
+  @keyframes cidaoTileIn {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes cidaoTilePop {
+    0% { transform: scale(1); }
+    30% { transform: scale(0.9); }
+    60% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+  }
+  @keyframes cidaoIconWiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-14deg); }
+    75% { transform: rotate(14deg); }
+  }
+  @keyframes cidaoNewDot {
+    0% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0.55); }
+    100% { box-shadow: 0 0 0 10px rgb(225 29 72 / 0); }
+  }
+
 }
 
 /* ページごとの「機能の色」（ホームのタイルと同じ）。

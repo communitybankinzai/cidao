@@ -10,7 +10,7 @@ export const FEATURES = {
   proposals: { label: '提案・投票', color: 'indigo', icon: Vote },
   events: { label: 'イベント', color: 'orange', icon: CalendarDays },
   orgs: { label: '団体をさがす', color: 'emerald', icon: Building2 },
-  talent: { label: 'メンバー', color: 'violet', icon: Users },
+  talent: { label: '人材をさがす', color: 'violet', icon: Users },
   freefree: { label: '掲示板', color: 'amber', icon: Megaphone },
   ranking: { label: 'ランキング', color: 'rose', icon: Trophy },
   match: { label: 'AIに相談', color: 'cyan', icon: Bot },

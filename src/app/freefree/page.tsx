@@ -1,5 +1,6 @@
 import { PageShell } from '@/components/layout/PageShell'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { PostingRules } from '@/components/PostingRules'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -78,6 +79,8 @@ export default async function FreefreePage() {
           )
         }
       />
+
+      <PostingRules variant="line" />
 
       <FreefreeBrowser rows={rows} />
     </PageShell>

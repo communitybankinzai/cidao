@@ -7,15 +7,17 @@ import { summarize } from '@/lib/contribution-summary'
 import { getCivicGroupCount } from '@/lib/org-count'
 import { PushNudge } from '@/components/PushNudge'
 import { PageShell } from '@/components/layout/PageShell'
-import { Tile, TileGrid } from '@/components/Tile'
+import { PillLink, PillRow, RoundLink, RoundRow, Tile, TileGrid } from '@/components/Tile'
+import { HomeTileEffects, NewDot } from '@/components/HomeTileEffects'
 import { MemberQr } from '@/components/MemberQr'
-import { DISASTER_MAP_URL, GOURMET_MAP_URL } from '@/lib/cbi-site-urls'
+import { DISASTER_MAP_URL, GOURMET_MAP_URL, METAVERSE_URL } from '@/lib/cbi-site-urls'
 import {
   Building2,
   CalendarDays,
   CircleHelp,
   Hospital,
   LogIn,
+  Map as MapIcon,
   Megaphone,
   ShieldAlert,
   Smartphone,
@@ -27,6 +29,15 @@ import {
 import { SYSTEM_MEMBER_IDS } from '@/lib/org-placeholder'
 
 const SITE_URL = 'https://cidao.vercel.app'
+
+/** 初めての端末で「新着の印」を出す日数（この日数より新しい投稿があれば出す） */
+const NEW_DOT_DAYS = 3
+
+function toMs(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? t : null
+}
 
 const TIER_LABEL: Record<string, { label: string; color: string }> = {
   light:      { label: 'ライト登録',   color: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
@@ -46,14 +57,36 @@ export default async function Home() {
   }
 
   // 登録者数・団体数（システムアカウントは除外）
-  const [{ count: memberCount }, orgCount] = await Promise.all([
+  // 新着の印（掲示板・イベントのタイル）用に、いちばん新しい投稿の時刻も1件ずつ読む。条件は各一覧ページと同じ
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const [{ count: memberCount }, orgCount, { data: latestPost }, { data: latestEvent }] = await Promise.all([
     supabase
       .from('members')
       .select('id', { count: 'exact', head: true })
       .is('deleted_at', null)
       .not('id', 'in', `(${SYSTEM_MEMBER_IDS.join(',')})`),
     getCivicGroupCount(supabase),
+    supabase
+      .from('freefree_posts')
+      .select('created_at')
+      .eq('status', 'active')
+      .gt('expires_at', nowIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('events')
+      .select('created_at')
+      .neq('status', 'draft')
+      .gt('end_at', nowIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
+  const newSince = now.getTime() - NEW_DOT_DAYS * 86400_000
+  const latestPostAt = toMs(latestPost?.created_at)
+  const latestEventAt = toMs(latestEvent?.created_at)
 
   // 会員証カード用データ（ログイン時のみ）
   let member: { tier: string; display_name: string; avatar_url: string | null; created_at: string } | null = null
@@ -95,28 +128,63 @@ export default async function Home() {
   const isLight = member?.tier === 'light'
   const tierInfo = member ? (TIER_LABEL[member.tier] ?? TIER_LABEL.light) : null
 
-  // やりたいことを、絵と短い言葉で選ぶ（10個まで）。ログイン前は見出しの直下、ログイン後は会員証の下に置く
+  // ホームのボタンは3段（2026-11-23 事業主決定・A案）。段ごとに形を変えて、色が見えにくくても見分けられるようにする
+  // 上段：自分のこと・困ったときの入口。ログイン前も後も、見出しのすぐ下（会員証より上）に置く
+  const topRow = (
+    <PillRow label="マイページと使い方">
+      {userId ? (
+        <PillLink href="/me" icon={UserRound} label="マイページ" solid />
+      ) : (
+        <PillLink href="/login" icon={LogIn} label="ログイン" solid />
+      )}
+      <PillLink href="/help" icon={CircleHelp} label="使い方" />
+    </PillRow>
+  )
+
+  // 中段・下段。ログイン前は上段の直下、ログイン後は会員証の下に置く
   const tiles = (
     <section aria-label="できること" className="space-y-3">
-      <TileGrid label="CiDAOでできること">
-        <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" />
-        <Tile href="/events" icon={CalendarDays} label="イベント" color="orange" />
-        <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" />
-        <Tile href="/talent" icon={Users} label="メンバー" color="violet" />
-        <Tile href="/freefree" icon={Megaphone} label="掲示板" color="amber" />
-        {/* 食レポマップ（CBI サイト・2026-11-13）。CiDAO の外なので新しいタブで開く。名前は事業主の希望で短く「ぐるめ」 */}
-        <Tile href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
-        {/* 防災マップ（CBI サイト・2026-11-13）。事業主の指示で「ぐるめ」の後ろ（防災は主役ではない）。CiDAO の外なので新しいタブ */}
-        <Tile href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="cyan" external />
-        {/* 病院マップ（2026-11-23）。休日に病院を探して困る人のため。事業主決定でタイルを10個に */}
-        <Tile href="/hospitals" icon={Hospital} label="病院" color="teal" />
-        <Tile href="/help" icon={CircleHelp} label="使い方" color="sky" />
-        {userId ? (
-          <Tile href="/me" icon={UserRound} label="マイページ" color="navy" />
-        ) : (
-          <Tile href="/login" icon={LogIn} label="ログイン" color="navy" />
-        )}
-      </TileGrid>
+      {/* 中段：CiDAO の主な機能。色は各ページの見出しと同じ（features.ts） */}
+      <div className="space-y-2 [--stagger-base:120ms]">
+        <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">CiDAOでできること</h2>
+        <TileGrid label="CiDAOでできること" cols={6}>
+          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={3} />
+          <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" span={3} />
+          <Tile href="/talent" icon={Users} label="人材をさがす" color="violet" span={2} />
+          <Tile
+            href="/events"
+            icon={CalendarDays}
+            label="イベント"
+            color="orange"
+            span={2}
+            seenKey="events"
+            badge={<NewDot seenKey="events" latestAt={latestEventAt} recent={latestEventAt !== null && latestEventAt > newSince} />}
+          />
+          <Tile
+            href="/freefree"
+            icon={Megaphone}
+            label="掲示板"
+            color="amber"
+            span={2}
+            seenKey="freefree"
+            badge={<NewDot seenKey="freefree" latestAt={latestPostAt} recent={latestPostAt !== null && latestPostAt > newSince} />}
+          />
+        </TileGrid>
+      </div>
+      {/* 下段：「あったらいいな」を形にした実例。丸い形で、主な機能と別のものだと分かるようにする */}
+      <div className="space-y-2 pt-1 [--stagger-base:420ms]">
+        <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">「あったらいいな」を形にしました</h2>
+        <RoundRow label="「あったらいいな」を形にした実例">
+          {/* 3Dマップ（CBI サイトの3Dワールド）。CiDAO の外なので新しいタブで開く */}
+          <RoundLink href={METAVERSE_URL} icon={MapIcon} label="3Dマップ" color="blue" external />
+          {/* 食レポマップ（CBI サイト・2026-11-13）。名前は事業主の希望で短く「ぐるめ」 */}
+          <RoundLink href={GOURMET_MAP_URL} icon={Utensils} label="ぐるめ" color="rose" external />
+          {/* 防災マップ（CBI サイト・2026-11-13）。事業主の指示で「ぐるめ」の後ろ（防災は主役ではない） */}
+          <RoundLink href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="yellow" external />
+          {/* 病院マップ（2026-11-23）。休日に病院を探して困る人のため */}
+          <RoundLink href="/hospitals" icon={Hospital} label="病院" color="teal" />
+        </RoundRow>
+      </div>
       {orgCount || memberCount ? (
         <p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-center text-sm text-slate-600 dark:text-slate-300">
           {orgCount ? (
@@ -164,6 +232,9 @@ export default async function Home() {
             </div>
           </details>
         </header>
+
+        <HomeTileEffects />
+        {topRow}
 
         {!userId && tiles}
 

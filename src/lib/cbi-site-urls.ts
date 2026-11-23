@@ -5,5 +5,8 @@
 /** 防災マップ（CBI の試作） */
 export const DISASTER_MAP_URL = 'https://communitybankinzai.github.io/cbi-site/inzai-disaster-map/'
 
+/** 印西の3Dマップ（CBI サイトの3Dワールド）。ホームの下段「3Dマップ」から開く（2026-11-23） */
+export const METAVERSE_URL = 'https://communitybankinzai.github.io/cbi-site/metaverse/'
+
 /** 印西 食レポマップ（CiDAO の中では「ぐるめ」）。CiDAO ではないので utm は付けない */
 export const GOURMET_MAP_URL = 'https://communitybankinzai.github.io/cbi-site/gourmet-map/'

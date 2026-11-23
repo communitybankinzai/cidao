@@ -1,4 +1,5 @@
 import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { PostingRules } from '@/components/PostingRules'
 import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -95,6 +96,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
         <BackLink href="/events">イベント一覧</BackLink>
         <FeatureEyebrow feature="events" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">新しいイベント</h1>
+        <PostingRules variant="full" />
 
         {sp.error && (
           <p className="text-sm text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded p-3">

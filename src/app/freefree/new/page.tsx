@@ -1,4 +1,5 @@
 import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { PostingRules } from '@/components/PostingRules'
 import { accentClass } from '@/components/features'
 import { redirect, unstable_rethrow } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -116,6 +117,7 @@ export default async function NewFreefreePage() {
         <BackLink href="/freefree">FreeFree</BackLink>
         <FeatureEyebrow feature="freefree" />
         <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい掲載</h1>
+        <PostingRules variant="full" />
         <NewFreefreeForm
           action={handleCreate}
           userId={user.id}
