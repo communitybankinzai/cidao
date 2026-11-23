@@ -4,7 +4,18 @@
 // 地図は食レポの候補画面（NewShopPanel）と同じ Leaflet（CDN）＋国土地理院の標準地図。サーバーの処理は使わない（データは src/lib/hospitals.ts）。
 // 同じ建物に入っている医療機関は、1つのピンにまとめて出す（重なって押せなくなるため）。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HOSPITALS, HOSPITAL_FILTERS, HOSPITAL_OPEN_MARKS, matchesHospitalFilter, type Hospital } from '@/lib/hospitals'
+import {
+  HOSPITALS,
+  HOSPITALS_AS_OF,
+  HOSPITAL_DAY_FILTERS,
+  HOSPITAL_FILTERS,
+  HOSPITAL_OPEN_MARKS,
+  matchesHospitalDay,
+  matchesHospitalFilter,
+  sortHospitalsForDay,
+  type Hospital,
+  type HospitalDayKey,
+} from '@/lib/hospitals'
 
 // 土曜午後・日曜・祝日の印を言葉にする（市の一覧の ●＝診療、▲＝要確認）
 function openLabels(h: Hospital): { text: string; sure: boolean }[] {
@@ -92,7 +103,14 @@ export function HospitalMap() {
   const mapEl = useRef<HTMLDivElement>(null)
   const ref = useRef<{ L: HLeaflet; map: HMap; markers: Map<string, HMarker> } | null>(null)
 
-  const shown = useMemo(() => HOSPITALS.filter((h) => filter === 'all' || matchesHospitalFilter(h, filter)), [filter])
+  // 曜日の絞り込み（2026-11-23・A案）。診療科と掛け合わせる。曜日を選んだときは、診療（●）を上、要確認（▲）を下に並べる
+  const [day, setDay] = useState<HospitalDayKey | 'all'>('all')
+
+  const shown = useMemo(() => {
+    const byDept = HOSPITALS.filter((h) => filter === 'all' || matchesHospitalFilter(h, filter))
+    if (day === 'all') return byDept
+    return sortHospitalsForDay(byDept.filter((h) => matchesHospitalDay(h, day)), day)
+  }, [filter, day])
 
   // 地図を作る（一度だけ）
   useEffect(() => {
@@ -154,6 +172,7 @@ export function HospitalMap() {
     mapEl.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
+  // 絞り込みのボタンには data-instant="true" を付ける（ButtonFeedback が押したボタンを6秒間「処理中」にして、続けて選べなくなるのを防ぐ）
   const btn = (active: boolean) =>
     `min-h-10 rounded-full border px-3 text-sm font-medium transition ${
       active
@@ -163,15 +182,37 @@ export function HospitalMap() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="診療科でしぼる">
-        <button type="button" className={btn(filter === 'all')} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-          すべて
-        </button>
-        {HOSPITAL_FILTERS.map((f) => (
-          <button key={f.key} type="button" className={btn(filter === f.key)} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-            {f.label}
+      <div className="space-y-1.5">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">診療科</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="診療科でしぼる">
+          <button data-instant="true" type="button" className={btn(filter === 'all')} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+            すべて
           </button>
-        ))}
+          {HOSPITAL_FILTERS.map((f) => (
+            <button data-instant="true" key={f.key} type="button" className={btn(filter === f.key)} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">曜日（診療科と組み合わせて選べます）</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="曜日でしぼる">
+          <button data-instant="true" type="button" className={btn(day === 'all')} aria-pressed={day === 'all'} onClick={() => setDay('all')}>
+            すべて
+          </button>
+          {HOSPITAL_DAY_FILTERS.map((d) => (
+            <button data-instant="true" key={d.key} type="button" className={btn(day === d.key)} aria-pressed={day === d.key} onClick={() => setDay(d.key)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+        {day !== 'all' ? (
+          <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+            市の一覧（{HOSPITALS_AS_OF}現在）で印のある所です。「診療」の所を上に、「要確認」の所を下に並べています。診療日は変わることがあるので、行く前に電話で確かめてください。
+          </p>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
@@ -185,6 +226,11 @@ export function HospitalMap() {
       <p className="text-sm font-semibold text-slate-700 dark:text-slate-200" aria-live="polite">
         {shown.length}件
       </p>
+      {shown.length === 0 ? (
+        <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          この組み合わせに当てはまる医療機関は、市の一覧にはありません。曜日か診療科を「すべて」に戻すか、上の電話の案内をお使いください。
+        </p>
+      ) : null}
       <ul className="space-y-2">
         {shown.map((h) => (
           <li key={h.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">

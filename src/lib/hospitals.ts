@@ -222,13 +222,35 @@ export const HOSPITAL_FILTERS: { key: string; label: string; words: string[] }[]
   { key: 'sanfujinka', label: '産科・婦人科', words: ['産科', '婦人科', '産婦人科', '女性'] },
   { key: 'kokoro', label: '心療内科・精神科', words: ['心療内科', '精神'] },
   { key: 'shika', label: '歯科', words: ['歯科'] },
-  { key: 'holiday', label: '日曜・祝日に診療', words: [] },
 ]
+
+// 曜日の絞り込み（2026-11-23 事業主決定・A案）。診療科と掛け合わせて「内科で日曜」のように探せるようにする。
+// 「日曜・祝日に診療」の1つのボタンをやめ、土曜午後・日曜・祝日を別々に選べるようにした。
+// 平日は載せない（各院の休診日・診療時間は載せない決まり。古い情報を見て行くと閉まっている害を避けるため）
+export type HospitalDayKey = 'satPm' | 'sun' | 'hol'
+export const HOSPITAL_DAY_FILTERS: { key: HospitalDayKey; label: string }[] = [
+  { key: 'satPm', label: '土曜午後' },
+  { key: 'sun', label: '日曜' },
+  { key: 'hol', label: '祝日' },
+]
+
+/** その曜日に印がある（診療●・要確認▲のどちらも含む） */
+export function matchesHospitalDay(h: Hospital, day: HospitalDayKey): boolean {
+  return Boolean(HOSPITAL_OPEN_MARKS[h.id]?.[day])
+}
+
+/** 曜日を選んだときの並び：診療（●）を上、要確認（▲）を下。同じ印どうしは元の順のまま */
+export function sortHospitalsForDay(list: Hospital[], day: HospitalDayKey): Hospital[] {
+  const rank = (h: Hospital) => (HOSPITAL_OPEN_MARKS[h.id]?.[day] === 'o' ? 0 : 1)
+  return list
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+    .map((x) => x.h)
+}
 
 export function matchesHospitalFilter(h: Hospital, key: string): boolean {
   const f = HOSPITAL_FILTERS.find((x) => x.key === key)
   if (!f) return true
-  if (key === 'holiday') return opensOnHoliday(h)
   // 歯科は「歯科」のボタンだけに出す（「歯科口腔外科」が外科に、「小児歯科」が小児科に混ざらないように）
   if (key === 'shika') return h.kind === '歯科' || h.dept.includes('歯科')
   if (h.kind === '歯科') return false
