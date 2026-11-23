@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { summarize } from '@/lib/contribution-summary'
 import { getCivicGroupCount } from '@/lib/org-count'
+import { openProposalsNote } from '@/lib/proposal-open-note'
 import { PushNudge } from '@/components/PushNudge'
 import { PageShell } from '@/components/layout/PageShell'
 import { PillLink, PillRow, RoundLink, RoundRow, Tile, TileGrid } from '@/components/Tile'
@@ -61,7 +62,8 @@ export default async function Home() {
   // 新着の印（掲示板・イベントのタイル）用に、いちばん新しい投稿の時刻も1件ずつ読む。条件は各一覧ページと同じ
   const now = new Date()
   const nowIso = now.toISOString()
-  const [{ count: memberCount }, orgCount, { data: latestPost }, { data: latestEvent }] = await Promise.all([
+  // 「提案・投票」タイルの件数（投票中・議論中）用に、参加できる提案の状態だけを読む（数件・ほかの読み取りと同時）
+  const [{ count: memberCount }, orgCount, { data: latestPost }, { data: latestEvent }, { data: openProposals }] = await Promise.all([
     supabase
       .from('members')
       .select('id', { count: 'exact', head: true })
@@ -84,7 +86,9 @@ export default async function Home() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from('proposals').select('status, voting_end_at').in('status', ['voting', 'discussion']).limit(100),
   ])
+  const proposalsNote = openProposalsNote(openProposals, now.getTime())
   const newSince = now.getTime() - NEW_DOT_DAYS * 86400_000
   const latestPostAt = toMs(latestPost?.created_at)
   const latestEventAt = toMs(latestEvent?.created_at)
@@ -150,7 +154,7 @@ export default async function Home() {
         <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">CiDAOでできること</h2>
         {/* 並び（2026-11-23 事業主決定）：提案・投票は横いっぱい／団体・人材は同じ行／イベント・掲示板は同じ行 */}
         <TileGrid label="CiDAOでできること" cols={6}>
-          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={6} />
+          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={6} note={proposalsNote} />
           <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" span={3} />
           <Tile href="/talent" icon={Users} label="人材をさがす" color="violet" span={3} />
           <Tile

@@ -106,6 +106,7 @@ export function Tile({
   span,
   seenKey,
   badge,
+  note,
 }: {
   href: string
   icon: LucideIcon
@@ -120,6 +121,8 @@ export function Tile({
   seenKey?: string
   /** 右上に重ねる印（新着の点など） */
   badge?: React.ReactNode
+  /** 名前の下に出す短い1行（例：「投票中 4件」）。無ければ出さない */
+  note?: string | null
 }) {
   const c = COLORS[color]
   const className = `cidao-tile relative flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border px-1 py-3 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
@@ -127,6 +130,11 @@ export function Tile({
     <>
       <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
       <span className={`text-[13px] font-semibold leading-tight ${c.label}`}>{label}</span>
+      {note ? (
+        <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold leading-tight text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+          {note}
+        </span>
+      ) : null}
       {badge}
     </>
   )
