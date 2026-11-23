@@ -1,6 +1,6 @@
 // 食レポの候補：地域の区分・絞り込み（2026-11-13）
 import { describe, expect, it } from 'vitest'
-import { areaVisible, candidateAreaClass, hintAreaClass, hintIsOutOfRange } from '../gourmet-area-class'
+import { areaVisible, candidateAreaClass, hintAreaClass, hintIsOutOfRange, isKitchenCar } from '../gourmet-area-class'
 
 describe('hintAreaClass', () => {
   it('印西市・千葉ニュータウン・牧の原は市内', () => {
@@ -52,5 +52,18 @@ describe('candidateAreaClass と areaVisible', () => {
     expect(areaVisible('pref', 'pref')).toBe(true)
     expect(areaVisible('out', 'pref')).toBe(false)
     expect(areaVisible('out', 'all')).toBe(true)
+  })
+})
+
+describe('isKitchenCar（住所調べの対象外・2026-11-24）', () => {
+  it('店名・アカウント名・理由にキッチンカーの言葉があれば該当', () => {
+    expect(isKitchenCar({ name: 'ハンバーグのキッチンカー', area_hint: '印西' })).toBe(true)
+    expect(isKitchenCar({ name: 'elena_kitchencar_66', area_hint: '' })).toBe(true)
+    expect(isKitchenCar({ name: 'クレープ屋', area_hint: '', reason: '移動販売のクレープ' })).toBe(true)
+    expect(isKitchenCar({ name: 'ＫＩＴＣＨＥＮ ＣＡＲ ハワイ' })).toBe(true)
+  })
+  it('ふつうのお店は該当しない', () => {
+    expect(isKitchenCar({ name: 'スナヲめし', area_hint: '印西市高花', reason: 'ランチの紹介' })).toBe(false)
+    expect(isKitchenCar({ name: 'Kitchen さくら', area_hint: '白井市' })).toBe(false)
   })
 })

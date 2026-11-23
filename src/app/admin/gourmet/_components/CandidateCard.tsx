@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import { approveSelected, rejectPost, rejectSelected, requestAddressResearch } from '../actions'
 import type { StoredShop } from '@/lib/gourmet-candidates'
 import { NewShopPanel } from './NewShopPanel'
-import { hintAreaClass } from '@/lib/gourmet-area-class'
+import { hintAreaClass, isKitchenCar } from '@/lib/gourmet-area-class'
 
 type Props = {
   id: string
@@ -62,7 +62,9 @@ export function CandidateCard(p: Props) {
               ) : (
               <>
                 <span className="text-xs text-slate-500">地図にないお店</span>
-                {s.research_requested_at ? (
+                {isKitchenCar(s) ? (
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-300">キッチンカーは住所が決まらないため、住所の自動調べの対象外です（載せるなら「地図に足して承認」で手入力）</span>
+                ) : s.research_requested_at ? (
                   <span className="rounded bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-2 py-0.5 text-xs text-sky-800 dark:text-sky-200">住所を調査中（結果が出れば自動で登録します）</span>
                 ) : (
                   !held && (

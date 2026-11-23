@@ -6,6 +6,7 @@
 //      - 範囲は千葉県内まで（2026-11-14 事業主決定「県内であればとりあえず登録」）。県外・閉店・移転・住所不明・確度低は登録しない
 //   B. 開いている依頼（成果待ち）が無く、地図にないお店（県外でない）が溜まっていれば、次の番号の依頼書を Drive に置く
 //      - 管理画面の「住所を調べて自動登録」（shops[].research_requested_at）が付いたお店は、開いている依頼があっても別の依頼にして先に出す。結果が出たら登録し、登録しなかった理由は research_note に残す
+//      - キッチンカー（移動販売）は決まった住所が無いので、最初から依頼の対象外（2026-11-24 事業主指示。判定は isKitchenCar）。地図に足すなら運営が手で入れる
 //   C. 地図のお店との照合がはっきりした候補を自動で承認する（2026-11-14「候補抽出・住所調査・地図登録まで自動化」条件つき）
 //      - 条件：保留なし・投稿が批判的でない（好意的／中立）・AI の確度が高・照合の1位がはっきり（chosen_ref あり）。ほかは管理画面に残す
 //   Muse は夜に依頼を処理する（21:05〜22:50）。直接頼めば即実行されるが、ここでは自動化しない。
@@ -15,7 +16,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { addShopAndApprove, approveShops } from '../src/lib/gourmet-candidates'
-import { hintAreaClass } from '../src/lib/gourmet-area-class'
+import { hintAreaClass, isKitchenCar } from '../src/lib/gourmet-area-class'
 import { gourmetAreaOf, insideChibaPrefecture } from '../src/lib/gourmet'
 
 const DRY = process.argv.includes('--dry-run')
@@ -243,6 +244,7 @@ async function main() {
       ;(c.shops as Array<Record<string, unknown>>).forEach((s, i) => {
         if (s.decision || s.status !== 'unmatched') return
         if (hintAreaClass(String(s.area_hint ?? '')) === 'out') return
+        if (isKitchenCar(s as { name?: string; area_hint?: string; reason?: string })) return // 住所が出てこないので調べない
         const last = lastRequestAt.get(`${c.id}:${i}`)
         const asked = typeof s.research_requested_at === 'string' ? s.research_requested_at : ''
         if (asked && (!last || last < asked)) urgent.push(mk(c, s, i, urgent.length + 1))

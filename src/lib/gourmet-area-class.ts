@@ -36,6 +36,17 @@ export function hintIsOutOfRange(hint: string): boolean {
   return hintAreaClass(hint) === 'out'
 }
 
+// ---- キッチンカー（2026-11-24 事業主指示「キッチンカーの住所は出てこないので、最初から巡回の対象外」） ----
+// キッチンカー・移動販売は決まった住所が無く、Muse に調べてもらっても「住所が分からない」で終わる（依頼078・079で実例）。
+// 住所調べの依頼（巡回）にも、管理画面の「住所を調べて自動登録」にも出さない。地図に足すときは運営が手で入れる。
+const KITCHEN_CAR_WORDS = ['キッチンカー', 'きっちんかー', 'kitchencar', 'kitchen car', 'kitchen_car', '移動販売', 'フードトラック', 'foodtruck', 'food truck']
+
+/** キッチンカー（移動販売）のお店か。店名・場所の手がかり・判断の理由のどれかに言葉があれば該当 */
+export function isKitchenCar(shop: { name?: string | null; area_hint?: string | null; reason?: string | null }): boolean {
+  const t = [shop.name, shop.area_hint, shop.reason].map((v) => String(v ?? '')).join(' ').normalize('NFKC').toLowerCase()
+  return KITCHEN_CAR_WORDS.some((w) => t.includes(w))
+}
+
 // ---- 候補の絞り込みと並べ替え（管理画面） ----
 export type AreaFilter = 'inzai' | 'near' | 'pref' | 'all'
 const RANK: Record<AreaClass, number> = { inzai: 0, unknown: 1, near: 2, pref: 3, out: 4 }
