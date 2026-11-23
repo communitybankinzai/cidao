@@ -139,7 +139,7 @@ export function NewDot({
   const show = seen !== '' && Number.isFinite(seenAt) ? latestAt > seenAt : recent
   if (!show) return null
   return (
-    <span className="cidao-new-dot absolute right-2.5 top-2.5 size-2.5 rounded-full bg-rose-600 dark:bg-rose-500">
+    <span className="cidao-new-dot absolute right-2 top-2 size-3.5 rounded-full border-2 border-white bg-rose-600 dark:bg-rose-500">
       <span className="sr-only">新着あり</span>
     </span>
   )

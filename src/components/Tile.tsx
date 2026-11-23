@@ -19,6 +19,7 @@ import { ArrowUpRight, type LucideIcon } from 'lucide-react'
  * - 色は意味づけでなく見分けやすさのため（2026-10-19 事業主が「9色・淡い背景」を選択）。
  *   ラベルは必ず濃い色の文字で、色だけで区別させない。ログイン／マイページは濃い紺で目立たせる。
  *   Tailwind が拾えるよう、クラス名は丸ごと書く
+ * - 2026-11-23：ホームの中段は solid（濃い塗り＋白い文字）、下段の丸は線だけにした（SOLID_BOX・ROUND_COLORS の説明を参照）
  */
 export function TileGrid({
   label,
@@ -97,6 +98,22 @@ const COLORS = {
 
 export type TileColor = keyof typeof COLORS
 
+/**
+ * 濃い塗り＋白い文字（ホームの中段）。
+ * 2026-11-23 運営メンバーの意見（「下段の丸が濃くて、目が下へ行く」「メインのボタンが光り輝く感じに」）で、
+ * 中段を濃く・下段を線だけにして強弱を入れ替えた（事業主決定・案1）。色あいは各ページの見出しと同じで、濃さだけ変える。
+ * 白い文字が 4.5:1 以上になる濃さを選ぶ。上の明るい帯と影で、動かさずに光って見せる
+ */
+const SOLID_BOX: Partial<Record<TileColor, string>> = {
+  indigo: 'bg-indigo-600 shadow-indigo-600/40',
+  emerald: 'bg-emerald-700 shadow-emerald-700/40',
+  violet: 'bg-violet-600 shadow-violet-600/40',
+  orange: 'bg-orange-700 shadow-orange-700/40',
+  amber: 'bg-amber-700 shadow-amber-700/40',
+}
+const SOLID_BASE =
+  'border-white/25 bg-linear-to-b from-white/25 to-transparent to-60% shadow-lg hover:brightness-110 dark:shadow-none'
+
 export function Tile({
   href,
   icon: Icon,
@@ -107,12 +124,15 @@ export function Tile({
   seenKey,
   badge,
   note,
+  solid = false,
 }: {
   href: string
   icon: LucideIcon
   label: string
   /** タイルの色。省略時は従来の淡い青 */
   color?: TileColor
+  /** 濃い塗り＋白い文字にする（SOLID_BOX にある色だけ。無い色は淡いまま） */
+  solid?: boolean
   /** CiDAO の外のページ（CBI サイトの食レポマップなど）。新しいタブで開く（2026-11-13） */
   external?: boolean
   /** TileGrid の cols={6} の中での幅（6＝横いっぱい、3＝半分、2＝3分の1） */
@@ -124,7 +144,10 @@ export function Tile({
   /** 名前の下に出す短い1行（例：「投票中 4件」）。無ければ出さない */
   note?: string | null
 }) {
-  const c = COLORS[color]
+  const solidBox = solid ? SOLID_BOX[color] : undefined
+  const c: Color = solidBox
+    ? { box: `${SOLID_BASE} ${solidBox}`, icon: 'text-white', label: 'text-white' }
+    : COLORS[color]
   const className = `cidao-tile relative flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border px-1 py-3 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
   const inner = (
     <>
@@ -198,13 +221,17 @@ export function PillLink({
  * 下段の丸いアイコン（3Dマップ・ぐるめ・防災・病院）。
  * 「あったらいいな」を形にした実例の入口。CiDAO の主な機能（角丸のタイル）と形で見分けられるようにする。
  * 色だけで区別させないよう、ラベルは必ず濃い色の文字で出す
+ *
+ * 2026-11-23（事業主決定・案1）：丸を「濃い塗り」から「白地に色の線」へ変えた。
+ * 濃い丸が中段より目立ち、目が下段へ行ってしまうという運営メンバーの意見による。中段（Tile の solid）と強弱を入れ替えてある
  */
+const ROUND_DISC_BASE = 'border-[1.5px] bg-white dark:bg-slate-900'
 const ROUND_COLORS = {
-  blue: { disc: 'bg-blue-600 dark:bg-blue-500', icon: 'text-white' },
-  rose: { disc: 'bg-rose-600 dark:bg-rose-500', icon: 'text-white' },
-  // 黄は白い絵だと読めないので、絵を濃い茶にする
-  yellow: { disc: 'bg-yellow-400 dark:bg-yellow-400', icon: 'text-yellow-950' },
-  teal: { disc: 'bg-teal-600 dark:bg-teal-500', icon: 'text-white' },
+  blue: { disc: 'border-blue-600 dark:border-blue-400', icon: 'text-blue-600 dark:text-blue-300' },
+  rose: { disc: 'border-rose-600 dark:border-rose-400', icon: 'text-rose-600 dark:text-rose-300' },
+  // 黄は白地だと線が見えないので、濃い黄土にする
+  yellow: { disc: 'border-yellow-700 dark:border-yellow-400', icon: 'text-yellow-700 dark:text-yellow-300' },
+  teal: { disc: 'border-teal-600 dark:border-teal-400', icon: 'text-teal-600 dark:text-teal-300' },
 } satisfies Record<string, { disc: string; icon: string }>
 
 export type RoundColor = keyof typeof ROUND_COLORS
@@ -241,7 +268,7 @@ export function RoundLink({
     'cidao-tile cidao-round group flex flex-col items-center gap-1.5 rounded-xl py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500'
   const inner = (
     <>
-      <span className={`cidao-round-disc flex size-14 items-center justify-center rounded-full ${c.disc}`}>
+      <span className={`cidao-round-disc flex size-14 items-center justify-center rounded-full ${ROUND_DISC_BASE} ${c.disc}`}>
         <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
       </span>
       <span className="inline-flex items-center gap-0.5 text-[13px] font-semibold leading-tight text-slate-800 dark:text-slate-100">
