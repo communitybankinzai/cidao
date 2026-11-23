@@ -112,7 +112,7 @@ export function HospitalMap() {
 
   // 曜日の絞り込み（2026-11-23・A案）。診療科と掛け合わせる。曜日を選んだときは、診療（●）を上、要確認（▲）を下に並べる
   // 開いた日が日曜・祝日・土曜の正午以降なら、その曜日を選んだ状態で始める（autoHospitalDay）。
-  // 利用者が選び直したら（pickedDay）、そちらを優先する。サーバーで描くときは「すべて」（ページは作り置きなので、今日が何曜日かは端末で決める）
+  // 利用者が選び直したら（pickedDay）、そちらを優先する。サーバーで描くときは「すべて」にし、今日が何曜日かは端末で決める（サーバーと端末で日付がずれたときに、表示が食い違わないように）
   const autoDay = useSyncExternalStore(subscribeNever, autoDayNow, autoDayOnServer)
   const [pickedDay, setDay] = useState<HospitalDayKey | 'all' | null>(null)
   const day = pickedDay ?? autoDay
