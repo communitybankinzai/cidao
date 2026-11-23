@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
+// 版の番号（ビルドのたびに変わる）。画面側（VersionRefresher）とサーバー側（/api/version）の両方に同じ値が埋め込まれ、
+// 開いたままの画面が古い版かどうかを比べるのに使う（2026-11-23）。
+// Vercel ではコミットの番号。取れないとき・手元では固定の 'dev'（番号がいつも同じ＝読み直しは起きない。
+// 時刻を使うと、この設定が読まれるたびに値が変わり、画面側とサーバー側で食い違って読み直しが起きてしまう）
+const BUILD_ID = process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
+  },
   // ネイティブバイナリを含むパッケージはバンドルせず実行時に require させる
   // （sharp は SNS 告知カード画像の生成で使用）
   serverExternalPackages: ["sharp", "satori"],

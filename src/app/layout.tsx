@@ -8,6 +8,7 @@ import { AdminLink } from '@/components/AdminLink'
 import { ContactLink } from '@/components/ContactLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 import { PageViewTracker } from '@/components/PageViewTracker'
+import { VersionRefresher } from '@/components/VersionRefresher'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -57,6 +58,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ButtonFeedback />
         <PageViewTracker />
+        <VersionRefresher />
         <TopBarSpacer />
         <ContactLink />
         <AdminLink />
