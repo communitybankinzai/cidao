@@ -148,16 +148,17 @@ export default async function Home() {
       {/* 中段：CiDAO の主な機能。色は各ページの見出しと同じ（features.ts） */}
       <div className="space-y-2 [--stagger-base:120ms]">
         <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">CiDAOでできること</h2>
+        {/* 並び（2026-11-23 事業主決定）：提案・投票は横いっぱい／団体・人材は同じ行／イベント・掲示板は同じ行 */}
         <TileGrid label="CiDAOでできること" cols={6}>
-          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={3} />
+          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={6} />
           <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" span={3} />
-          <Tile href="/talent" icon={Users} label="人材をさがす" color="violet" span={2} />
+          <Tile href="/talent" icon={Users} label="人材をさがす" color="violet" span={3} />
           <Tile
             href="/events"
             icon={CalendarDays}
             label="イベント"
             color="orange"
-            span={2}
+            span={3}
             seenKey="events"
             badge={<NewDot seenKey="events" latestAt={latestEventAt} recent={latestEventAt !== null && latestEventAt > newSince} />}
           />
@@ -166,7 +167,7 @@ export default async function Home() {
             icon={Megaphone}
             label="掲示板"
             color="amber"
-            span={2}
+            span={3}
             seenKey="freefree"
             badge={<NewDot seenKey="freefree" latestAt={latestPostAt} recent={latestPostAt !== null && latestPostAt > newSince} />}
           />

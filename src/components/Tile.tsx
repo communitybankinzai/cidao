@@ -114,8 +114,8 @@ export function Tile({
   color?: TileColor
   /** CiDAO の外のページ（CBI サイトの食レポマップなど）。新しいタブで開く（2026-11-13） */
   external?: boolean
-  /** TileGrid の cols={6} の中での幅（3＝半分、2＝3分の1） */
-  span?: 2 | 3
+  /** TileGrid の cols={6} の中での幅（6＝横いっぱい、3＝半分、2＝3分の1） */
+  span?: 2 | 3 | 6
   /** 新着の印（NewDot）と組で使う。押すと「見た」と覚える（HomeTileEffects が制御） */
   seenKey?: string
   /** 右上に重ねる印（新着の点など） */
@@ -131,7 +131,7 @@ export function Tile({
     </>
   )
   return (
-    <li className={span === 3 ? 'col-span-3' : span === 2 ? 'col-span-2' : undefined}>
+    <li className={span === 6 ? 'col-span-6' : span === 3 ? 'col-span-3' : span === 2 ? 'col-span-2' : undefined}>
       {external ? (
         <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
           {inner}
