@@ -3,13 +3,14 @@
 // 病院マップ（2026-11-23）。印西市の医療機関（医科・歯科）を地図と一覧で出す。
 // 地図は食レポの候補画面（NewShopPanel）と同じ Leaflet（CDN）＋国土地理院の標準地図。サーバーの処理は使わない（データは src/lib/hospitals.ts）。
 // 同じ建物に入っている医療機関は、1つのピンにまとめて出す（重なって押せなくなるため）。
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   HOSPITALS,
   HOSPITALS_AS_OF,
   HOSPITAL_DAY_FILTERS,
   HOSPITAL_FILTERS,
   HOSPITAL_OPEN_MARKS,
+  autoHospitalDay,
   matchesHospitalDay,
   matchesHospitalFilter,
   sortHospitalsForDay,
@@ -96,6 +97,12 @@ function popupHtml(list: Hospital[]): string {
   return `<div style="min-width:200px;max-width:260px;max-height:260px;overflow:auto"><div style="font-size:12px;color:#475569">${esc(head.addr)}${head.bld ? `（${esc(head.bld.replace(/ ?[0-9]F$/, ''))}）` : ''}</div>${approx}${rows.join('')}</div>`
 }
 
+// 「きょう選んでおく曜日」は開いたときに1回決めるだけなので、変化の知らせは要らない
+const subscribeNever = () => () => {}
+const autoDayNow = (): HospitalDayKey | 'all' => autoHospitalDay(new Date())
+const autoDayOnServer = (): HospitalDayKey | 'all' => 'all'
+const AUTO_DAY_WORD: Record<HospitalDayKey, string> = { sun: '日曜', hol: '祝日', satPm: '土曜の午後' }
+
 export function HospitalMap() {
   const [filter, setFilter] = useState<string>('all')
   const [mapError, setMapError] = useState<string | null>(null)
@@ -104,7 +111,11 @@ export function HospitalMap() {
   const ref = useRef<{ L: HLeaflet; map: HMap; markers: Map<string, HMarker> } | null>(null)
 
   // 曜日の絞り込み（2026-11-23・A案）。診療科と掛け合わせる。曜日を選んだときは、診療（●）を上、要確認（▲）を下に並べる
-  const [day, setDay] = useState<HospitalDayKey | 'all'>('all')
+  // 開いた日が日曜・祝日・土曜の正午以降なら、その曜日を選んだ状態で始める（autoHospitalDay）。
+  // 利用者が選び直したら（pickedDay）、そちらを優先する。サーバーで描くときは「すべて」（ページは作り置きなので、今日が何曜日かは端末で決める）
+  const autoDay = useSyncExternalStore(subscribeNever, autoDayNow, autoDayOnServer)
+  const [pickedDay, setDay] = useState<HospitalDayKey | 'all' | null>(null)
+  const day = pickedDay ?? autoDay
 
   const shown = useMemo(() => {
     const byDept = HOSPITALS.filter((h) => filter === 'all' || matchesHospitalFilter(h, filter))
@@ -208,6 +219,11 @@ export function HospitalMap() {
             </button>
           ))}
         </div>
+        {day !== 'all' && pickedDay === null ? (
+          <p className="text-xs font-semibold leading-relaxed text-sky-800 dark:text-sky-200">
+            きょうは{AUTO_DAY_WORD[day]}なので、「{HOSPITAL_DAY_FILTERS.find((d) => d.key === day)?.label}」を選んであります。全部を見るときは「すべて」を押してください。
+          </p>
+        ) : null}
         {day !== 'all' ? (
           <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
             市の一覧（{HOSPITALS_AS_OF}現在）で印のある所です。「診療」の所を上に、「要確認」の所を下に並べています。診療日は変わることがあるので、行く前に電話で確かめてください。

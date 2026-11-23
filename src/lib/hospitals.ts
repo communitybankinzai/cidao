@@ -6,6 +6,8 @@
 // 診療時間は載せない（変わりやすく、古い時間を見て行くと閉まっていることがあるため）。土曜午後・日曜・祝日の印だけ、市の一覧のとおりに載せる（2026-11-23 事業主指示）。歯科は 2026-11-23 に足した（位置・公式サイト・診療科は国の歯科診療所のデータ）。
 // 直すとき：市の一覧が新しくなったら HOSPITALS_AS_OF を変え、名前・電話・所在地を照らし合わせる。作り直しの道具は C:/Temp/oneoff/iryo/build.py・build_dental.py（控え）。
 
+import { isJapaneseHoliday, jstParts } from '@/lib/jp-holidays'
+
 export const HOSPITALS_AS_OF = '2026年8月1日'
 export const HOSPITALS_CITY_URL = 'https://www.city.inzai.lg.jp/0000021700.html'
 export const HOSPITALS_EMERGENCY_URL = 'https://www.city.inzai.lg.jp/0000001776.html'
@@ -246,6 +248,20 @@ export function sortHospitalsForDay(list: Hospital[], day: HospitalDayKey): Hosp
     .map((h, i) => ({ h, i }))
     .sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
     .map((x) => x.h)
+}
+
+/**
+ * 病院マップを開いたとき、曜日の段で最初に選んでおくもの（2026-11-23 事業主決定）。
+ * 休みの日に病院を探して困っている人が、押す回数を1回減らせるようにする。
+ *   日曜 → 「日曜」／祝日・振替休日（日曜以外）→「祝日」／土曜の正午以降 →「土曜午後」／それ以外 →「すべて」
+ * 日曜と祝日が重なる日は「日曜」にする。利用者が選び直したら、そちらを優先する（画面側）
+ */
+export function autoHospitalDay(now: Date): HospitalDayKey | 'all' {
+  const t = jstParts(now)
+  if (t.dow === 0) return 'sun'
+  if (isJapaneseHoliday(t.y, t.m, t.d)) return 'hol'
+  if (t.dow === 6 && t.hour >= 12) return 'satPm'
+  return 'all'
 }
 
 export function matchesHospitalFilter(h: Hospital, key: string): boolean {
