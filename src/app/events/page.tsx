@@ -40,6 +40,20 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   const rows: EventRow[] = (events ?? []) as EventRow[]
 
+  // カレンダー上の「新着」帯用：表示中の月に関係なく、72時間以内に登録された終わっていない催し
+  const newSinceMs = newBadgeSinceMs()
+  let newQuery = supabase
+    .from('events')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place, senior_place, cafe_place, created_at')
+    .neq('status', 'draft')
+    .gte('created_at', new Date(newSinceMs).toISOString())
+    .gt('end_at', new Date().toISOString())
+  if (tag === 'senior') newQuery = newQuery.eq('senior_place', true)
+  else if (tag === 'cafe') newQuery = newQuery.eq('cafe_place', true)
+  else if (tag) newQuery = newQuery.in('child_place', tagKinds(tag))
+  const { data: newEventsData } = await newQuery.order('start_at', { ascending: true }).limit(50)
+  const newEvents: EventRow[] = (newEventsData ?? []) as EventRow[]
+
   // 主催団体情報を一括解決（type / legal_form / logo_url も含む）
   const orgIds = Array.from(new Set(rows.filter((r) => r.organizer_type === 'org').map((r) => r.organizer_id)))
   const { data: orgList } = orgIds.length
@@ -93,7 +107,8 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         currentUserId={user?.id ?? null}
         isAdmin={!!isAdmin}
         tag={tag}
-        newSinceMs={newBadgeSinceMs()}
+        newSinceMs={newSinceMs}
+        newEvents={newEvents}
       />
     </PageShell>
   )

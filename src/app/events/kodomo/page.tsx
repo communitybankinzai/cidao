@@ -42,6 +42,19 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
     .order('start_at', { ascending: true })
   const rows: EventRow[] = (events ?? []) as EventRow[]
 
+  // カレンダー上の「新着」帯用：表示中の月に関係なく、72時間以内に登録された終わっていない催し
+  const newSinceMs = newBadgeSinceMs()
+  const { data: newEventsData } = await supabase
+    .from('events')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place, created_at')
+    .neq('status', 'draft')
+    .gte('created_at', new Date(newSinceMs).toISOString())
+    .gt('end_at', new Date().toISOString())
+    .in('child_place', tagKinds(tag))
+    .order('start_at', { ascending: true })
+    .limit(50)
+  const newEvents: EventRow[] = (newEventsData ?? []) as EventRow[]
+
   const orgIds = Array.from(new Set(rows.filter((r) => r.organizer_type === 'org').map((r) => r.organizer_id)))
   const { data: orgList } = orgIds.length
     ? await supabase.from('organizations').select('id, name, type, legal_form, logo_url').in('id', orgIds)
@@ -84,7 +97,8 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
           isAdmin={!!isAdmin}
           tag={tag}
           basePath="/events/kodomo"
-          newSinceMs={newBadgeSinceMs()}
+          newSinceMs={newSinceMs}
+          newEvents={newEvents}
         />
       </div>
 

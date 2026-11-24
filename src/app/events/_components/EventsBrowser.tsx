@@ -71,6 +71,8 @@ type Props = {
   basePath?: string
   // この時刻（ミリ秒）以降に登録された催しに「New」の札を出す。サーバー側で決めて渡す（表示のずれ防止）。未指定なら出さない
   newSinceMs?: number | null
+  // 表示中の月に関係なく取った「72時間以内に登録された、終わっていない催し」。カレンダー上の新着帯に使う
+  newEvents?: EventRow[]
 }
 
 // 「New」の札を付ける催しの id を求める。
@@ -103,6 +105,8 @@ function newBadgeIds(events: EventRow[], newSinceMs: number | null | undefined, 
   return ids
 }
 
+const NO_EVENTS: EventRow[] = []
+
 function NewBadge() {
   return (
     <span className="inline-block align-[2px] mr-1 px-1.5 py-px rounded text-[10px] font-bold leading-tight tracking-wide bg-rose-600 text-white dark:bg-rose-500" aria-label="新着">New</span>
@@ -111,7 +115,7 @@ function NewBadge() {
 
 const TYPE_ORDER: Array<'civic_group' | 'business' | 'government'> = ['civic_group', 'business', 'government']
 
-export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false, tag = null, basePath = '/events', newSinceMs = null }: Props) {
+export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false, tag = null, basePath = '/events', newSinceMs = null, newEvents = NO_EVENTS }: Props) {
   const [query, setQuery] = useState('')
   const [orgFilter, setOrgFilter] = useState<string>('all')  // 'all' | 'member_only' | orgId
   const [typeFilter, setTypeFilter] = useState<string | null>(null)  // null | 'civic_group' | 'business' | 'government'
@@ -119,7 +123,16 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   // 絞り込みの開閉。居場所で絞り込んでいるとき（?tag=）は最初から開いておく
   const [filtersOpen, setFiltersOpen] = useState(!!tag)
   // 「New」の札を付ける催し（絞り込み前の全件で決める＝絞り込みで札の位置が動かない）
-  const newIds = useMemo(() => newBadgeIds(events, newSinceMs, NEW_BADGE_MS), [events, newSinceMs])
+  // 札の判定は「表示中の月の催し＋月の外の新着」をまとめて行い、帯と各行で同じ1件に付ける
+  const newIds = useMemo(() => {
+    const seen = new Set(events.map((e) => e.id))
+    const all = events.concat(newEvents.filter((e) => !seen.has(e.id)))
+    return newBadgeIds(all, newSinceMs, NEW_BADGE_MS)
+  }, [events, newEvents, newSinceMs])
+  const bannerEvents = useMemo(
+    () => newEvents.filter((e) => newIds.has(e.id)).sort((a, b) => a.start_at.localeCompare(b.start_at)),
+    [newEvents, newIds],
+  )
 
   // 一覧に「編集」リンクを出すか。ここで拾えるのは管理者と登録者本人の分だけで、
   // 団体役員など他の編集権限者にはリンクが出ない（その場合は従来どおり詳細ページの「編集」から入る）。
@@ -461,6 +474,7 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             <span aria-hidden>📱</span>
             <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
           </p>
+          <NewEventsStrip events={bannerEvents} />
           <PeriodEventsStrip events={periodEvents} month={month} />
           <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} newIds={newIds} />
         </>
@@ -686,6 +700,38 @@ function TagChip({ href, active, title, children }: { href: string; active: bool
     >
       {children}
     </Link>
+  )
+}
+
+// 新着帯の日時「11/28（土）10:00」（日本時間）
+const newStripFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
+function formatNewStripDate(e: EventRow): string {
+  if (isMultiDayEvent(e)) return formatPeriodRange(ymdInJst(new Date(e.start_at)), periodEndYmd(e))
+  const p = Object.fromEntries(newStripFmt.formatToParts(new Date(e.start_at)).map((x) => [x.type, x.value]))
+  return `${p.month}/${p.day}（${p.weekday}）${p.hour}:${p.minute}`
+}
+
+// カレンダー上部の「新着」帯。マス目には札を付けないので、登録から72時間以内の催しをここで知らせる（押すと開く）
+function NewEventsStrip({ events }: { events: EventRow[] }) {
+  if (events.length === 0) return null
+  return (
+    <details className="mb-3 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 group">
+      <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-rose-800 dark:text-rose-200">
+        <NewBadge />
+        <span className="flex-1">新しく載ったイベント {events.length}件<span className="ml-1 text-xs font-normal text-rose-700/80 dark:text-rose-300/80">（登録から3日以内）</span></span>
+        <span aria-hidden className="text-xs transition-transform group-open:rotate-180">▼</span>
+      </summary>
+      <ul className="space-y-1.5 px-3 pb-3">
+        {events.map((e) => (
+          <li key={e.id}>
+            <Link href={`/events/${e.id}`} className="flex items-baseline gap-2 rounded-md border border-rose-100 dark:border-rose-900/60 bg-white dark:bg-slate-900 px-2.5 py-1.5 hover:bg-rose-50 dark:hover:bg-slate-800/50 transition-colors">
+              <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">{formatNewStripDate(e)}</span>
+              <span className="min-w-0 flex-1 text-sm text-slate-900 dark:text-slate-100 truncate">{e.title}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
