@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { PageShell } from '@/components/layout/PageShell'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { createClient } from '@/lib/supabase/server'
-import { buildCells, fetchWindow, parseYm, ymdInJst } from '@/lib/events-calendar'
+import { buildCells, fetchWindow, parseYm, newBadgeSinceMs, ymdInJst } from '@/lib/events-calendar'
 import { CHILD_PLACE_KINDS, parseChildPlaceTag, tagKinds, type ChildPlaceSummary } from '@/lib/child-place'
 import { loadChildPlaceReport } from '@/lib/child-place-data'
 import type { EvidenceRow } from '@/lib/child-place-evidence'
@@ -34,7 +34,7 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
   const { fetchStart, fetchEnd } = fetchWindow(y, m, view)
   const { data: events } = await supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place, created_at')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())
@@ -84,6 +84,7 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
           isAdmin={!!isAdmin}
           tag={tag}
           basePath="/events/kodomo"
+          newSinceMs={newBadgeSinceMs()}
         />
       </div>
 

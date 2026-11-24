@@ -39,6 +39,8 @@ export type EventRow = {
   cafe_place?: boolean | null
   /** 情報元（どこから入った情報か）。同じ名称の催しをまとめたときの内訳に使う */
   external_source?: string | null
+  /** 登録日時。「New」の札（登録から72時間）の判定に使う */
+  created_at?: string | null
 }
 export type OrgInfo = { id: string; name: string; type: string; legal_form: string | null; logo_url: string | null }
 
@@ -66,11 +68,26 @@ type Props = {
   tag?: PlaceTag | null
   // 月送り・ビュー切替のリンクの土台（既定は /events。専用ページでは /events/kodomo）
   basePath?: string
+  // この時刻（ミリ秒）以降に登録された催しに「New」の札を出す。サーバー側で決めて渡す（表示のずれ防止）。未指定なら出さない
+  newSinceMs?: number | null
+}
+
+// 登録から一定時間内（newSinceMs 以降に登録）の催しか。まとめた催しは代表（main）の行で判定する
+function isNewEvent(r: EventRow, newSinceMs: number | null | undefined): boolean {
+  if (newSinceMs == null || !r.created_at) return false
+  const t = Date.parse(r.created_at)
+  return Number.isFinite(t) && t >= newSinceMs
+}
+
+function NewBadge() {
+  return (
+    <span className="inline-block align-[2px] mr-1 px-1.5 py-px rounded text-[10px] font-bold leading-tight tracking-wide bg-rose-600 text-white dark:bg-rose-500" aria-label="新着">New</span>
+  )
 }
 
 const TYPE_ORDER: Array<'civic_group' | 'business' | 'government'> = ['civic_group', 'business', 'government']
 
-export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false, tag = null, basePath = '/events' }: Props) {
+export default function EventsBrowser({ events, orgInfo, cells, year, month, today, isLoggedIn, view, currentUserId = null, isAdmin = false, tag = null, basePath = '/events', newSinceMs = null }: Props) {
   const [query, setQuery] = useState('')
   const [orgFilter, setOrgFilter] = useState<string>('all')  // 'all' | 'member_only' | orgId
   const [typeFilter, setTypeFilter] = useState<string | null>(null)  // null | 'civic_group' | 'business' | 'government'
@@ -419,10 +436,10 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
           </p>
           <PeriodEventsStrip events={periodEvents} month={month} />
-          <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} />
+          <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} newSinceMs={newSinceMs} />
         </>
       ) : (
-        <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} />
+        <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} newSinceMs={newSinceMs} />
       )}
       </div>
     </div>
@@ -703,7 +720,7 @@ function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: numbe
 }
 
 function CalendarView({
-  cells, byDate, periodEvents, today, year, month, isLoggedIn, orgInfo, organizerLabel,
+  cells, byDate, periodEvents, today, year, month, isLoggedIn, orgInfo, organizerLabel, newSinceMs,
 }: {
   cells: string[]
   byDate: Map<string, EventRow[]>
@@ -714,6 +731,7 @@ function CalendarView({
   isLoggedIn: boolean
   orgInfo: Record<string, OrgInfo>
   organizerLabel: (r: EventRow) => string
+  newSinceMs: number | null
 }) {
   // 日付タップで、その日のイベント一覧をカレンダー直下に表示する。
   // 初期表示は「今日」（イベントがある場合のみパネルが出る）
@@ -817,6 +835,7 @@ function CalendarView({
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">{hmFmt.format(new Date(e.start_at))}</span>
                 <span className="min-w-0">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
+                    {isNewEvent(e, newSinceMs) && <NewBadge />}
                     {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
                     {e.title}
                   </span>
@@ -839,6 +858,7 @@ function CalendarView({
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">期間</span>
                 <span className="min-w-0">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
+                    {isNewEvent(e, newSinceMs) && <NewBadge />}
                     {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
                     {e.title}
                   </span>
@@ -961,7 +981,7 @@ function RevealItem({
   )
 }
 
-function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean }) {
+function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newSinceMs }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean; newSinceMs: number | null }) {
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const { groups, membersOf } = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
@@ -1017,7 +1037,7 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow }: { even
                     ) : null}
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between mb-1 gap-2">
-                        <h2 className="text-base font-semibold truncate">{e.title}</h2>
+                        <h2 className="text-base font-semibold truncate">{isNewEvent(e, newSinceMs) && <NewBadge />}{e.title}</h2>
                         <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
                           {hmFmt.format(new Date(e.start_at))}
                         </span>

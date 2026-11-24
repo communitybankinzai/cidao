@@ -5,7 +5,7 @@ import { MarkSeen } from '@/components/HomeTileEffects'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { buildCells, fetchWindow, parseYm, ymdInJst } from '@/lib/events-calendar'
+import { buildCells, fetchWindow, parseYm, newBadgeSinceMs, ymdInJst } from '@/lib/events-calendar'
 import { tagKinds } from '@/lib/child-place'
 import { parsePlaceTag } from '@/lib/senior-place'
 import EventsBrowser, { type EventRow, type OrgInfo } from './_components/EventsBrowser'
@@ -29,7 +29,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   let eventsQuery = supabase
     .from('events')
-    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place, senior_place, cafe_place')
+    .select('id, title, description, category, start_at, end_at, location, online_flag, organizer_type, organizer_id, organizer_name_text, flyer_image_url, external_source, child_place, senior_place, cafe_place, created_at')
     .neq('status', 'draft')
     .lt('start_at', fetchEnd.toISOString())
     .gt('end_at', fetchStart.toISOString())
@@ -93,6 +93,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         currentUserId={user?.id ?? null}
         isAdmin={!!isAdmin}
         tag={tag}
+        newSinceMs={newBadgeSinceMs()}
       />
     </PageShell>
   )

@@ -50,3 +50,11 @@ export function fetchWindow(y: number, m: number, view: 'calendar' | 'list'): { 
   const fetchEnd = new Date((view === 'list' ? listEndUtc : endUtc).getTime() + 7 * 86_400_000)
   return { fetchStart, fetchEnd }
 }
+
+// 一覧で「New」の札を出す期間（登録＝events.created_at から72時間。2026-11-24 事業主決定）
+export const NEW_BADGE_MS = 72 * 60 * 60 * 1000
+
+// この時刻（ミリ秒）以降に登録された催しが「New」。サーバー側で1回だけ求めて一覧部品へ渡す
+export function newBadgeSinceMs(now: number = Date.now()): number {
+  return now - NEW_BADGE_MS
+}
