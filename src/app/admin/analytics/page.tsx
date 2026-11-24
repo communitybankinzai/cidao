@@ -60,6 +60,12 @@ const PAGE_LABELS: Record<string, string> = {
   '/install': 'アプリ追加',
   '/login': 'ログイン',
   '/bug-report': '相談・不具合報告',
+  // 「ホーム画面に追加」の案内の回数（実在のページではない。送るのは lib/install-track.ts）
+  '/go/install-shown': '📲 追加の案内が出た（端末ごとに1回）',
+  '/go/install-tap': '📲 追加ボタンが押された（保存直後の案内）',
+  '/go/install-tap-guide': '📲 追加ボタンが押された（案内ページ）',
+  '/go/install-added': '📲 追加できた（Android・パソコン）',
+  '/go/install-standalone': '📲 ホーム画面のアイコンから開いた（端末ごとに初回）',
 }
 
 function pct(current: number, prev: number): string {

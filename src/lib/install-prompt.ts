@@ -9,6 +9,8 @@
 // 取っておいた合図は、止めていなくても prompt() で確認を出せる（2026-11-24 Chrome で確認）。
 // 対応は Android の Chrome など。iPhone にはこの仕組みが無い。
 
+import { trackInstallOnce } from './install-track'
+
 export type InstallPromptEvent = Event & {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
@@ -30,6 +32,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('appinstalled', () => {
     saved = null
     installed = true
+    // 追加できた回数を数える（端末ごとに1回。iPhone にはこの合図が無い）
+    trackInstallOnce('install-added')
     emit()
   })
 }

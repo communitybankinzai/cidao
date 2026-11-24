@@ -12,6 +12,7 @@ import {
   type InstallNudgeMode,
 } from '@/lib/install-nudge'
 import { canPromptInstall, promptInstall, subscribeInstallPrompt, wasInstalled } from '@/lib/install-prompt'
+import { trackInstall, trackInstallOnce } from '@/lib/install-track'
 
 /**
  * 本登録・保存の直後に出す「ホーム画面に追加」の案内（2026-11-24 事業主決定・A案）。
@@ -62,6 +63,11 @@ export function InstallNudge() {
     }
   }, [])
 
+  // 案内が出た回数を数える（端末ごとに1回。保存のたびに増えないように）
+  useEffect(() => {
+    if (mode !== 'none') trackInstallOnce('install-shown')
+  }, [mode])
+
   if (added) {
     return (
       <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-3 rounded text-sm text-emerald-900 dark:text-emerald-100">
@@ -88,6 +94,7 @@ export function InstallNudge() {
   }
 
   const add = async () => {
+    trackInstall('install-tap')
     const outcome = await promptInstall()
     if (outcome === 'accepted') setAdded(true)
     // やめた・出せなかったときは、合図を使い切っているので、手順の表示に切り替わる（decide が決め直す）

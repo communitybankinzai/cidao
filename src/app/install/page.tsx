@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { PushHowtoVideo } from '@/components/PushHowtoVideo'
+import { canPromptInstall, promptInstall, subscribeInstallPrompt, wasInstalled } from '@/lib/install-prompt'
+import { trackInstall } from '@/lib/install-track'
 
 type Device = 'ios' | 'android' | 'other'
 
@@ -18,6 +20,8 @@ export default function InstallPage() {
   const [device, setDevice] = useState<Device>('other')
   const [inLineBrowser, setInLineBrowser] = useState(false)
   const [standalone, setStandalone] = useState(false)
+  const [canPrompt, setCanPrompt] = useState(false)
+  const [added, setAdded] = useState(false)
 
   useEffect(() => {
     const ua = navigator.userAgent || ''
@@ -28,6 +32,28 @@ export default function InstallPage() {
     // すでにホーム画面から起動している場合
     if (window.matchMedia('(display-mode: standalone)').matches) setStandalone(true)
   }, [])
+
+  // Android の Chrome では、ボタン1つで追加の確認を出せる（2026-11-25）。
+  // 合図は layout の InstallPromptCapture が先に受け取っている。あとから届いたとき・追加が済んだときにも読み直す
+  useEffect(() => {
+    const read = () => {
+      setCanPrompt(canPromptInstall())
+      if (wasInstalled()) setAdded(true)
+    }
+    const t = setTimeout(read, 0)
+    const unsubscribe = subscribeInstallPrompt(read)
+    return () => {
+      clearTimeout(t)
+      unsubscribe()
+    }
+  }, [])
+
+  async function addToHomeScreen() {
+    trackInstall('install-tap-guide')
+    const outcome = await promptInstall()
+    if (outcome === 'accepted') setAdded(true)
+    // やめた・出せなかったときは、合図を使い切っているのでボタンが消え、下の手順が残る
+  }
 
   function openInExternalBrowser() {
     const url = window.location.href
@@ -81,6 +107,33 @@ export default function InstallPage() {
             外部ブラウザで開く
           </Button>
         </div>
+      )}
+
+      {added && !standalone && (
+        <div className="bg-emerald-50 dark:bg-emerald-950 border-l-4 border-emerald-500 p-4 rounded">
+          <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+            ✓ ホーム画面に追加しました
+          </p>
+          <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+            次からは、ホーム画面のCiDAOのアイコンから開けます。
+          </p>
+        </div>
+      )}
+
+      {/* Android の Chrome：ボタン1つで追加できる。出せないとき（iPhone・LINEの中・合図が無い）は下の手順へ */}
+      {device === 'android' && !inLineBrowser && !standalone && !added && canPrompt && (
+        <section
+          aria-label="ボタンでホーム画面に追加"
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-2"
+        >
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">📲 このボタンで追加できます</h2>
+          <Button type="button" onClick={addToHomeScreen}>
+            ホーム画面に追加する
+          </Button>
+          <p className="text-xs text-slate-500">
+            押すと確認が1回出ます。「インストール」を押すと終わりです。うまくいかないときは、下の手順をご覧ください。
+          </p>
+        </section>
       )}
 
       {/* できるようになること */}

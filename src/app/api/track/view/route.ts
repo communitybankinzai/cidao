@@ -10,6 +10,7 @@
 //
 // /go/<名前>（/go/3dmap・/go/gourmet・/go/bousai・/go/hospitals）は実在のページではなく、
 // ホームの下段（「あったらいいな」の実例）が押された回数（2026-11-23。送るのは HomeTileEffects）。
+// /go/install-…（install-shown・install-tap など）は「ホーム画面に追加」の案内の回数（2026-11-25。送るのは lib/install-track.ts）。
 // 閲覧数の合計にもこの回数が含まれる。ページ別の表では /go/ で始まる行として見分けられる。
 //
 // path はクライアントで正規化済みだが、サーバ側でも同じ正規化をかけ直して
