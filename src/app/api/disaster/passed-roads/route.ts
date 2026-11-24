@@ -199,7 +199,9 @@ async function getUncached(request: Request) {
   if (!wantAll) query = query.eq('hidden', false)
   if (KINDS.has(kindParam)) query = query.eq('kind', kindParam)
   // 一般向けの一覧（1回 100ms・DB 1.3秒）は 60 秒の間は関数内で使い回す。運営の全件表示（all=1）は毎回読む（2026-11-06）
-  const { data, error } = wantAll
+  // 記録・修正の直後に画面が ?t= を付けて読み直すときも使い回さない（使い回すと、送ったばかりの線が最長60秒出ず「直す」も押せなかった・2026-11-24）
+  const fresh = searchParams.has('t')
+  const { data, error } = wantAll || fresh
     ? await query
     : await memoTtl(`passed-roads:rows:${kindParam}`, 60_000, async () => {
         const result = await query
