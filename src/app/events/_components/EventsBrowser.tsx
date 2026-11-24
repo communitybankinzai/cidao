@@ -10,6 +10,7 @@ import { TYPE_LABEL } from '@/lib/org-labels'
 import { CHILD_PLACE_KINDS, childPlaceLabel } from '@/lib/child-place'
 import { SENIOR_PLACE_DESC, SENIOR_PLACE_LABEL, placeTagLabel, type PlaceTag } from '@/lib/senior-place'
 import { CAFE_PLACE_DESC, CAFE_PLACE_LABEL } from '@/lib/cafe-place'
+import { NEW_BADGE_MS } from '@/lib/events-calendar'
 import { groupByEventName, isSameEventName, memberSourceLinks } from '@/lib/event-name-groups'
 
 const JST = 'Asia/Tokyo'
@@ -72,11 +73,34 @@ type Props = {
   newSinceMs?: number | null
 }
 
-// 登録から一定時間内（newSinceMs 以降に登録）の催しか。まとめた催しは代表（main）の行で判定する
-function isNewEvent(r: EventRow, newSinceMs: number | null | undefined): boolean {
-  if (newSinceMs == null || !r.created_at) return false
-  const t = Date.parse(r.created_at)
-  return Number.isFinite(t) && t >= newSinceMs
+// 「New」の札を付ける催しの id を求める。
+// 登録から一定時間内（newSinceMs 以降に登録）の催しが対象。ただし毎週の教室のように
+// 題名と主催が同じ回がまとめて登録されたときは、札が並ぶとうるさいので1件だけにする
+// （まだ終わっていない回のうちいちばん早い回。全回終わっていれば最初の回）。
+// 「今」は newSinceMs から逆算し、サーバーと画面で判定がずれないようにする。
+function newBadgeIds(events: EventRow[], newSinceMs: number | null | undefined, newBadgeMs: number): Set<string> {
+  const ids = new Set<string>()
+  if (newSinceMs == null) return ids
+  const nowMs = newSinceMs + newBadgeMs
+  const best = new Map<string, EventRow>()
+  const rank = (r: EventRow) => {
+    const start = Date.parse(r.start_at)
+    const ended = Date.parse(r.end_at) < nowMs
+    return { ended, start }
+  }
+  for (const r of events) {
+    if (!r.created_at) continue
+    const t = Date.parse(r.created_at)
+    if (!Number.isFinite(t) || t < newSinceMs) continue
+    const organizer = r.organizer_type === 'org' ? `org:${r.organizer_id}` : `member:${r.organizer_id}:${(r.organizer_name_text ?? '').trim()}`
+    const key = `${r.title.trim()}\u0000${organizer}`
+    const cur = best.get(key)
+    if (!cur) { best.set(key, r); continue }
+    const a = rank(r), b = rank(cur)
+    if ((a.ended === b.ended && a.start < b.start) || (!a.ended && b.ended)) best.set(key, r)
+  }
+  for (const r of best.values()) ids.add(r.id)
+  return ids
 }
 
 function NewBadge() {
@@ -94,6 +118,8 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
   const [onlineOnly, setOnlineOnly] = useState(false)
   // 絞り込みの開閉。居場所で絞り込んでいるとき（?tag=）は最初から開いておく
   const [filtersOpen, setFiltersOpen] = useState(!!tag)
+  // 「New」の札を付ける催し（絞り込み前の全件で決める＝絞り込みで札の位置が動かない）
+  const newIds = useMemo(() => newBadgeIds(events, newSinceMs, NEW_BADGE_MS), [events, newSinceMs])
 
   // 一覧に「編集」リンクを出すか。ここで拾えるのは管理者と登録者本人の分だけで、
   // 団体役員など他の編集権限者にはリンクが出ない（その場合は従来どおり詳細ページの「編集」から入る）。
@@ -436,10 +462,10 @@ export default function EventsBrowser({ events, orgInfo, cells, year, month, tod
             <span>スマホでは画面上の<strong className="text-slate-700 dark:text-slate-300">「リスト」</strong>表示の方が読みやすくなります</span>
           </p>
           <PeriodEventsStrip events={periodEvents} month={month} />
-          <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} newSinceMs={newSinceMs} />
+          <CalendarView cells={cells} byDate={byDate} periodEvents={allPeriodEvents} today={today} year={year} month={month} isLoggedIn={isLoggedIn} orgInfo={orgInfo} organizerLabel={organizerLabel} newIds={newIds} />
         </>
       ) : (
-        <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} newSinceMs={newSinceMs} />
+        <ListView events={filtered} today={today} organizerLabel={organizerLabel} orgInfo={orgInfo} canEditRow={canEditRow} newIds={newIds} />
       )}
       </div>
     </div>
@@ -720,7 +746,7 @@ function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: numbe
 }
 
 function CalendarView({
-  cells, byDate, periodEvents, today, year, month, isLoggedIn, orgInfo, organizerLabel, newSinceMs,
+  cells, byDate, periodEvents, today, year, month, isLoggedIn, orgInfo, organizerLabel, newIds,
 }: {
   cells: string[]
   byDate: Map<string, EventRow[]>
@@ -731,7 +757,7 @@ function CalendarView({
   isLoggedIn: boolean
   orgInfo: Record<string, OrgInfo>
   organizerLabel: (r: EventRow) => string
-  newSinceMs: number | null
+  newIds: Set<string>
 }) {
   // 日付タップで、その日のイベント一覧をカレンダー直下に表示する。
   // 初期表示は「今日」（イベントがある場合のみパネルが出る）
@@ -835,7 +861,7 @@ function CalendarView({
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">{hmFmt.format(new Date(e.start_at))}</span>
                 <span className="min-w-0">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
-                    {isNewEvent(e, newSinceMs) && <NewBadge />}
+                    {newIds.has(e.id) && <NewBadge />}
                     {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
                     {e.title}
                   </span>
@@ -858,7 +884,7 @@ function CalendarView({
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">期間</span>
                 <span className="min-w-0">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
-                    {isNewEvent(e, newSinceMs) && <NewBadge />}
+                    {newIds.has(e.id) && <NewBadge />}
                     {e.flyer_image_url && <span className="mr-1" aria-hidden>📎</span>}
                     {e.title}
                   </span>
@@ -981,7 +1007,7 @@ function RevealItem({
   )
 }
 
-function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newSinceMs }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean; newSinceMs: number | null }) {
+function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newIds }: { events: EventRow[]; today: string; organizerLabel: (r: EventRow) => string; orgInfo: Record<string, OrgInfo>; canEditRow: (r: EventRow) => boolean; newIds: Set<string> }) {
   // 年月ごとにグルーピング（表示順は events の並び = start_at 昇順を維持）
   const { groups, membersOf } = useMemo(() => {
     const m = new Map<string, { label: string; items: EventRow[] }>()
@@ -1037,7 +1063,7 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newSince
                     ) : null}
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between mb-1 gap-2">
-                        <h2 className="text-base font-semibold truncate">{isNewEvent(e, newSinceMs) && <NewBadge />}{e.title}</h2>
+                        <h2 className="text-base font-semibold truncate">{newIds.has(e.id) && <NewBadge />}{e.title}</h2>
                         <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
                           {hmFmt.format(new Date(e.start_at))}
                         </span>
