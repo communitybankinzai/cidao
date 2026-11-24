@@ -15,6 +15,7 @@ import RegisterConfirmSettings from './_components/RegisterConfirmSettings'
 import BroadcastNotifySettings from './_components/BroadcastNotifySettings'
 import { PushToggle } from '@/components/PushToggle'
 import { PushNudge } from '@/components/PushNudge'
+import { InstallNudge } from '@/components/InstallNudge'
 
 const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = {
   open: {
@@ -149,9 +150,14 @@ export default async function MyPage({
           </div>
         )}
 
+        {/* 本登録・保存の直後に、ホーム画面への追加を案内する（2026-11-24 事業主決定・A案）。
+            自動では追加できないので、Android はボタン・iPhone は3手順・LINE の中は「開き直す」を出す。
+            追加済み・閉じた人・パソコンには出ない（InstallNudge の中で判定） */}
+        {sp.updated && <InstallNudge />}
+
         {/* 本登録・保存の直後に、スマホへの通知の案内を出す（2026-11-22。運営の一斉お知らせに気づけない人が多いため）。
             設定ずみ・「今は設定しない」を押した人・対応していない端末には出ない（PushNudge の中で判定） */}
-        {sp.updated && <PushNudge />}
+        {sp.updated && <PushNudge skipIosInstall />}
 
         {/* 保存直後で一覧に載っていなければ、掲載には人材バンクでの公開が別途必要なことを明示
             （「登録したのに登録メンバー一覧に載らない」問い合わせ対策） */}

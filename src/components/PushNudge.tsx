@@ -20,8 +20,11 @@ const DISMISS_KEY = 'cidao_push_nudge_dismissed_at'
  *   ・iPhone の Safari（ホーム画面に追加する前） → 先に「ホーム画面に追加」の案内＋動画への入口
  * 購読済みの人と、それ以外の非対応ブラウザには何も表示しない。
  * （以前は iPhone の Safari が「非対応」と判定されて何も出ず、いちばん案内が要る人に届いていなかった）
+ *
+ * skipIosInstall：すぐ上に「ホーム画面に追加」の案内（InstallNudge）を置く画面で true にする。
+ *   iPhone 向けの「先にホーム画面に追加」の帯が、同じ中身で2つ並ばないようにするため。
  */
-export function PushNudge() {
+export function PushNudge({ skipIosInstall = false }: { skipIosInstall?: boolean } = {}) {
   const [mode, setMode] = useState<PushNudgeMode>('none')
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export function PushNudge() {
   }, [])
 
   if (mode === 'none') return null
+  if (mode === 'ios-install' && skipIosInstall) return null
 
   return (
     <section aria-label="プッシュ通知のご案内" className="space-y-1">

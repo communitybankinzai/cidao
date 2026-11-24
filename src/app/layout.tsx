@@ -9,6 +9,7 @@ import { ContactLink } from '@/components/ContactLink'
 import { ButtonFeedback } from '@/components/ButtonFeedback'
 import { PageViewTracker } from '@/components/PageViewTracker'
 import { VersionRefresher } from '@/components/VersionRefresher'
+import { InstallPromptCapture } from '@/components/InstallPromptCapture'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -59,6 +60,7 @@ export default function RootLayout({
         <ButtonFeedback />
         <PageViewTracker />
         <VersionRefresher />
+        <InstallPromptCapture />
         <TopBarSpacer />
         <ContactLink />
         <AdminLink />
