@@ -166,6 +166,28 @@ async function getUncached(request: Request) {
   const kindParam = searchParams.get('kind') ?? ''
   const format = searchParams.get('format') ?? 'json'
 
+  // ?own=<端末ID>：この端末が24時間以内に送った（伏せていない）記録の id だけを返す（2026-11-24）。
+  // 画面の「✏ この記録を直す」を出すため。端末の控え（localStorage）に頼ると、更新前に送った記録や
+  // 保存が消えた端末でボタンが出なかった（事業主の実機で発生）。端末IDは乱数なので他人には推測できない
+  const ownParam = searchParams.get('own')
+  if (ownParam !== null) {
+    const deviceId = ownParam.trim().slice(0, 64)
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'invalid_device_id' }, 400)
+    const { data: own, error: ownError } = await supabase
+      .from('disaster_passed_roads')
+      .select('id, created_at')
+      .eq('device_id', deviceId)
+      .eq('hidden', false)
+      .gte('created_at', new Date(Date.now() - OWNER_EDIT_SECONDS * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (isMissingTable(ownError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (ownError) return json(request, { error: ownError.message }, 500)
+    const response = json(request, { own: (own ?? []).map((row) => ({ id: row.id, createdAt: row.created_at })), ownerEditSeconds: OWNER_EDIT_SECONDS })
+    response.headers.set('Cache-Control', 'no-store')
+    return response
+  }
+
   // 運営用：伏せた記録も含めて返す（合言葉が合っているときだけ）
   const wantAll = searchParams.get('all') === '1' && isModerator(request)
 
@@ -632,7 +654,7 @@ export function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   const response = await getUncached(request)
   const url = new URL(request.url)
-  if (response.status === 200 && !url.searchParams.has('all') && !request.headers.get('x-moderation-key')) {
+  if (response.status === 200 && !url.searchParams.has('all') && !url.searchParams.has('own') && !request.headers.get('x-moderation-key')) {
     response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=120')
   }
   return response
