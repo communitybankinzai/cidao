@@ -153,6 +153,15 @@ export default async function AdminHomePage() {
           </li>
           <li>
             <Link
+              href="/admin/organizers"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
+            >
+              <h2 className="text-lg font-semibold mb-1">主催者の開催実績</h2>
+              <p className="text-sm text-slate-500">主催者名の表記ゆれをまとめた団体別の開催回数・情報元（CSV 出力・まとめ直しも可）</p>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/admin/orgs"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
