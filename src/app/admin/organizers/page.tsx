@@ -2,14 +2,22 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { loadOrganizerReport } from '@/lib/organizer-report-data'
+import { loadOrganizerDistinctPairs, loadOrganizerReport, type OrganizerDistinctRow } from '@/lib/organizer-report-data'
 import {
+  distinctPairId,
+  distinctPairRows,
   findSimilarCandidates,
   organizerYmdJst,
   type OrganizerGroup,
   type SimilarCandidate,
 } from '@/lib/organizer-groups'
-import { mergeOrganizerGroups, unmergeOrganizerGroup, unmergeOrganizerKey } from './actions'
+import {
+  markOrganizersDistinct,
+  mergeOrganizerGroups,
+  undoOrganizersDistinct,
+  unmergeOrganizerGroup,
+  unmergeOrganizerKey,
+} from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,8 +128,26 @@ function CandidateCard({ c }: { c: SimilarCandidate }) {
           「{c.b.name}」
         </Button>
       </form>
+      <form action={markOrganizersDistinct} className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="pairs" value={JSON.stringify(distinctPairRows(c.a, c.b))} />
+        <input type="hidden" name="label_a" value={c.a.name} />
+        <input type="hidden" name="label_b" value={c.b.name} />
+        <Button type="submit" size="sm" variant="outline">
+          別の団体です
+        </Button>
+        <span className="text-[11px] text-slate-500">次から候補に出しません（下の一覧から取り消せます）</span>
+      </form>
     </div>
   )
+}
+
+/** 「別の団体です」の記録を、1回の記録ごとにまとめる（新しい順） */
+function groupDecisions(rows: OrganizerDistinctRow[]): { id: string; a: string; b: string; at: string }[] {
+  const map = new Map<string, { id: string; a: string; b: string; at: string }>()
+  for (const r of rows) {
+    if (!map.has(r.decision_id)) map.set(r.decision_id, { id: r.decision_id, a: r.label_a, b: r.label_b, at: r.created_at })
+  }
+  return [...map.values()].sort((x, y) => (x.at < y.at ? 1 : -1))
 }
 
 export default async function AdminOrganizersPage({
@@ -139,8 +165,10 @@ export default async function AdminOrganizersPage({
   const { q: rawQ } = await searchParams
   const q = normalizeForSearch(rawQ ?? '')
 
-  const report = await loadOrganizerReport(supabase)
-  const candidates = findSimilarCandidates(report.groups)
+  const [report, distinctRows] = await Promise.all([loadOrganizerReport(supabase), loadOrganizerDistinctPairs(supabase)])
+  const distinct = new Set(distinctRows.map((r) => distinctPairId(r.key_a, r.key_b)))
+  const candidates = findSimilarCandidates(report.groups, 150, distinct)
+  const decisions = groupDecisions(distinctRows)
   const shown = q ? report.groups.filter((g) => groupMatches(g, q)) : report.groups
 
   return (
@@ -178,7 +206,7 @@ export default async function AdminOrganizersPage({
           <h2 className="text-sm font-semibold">似ている候補（{candidates.length}件）</h2>
           <p className="text-xs text-slate-500">
             自動ではまとまらなかったが、同じ団体かもしれない組み合わせです。同じ団体なら、残したい名前のほうを押すとまとまります。
-            別の団体なら何もしなくて構いません（押さなければ変わりません）。
+            別の団体なら「別の団体です」を押すと、次から候補に出ません。
           </p>
           {candidates.length === 0 ? (
             <p className="text-sm text-slate-500 bg-white dark:bg-slate-900 border rounded-lg p-6">候補はありません。</p>
@@ -190,6 +218,27 @@ export default async function AdminOrganizersPage({
                   <CandidateCard key={`${c.a.id}|${c.b.id}`} c={c} />
                 ))}
               </div>
+            </details>
+          )}
+          {decisions.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-slate-600 dark:text-slate-300">
+                別の団体として記録したもの（{decisions.length}件）
+              </summary>
+              <ul className="mt-2 space-y-2">
+                {decisions.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center gap-2 bg-white dark:bg-slate-900 border rounded-lg px-3 py-2">
+                    <span className="break-all">「{d.a}」と「{d.b}」</span>
+                    <span className="text-slate-500">{organizerYmdJst(d.at)}</span>
+                    <form action={undoOrganizersDistinct} className="ml-auto">
+                      <input type="hidden" name="decision_id" value={d.id} />
+                      <button type="submit" className="text-[11px] text-slate-500 hover:underline">
+                        取り消す（また候補に出す）
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
             </details>
           )}
         </section>

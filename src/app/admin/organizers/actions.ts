@@ -76,3 +76,49 @@ export async function unmergeOrganizerGroup(formData: FormData): Promise<void> {
   if (error) throw new Error(`解除に失敗しました: ${error.message}`)
   revalidatePath('/admin/organizers')
 }
+
+/**
+ * 似ている候補の2つを「別の団体です」と記録する（次から候補に出さない）。
+ * pairs … 2つのまとまりの自動キーの組（key_a < key_b）。1回の記録は decision_id でまとめ、取り消しもその単位。
+ */
+export async function markOrganizersDistinct(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireAdmin()
+  const labelA = String(formData.get('label_a') ?? '').trim()
+  const labelB = String(formData.get('label_b') ?? '').trim()
+  if (labelA.length < 1 || labelA.length > 200 || labelB.length < 1 || labelB.length > 200) {
+    throw new Error('入力の形式が正しくありません')
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(String(formData.get('pairs') ?? '[]'))
+  } catch {
+    throw new Error('入力の形式が正しくありません')
+  }
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 300) throw new Error('入力の形式が正しくありません')
+  const pairs = raw.map((p) => {
+    const a = (p as { key_a?: unknown })?.key_a
+    const b = (p as { key_b?: unknown })?.key_b
+    if (typeof a !== 'string' || typeof b !== 'string' || !a || !b || a.length > 300 || b.length > 300 || !(a < b)) {
+      throw new Error('入力の形式が正しくありません')
+    }
+    return { key_a: a, key_b: b }
+  })
+
+  const decisionId = crypto.randomUUID()
+  const { error } = await supabase.from('organizer_distinct_pairs').upsert(
+    pairs.map((p) => ({ ...p, label_a: labelA, label_b: labelB, decision_id: decisionId, created_by: user.id })),
+    { onConflict: 'key_a,key_b' },
+  )
+  if (error) throw new Error(`記録に失敗しました: ${error.message}`)
+  revalidatePath('/admin/organizers')
+}
+
+/** 「別の団体です」の記録を取り消す（その組はまた候補に出る）。 */
+export async function undoOrganizersDistinct(formData: FormData): Promise<void> {
+  const { supabase } = await requireAdmin()
+  const decisionId = String(formData.get('decision_id') ?? '')
+  if (!/^[0-9a-f-]{36}$/i.test(decisionId)) throw new Error('対象がありません')
+  const { error } = await supabase.from('organizer_distinct_pairs').delete().eq('decision_id', decisionId)
+  if (error) throw new Error(`取り消しに失敗しました: ${error.message}`)
+  revalidatePath('/admin/organizers')
+}

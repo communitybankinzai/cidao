@@ -229,7 +229,33 @@ function isUnknownKey(key: string): boolean {
   return key.startsWith('主催者不明')
 }
 
-export function findSimilarCandidates(groups: OrganizerGroup[], limit = 150): SimilarCandidate[] {
+/** 「別の団体です」の記録の1組（自動キー2つ。並び順は問わない） */
+export function distinctPairId(k1: string, k2: string): string {
+  return k1 < k2 ? `${k1}\u0000${k2}` : `${k2}\u0000${k1}`
+}
+
+/** 2つのまとまりの自動キーの組を全部（「別の団体です」で記録する行。key_a < key_b） */
+export function distinctPairRows(a: OrganizerGroup, b: OrganizerGroup): { key_a: string; key_b: string }[] {
+  const rows = new Map<string, { key_a: string; key_b: string }>()
+  for (const x of a.keys) {
+    for (const y of b.keys) {
+      if (x === y) continue
+      const [key_a, key_b] = x < y ? [x, y] : [y, x]
+      rows.set(distinctPairId(key_a, key_b), { key_a, key_b })
+    }
+  }
+  return [...rows.values()]
+}
+
+/**
+ * distinct … 「別の団体です」と記録した自動キーの組（distinctPairId の値）。この組で似ているだけなら候補に出さない。
+ * 記録した後に新しい表記（別の自動キー）が増えて似ていれば、また候補に出る。
+ */
+export function findSimilarCandidates(
+  groups: OrganizerGroup[],
+  limit = 150,
+  distinct: ReadonlySet<string> = new Set(),
+): SimilarCandidate[] {
   const out: SimilarCandidate[] = []
   const seen = new Set<string>()
   const push = (a: OrganizerGroup, b: OrganizerGroup, reason: SimilarCandidate['reason']) => {
@@ -254,6 +280,7 @@ export function findSimilarCandidates(groups: OrganizerGroup[], limit = 150): Si
       const x = items[i]
       const y = items[j]
       if (x.g.id === y.g.id) continue
+      if (distinct.has(distinctPairId(x.key, y.key))) continue
       const [short, long] = x.key.length <= y.key.length ? [x.key, y.key] : [y.key, x.key]
       if (short.length >= CONTAIN_MIN_LENGTH && long.includes(short)) {
         push(x.g, y.g, 'contain')

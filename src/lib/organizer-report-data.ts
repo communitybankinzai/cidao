@@ -48,3 +48,25 @@ export async function loadOrganizerReport(supabase: SupabaseClient): Promise<Org
   ])
   return buildOrganizerReport(events, aliases, orgs)
 }
+
+export type OrganizerDistinctRow = {
+  key_a: string
+  key_b: string
+  label_a: string
+  label_b: string
+  decision_id: string
+  created_at: string
+}
+
+/** 「別の団体です」と記録した組（似ている候補から外す・取り消し一覧に出す） */
+export async function loadOrganizerDistinctPairs(supabase: SupabaseClient): Promise<OrganizerDistinctRow[]> {
+  return selectAll<OrganizerDistinctRow>((from, to) =>
+    supabase
+      .from('organizer_distinct_pairs')
+      .select('key_a, key_b, label_a, label_b, decision_id, created_at')
+      .order('created_at', { ascending: false })
+      .order('key_a', { ascending: true })
+      .order('key_b', { ascending: true })
+      .range(from, to),
+  )
+}

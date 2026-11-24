@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildOrganizerReport,
+  distinctPairId,
+  distinctPairRows,
   findSimilarCandidates,
   organizerGroupsToCsv,
   organizerYmdJst,
@@ -107,6 +109,21 @@ describe('findSimilarCandidates', () => {
       [],
     )
     expect(findSimilarCandidates(r.groups).some((c) => c.a.name === 'コスモスパレット' && c.b.name === 'コスモスパレット')).toBe(false)
+  })
+
+  it('「別の団体です」と記録した組は出ない。ほかの候補は残る', () => {
+    const c = cands.find((x) => [x.a.name, x.b.name].includes('ここのわ'))!
+    const rows = distinctPairRows(c.a, c.b)
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((r) => r.key_a < r.key_b)).toBe(true)
+    const distinct = new Set(rows.map((r) => distinctPairId(r.key_a, r.key_b)))
+    const after = findSimilarCandidates(report.groups, 150, distinct)
+    expect(after.some((x) => [x.a.name, x.b.name].includes('ここのわ'))).toBe(false)
+    expect(after.length).toBe(cands.length - 1)
+  })
+
+  it('distinctPairId は並び順によらず同じ', () => {
+    expect(distinctPairId('b', 'a')).toBe(distinctPairId('a', 'b'))
   })
 })
 
