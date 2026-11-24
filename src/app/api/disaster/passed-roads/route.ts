@@ -86,6 +86,7 @@ function isModerator(request: Request) {
 const MIN_INTERVAL_SECONDS = 30
 const LIST_LIMIT = 2000
 const UNDO_WINDOW_SECONDS = 600 // 自分の記録を取り消せる時間
+const OWNER_EDIT_SECONDS = 24 * 60 * 60 // 自分の記録の線・時刻・メモを直せる時間（2026-11-24）
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin') ?? ''
@@ -445,10 +446,12 @@ export async function DELETE(request: Request) {
 export async function PATCH(request: Request) {
   const supabase = serviceClient()
   if (!supabase) return json(request, { error: 'server_not_configured' }, 503)
-  if (!isModerator(request)) return json(request, { error: 'forbidden' }, 403)
+  // 合言葉が無いときは、記録した本人（同じ端末・送信から24時間以内）が線・時刻・メモだけ直せる（2026-11-24 事業主決定）
+  const moderator = isModerator(request)
 
   const params = new URL(request.url).searchParams
   if (params.get('setting') === 'eventStart') {
+    if (!moderator) return json(request, { error: 'forbidden' }, 403)
     let payload: { eventStart?: unknown }
     try {
       payload = await request.json()
@@ -466,7 +469,7 @@ export async function PATCH(request: Request) {
   const id = params.get('id') ?? ''
   if (!/^[0-9a-f-]{36}$/.test(id)) return json(request, { error: 'invalid_id' }, 400)
 
-  let body: { endedAt?: unknown; note?: unknown; imageUrls?: unknown; sourceUrls?: unknown; path?: unknown }
+  let body: { endedAt?: unknown; note?: unknown; imageUrls?: unknown; sourceUrls?: unknown; path?: unknown; deviceId?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -474,6 +477,35 @@ export async function PATCH(request: Request) {
   }
 
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json(request, { error: 'invalid_json' }, 400)
+
+  // 本人の修正：線（path）・時刻（endedAt）・メモ（note）だけ。切る・写真・出典は運営だけ
+  if (!moderator) {
+    const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim().slice(0, 64) : ''
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) return json(request, { error: 'forbidden' }, 403)
+    if (params.get('splitAt') !== null || body.imageUrls !== undefined || body.sourceUrls !== undefined) {
+      return json(request, { error: 'forbidden' }, 403)
+    }
+    const { data: own, error: ownError } = await supabase
+      .from('disaster_passed_roads')
+      .select('device_id, created_at, hidden')
+      .eq('id', id)
+      .maybeSingle()
+    if (isMissingTable(ownError)) return json(request, { error: MIGRATION_HINT }, 503)
+    if (ownError) return json(request, { error: ownError.message }, 500)
+    // 他人の記録は直せない。存在の有無も教えない（取り消しと同じ）
+    if (!own || own.device_id !== deviceId) return json(request, { error: 'not_found' }, 404)
+    if (own.hidden) return json(request, { error: 'hidden' }, 409)
+    const ageSeconds = (Date.now() - new Date(own.created_at as string).getTime()) / 1000
+    if (ageSeconds > OWNER_EDIT_SECONDS) return json(request, { error: 'too_late', ownerEditSeconds: OWNER_EDIT_SECONDS }, 409)
+    // 時刻は新しく記録するときと同じ範囲（いまから24時間以内か、決まった災害の期間内）
+    if (body.endedAt !== undefined && body.endedAt !== null && body.endedAt !== '') {
+      const at = new Date(String(body.endedAt)).getTime()
+      if (Number.isNaN(at)) return json(request, { error: 'invalid_time' }, 400)
+      const inPastEvent = PAST_EVENTS.some((e) => at >= e.from && at <= e.to)
+      if (!inPastEvent && Date.now() - at > 24 * 60 * 60 * 1000) return json(request, { error: 'stale_time' }, 400)
+      if (at > Date.now() + 10 * 60 * 1000) return json(request, { error: 'future_time' }, 400)
+    }
+  }
 
   // 運営が1本の線を2本に切る（2026-09-26）。なぞりで離れた2点を結んだ直線（例：5km）は、点を動かしても消せないため。
   // ?splitAt=N（0始まり。N番の点から後ろが後半）。body.path があれば、動かした点をその線として切る。
