@@ -92,6 +92,20 @@ export default function HelpPage() {
         </li>
         <li>
           <Link
+            href="/help/bousai-map"
+            className="flex h-full min-h-24 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-500"
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="text-2xl leading-none">☔</span>
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">防災MAP 冠水した道の記録・直し方</span>
+            </span>
+            <span className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              通れなかった道・通れた道の記録のしかたと、送ったあと24時間以内に直す方法です（動画つき）。
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/help/auto-listing"
             className="flex h-full min-h-24 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-400 hover:shadow dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-500"
           >
