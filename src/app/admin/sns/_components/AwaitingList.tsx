@@ -25,9 +25,14 @@ const MEDIUM_FILTERS: Array<[string, string]> = [
   ['x', '𝕏'],
 ]
 
-export default function AwaitingList({ logs }: { logs: DraftLog[] }) {
+export default function AwaitingList({ logs, focusEventId }: { logs: DraftLog[]; focusEventId?: string }) {
   const [targetFilter, setTargetFilter] = useState('all')
   const [mediumFilter, setMediumFilter] = useState('all')
+  // イベント詳細の「📣 SNSで告知」から来たときは、そのイベントの下書きだけを出す。
+  // 承認・却下で該当が0件になっても絞り込みは保つ（「処理し終えた」と分かるように）
+  const [focusId, setFocusId] = useState<string | null>(focusEventId ?? null)
+  const isFocused = (l: DraftLog) => l.target_type === 'event' && l.target_id === focusId
+  const focusTitle = focusId ? logs.find(isFocused)?.title ?? null : null
   const [newestFirst, setNewestFirst] = useState(true)
 
   const countByTarget = useMemo(() => {
@@ -44,6 +49,7 @@ export default function AwaitingList({ logs }: { logs: DraftLog[] }) {
   const filtered = useMemo(() => {
     const list = logs.filter(
       (l) =>
+        (focusId === null || (l.target_type === 'event' && l.target_id === focusId)) &&
         (targetFilter === 'all' || l.target_type === targetFilter) &&
         (mediumFilter === 'all' || l.medium === mediumFilter),
     )
@@ -52,10 +58,26 @@ export default function AwaitingList({ logs }: { logs: DraftLog[] }) {
         ? b.created_at.localeCompare(a.created_at)
         : a.created_at.localeCompare(b.created_at),
     )
-  }, [logs, targetFilter, mediumFilter, newestFirst])
+  }, [logs, targetFilter, mediumFilter, newestFirst, focusId])
 
   return (
     <div className="space-y-3">
+      {focusId !== null && (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <span className="flex-1">
+            {focusTitle
+              ? <>📅 イベント「{focusTitle}」の下書きだけを表示しています（{logs.filter(isFocused).length} 件）</>
+              : <>📅 このイベントの承認待ちの下書きはありません（承認・却下が済んだか、まだ作られていません）</>}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFocusId(null)}
+            className="px-2.5 py-1 rounded border border-amber-400 bg-white text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-slate-800"
+          >
+            承認待ちをすべて表示（{logs.length} 件）
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <span className="text-slate-500 mr-1">対象:</span>
         {TARGET_FILTERS.map(([key, label]) => {

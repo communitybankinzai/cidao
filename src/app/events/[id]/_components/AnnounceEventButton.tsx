@@ -34,7 +34,10 @@ export function AnnounceEventButton({ eventId, hasFlyer }: { eventId: string; ha
       {msg && (
         <p className={`text-xs ${msg.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
           {msg.text}{' '}
-          <Link href="/admin/sns" className="underline">SNS管理画面へ</Link>
+          {/* 承認欄へ直行し、このイベントの下書きだけを出す（設定カードを延々スクロールさせない） */}
+          <Link href={`/admin/sns?event=${encodeURIComponent(eventId)}#approve`} className="underline">
+            {msg.ok ? 'このイベントの下書きを確認・承認する' : 'SNS管理画面へ'}
+          </Link>
         </p>
       )}
     </div>

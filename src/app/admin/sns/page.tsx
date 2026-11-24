@@ -39,7 +39,13 @@ const MEDIUM_LABEL: Record<string, string> = {
   instagram: '📷 IG',
 }
 
-export default async function AdminSnsPage() {
+export default async function AdminSnsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ event?: string }>
+}) {
+  // イベント詳細の「📣 SNSで告知」から来たときは、そのイベントの下書きだけを先に出す
+  const { event: focusEventId } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/admin/sns')
@@ -203,6 +209,42 @@ export default async function AdminSnsPage() {
           </p>
         </header>
 
+        {/* 承認はいちばん使う操作なので、設定カードより先に置く（2026-11-24） */}
+        <SnsActions />
+
+        <section id="approve" className="scroll-mt-4 bg-white dark:bg-slate-900 border rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">✍️ 投稿文の確認・承認（{awaiting.length} 件）</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            立ち上げ期は運営が事前に本文を確認する運用です（開発仕様書 v2.1 §3.11.4）。
+            <strong className="font-medium">承認したものだけが配信されます。</strong>
+            承認済みのものは<strong className="font-medium">毎日18時台（日本時間）に自動配信</strong>されます
+            （実行タイミングに最大1時間の幅があるため18:00ちょうどではありません）。
+            すぐ流したいときは上の「pending を実投稿」を押してください。
+          </p>
+          <ApprovalRules freefreeAuto={freefreeAutoPostEnabled} proposalAuto={autoPostEnabled} />
+          {awaiting.length > 0 ? (
+            <AwaitingList
+              focusEventId={focusEventId}
+              logs={awaiting.map((l) => ({
+                id: l.id,
+                target_type: l.target_type,
+                target_id: l.target_id,
+                medium: l.medium,
+                content: (l.content as string | null) ?? null,
+                approved_at: (l.approved_at as string | null) ?? null,
+                created_at: l.created_at,
+                title: titleOf(l.target_type, l.target_id),
+                mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
+                targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
+                consentNote: l.target_type === 'org' ? orgSnsShareNote(orgSnsShare.get(l.target_id)) : undefined,
+                heldWithin24h: typeof l.error_message === 'string' && l.error_message.startsWith(HELD_WITHIN_24H_NOTE),
+              }))}
+            />
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-4">承認待ちの投稿はありません</p>
+          )}
+        </section>
+
         <details className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 rounded-lg p-5">
           <summary className="cursor-pointer font-semibold text-sky-900 dark:text-sky-200">
             ❓ このページの使い方（承認と配信の仕組み）
@@ -280,40 +322,6 @@ export default async function AdminSnsPage() {
         <SnsAuthSettings status={authStatus} />
 
         <DisasterSnsMonitorRules initialRules={disasterMonitorRules} />
-
-        <SnsActions />
-
-        <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
-          <h2 className="text-lg font-semibold mb-1">✍️ 投稿文の確認・承認（{awaiting.length} 件）</h2>
-          <p className="text-xs text-slate-500 mb-3">
-            立ち上げ期は運営が事前に本文を確認する運用です（開発仕様書 v2.1 §3.11.4）。
-            <strong className="font-medium">承認したものだけが配信されます。</strong>
-            承認済みのものは<strong className="font-medium">毎日18時台（日本時間）に自動配信</strong>されます
-            （実行タイミングに最大1時間の幅があるため18:00ちょうどではありません）。
-            すぐ流したいときは上の「pending を実投稿」を押してください。
-          </p>
-          <ApprovalRules freefreeAuto={freefreeAutoPostEnabled} proposalAuto={autoPostEnabled} />
-          {awaiting.length > 0 ? (
-            <AwaitingList
-              logs={awaiting.map((l) => ({
-                id: l.id,
-                target_type: l.target_type,
-                target_id: l.target_id,
-                medium: l.medium,
-                content: (l.content as string | null) ?? null,
-                approved_at: (l.approved_at as string | null) ?? null,
-                created_at: l.created_at,
-                title: titleOf(l.target_type, l.target_id),
-                mediumLabel: MEDIUM_LABEL[l.medium] ?? l.medium,
-                targetLabel: TARGET_LABEL[l.target_type] ?? l.target_type,
-                consentNote: l.target_type === 'org' ? orgSnsShareNote(orgSnsShare.get(l.target_id)) : undefined,
-                heldWithin24h: typeof l.error_message === 'string' && l.error_message.startsWith(HELD_WITHIN_24H_NOTE),
-              }))}
-            />
-          ) : (
-            <p className="text-sm text-slate-400 text-center py-4">承認待ちの投稿はありません</p>
-          )}
-        </section>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-5">
           <h2 className="text-lg font-semibold mb-1">🗑 SNS削除待ち（{openTakedowns} 件）</h2>
