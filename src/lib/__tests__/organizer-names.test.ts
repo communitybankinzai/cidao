@@ -61,6 +61,11 @@ describe('市の部署は「課」の単位', () => {
     expect(k).toBe('印西市スポーツ振興課')
   })
 
+  it('都市計画課（「都市」の市を他の市と見ない）', () => {
+    expect(organizerKey('都市計画課計画係')).toBe(organizerKey('印西市都市建設部都市計画課計画係'))
+    expect(organizerKey('都市計画課計画係')).toBe('印西市都市計画課')
+  })
+
   it('高齢者福祉課（地域包括支援センターとの並記も）', () => {
     const k = organizerKey('印西市 福祉部 高齢者福祉課 包括支援係')
     expect(k).toBe('印西市高齢者福祉課')

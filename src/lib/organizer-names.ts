@@ -58,7 +58,8 @@ export function stripAnnotations(raw: string | null | undefined): string {
 //   課が見つからない（係・室だけ）名前は部署として扱わない。誤判定は名寄せ表で直す。
 // ---------------------------------------------
 const NOT_DEPARTMENT_WORDS = /協議会|協会|商工会|財団|法人|会社|組合|連合|学校|大学|病院/
-const OTHER_PLACE_RE = /県|郡|[町村]|(?<!印西)市(?!民)/
+// 「都市計画課」の「市」は他の市町村ではない（2026-11-24 都市計画課計画係がまとまらなかった）
+const OTHER_PLACE_RE = /県|郡|[町村]|(?<!印西|都)市(?!民)/
 
 /** 市の部署なら「○○課」を返す。そうでなければ null。 */
 export function cityDepartment(cleaned: string): string | null {
