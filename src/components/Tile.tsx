@@ -210,10 +210,19 @@ function LabelText({ label }: { label: string }) {
  * 「CiDAO の機能」ではなく「自分のこと・困ったとき」の入口なので、タイルと形を変える（2026-11-23 事業主決定・A案）。
  * solid＝紺の塗り、false＝白地に紺の枠
  */
-export function PillRow({ label, children }: { label: string; children: React.ReactNode }) {
+export function PillRow({
+  label,
+  children,
+  compact = false,
+}: {
+  label: string
+  children: React.ReactNode
+  /** 左寄せの小さい形（会員のホーム）。右上に浮いている連絡・管理・通知ベルと同じ行に並べるため、横いっぱいに広げない */
+  compact?: boolean
+}) {
   return (
     <nav aria-label={label}>
-      <ul className="cidao-stagger grid grid-cols-2 gap-2.5 sm:gap-3">{children}</ul>
+      <ul className={compact ? 'cidao-stagger flex gap-1.5' : 'cidao-stagger grid grid-cols-2 gap-2.5 sm:gap-3'}>{children}</ul>
     </nav>
   )
 }
@@ -223,11 +232,14 @@ export function PillLink({
   icon: Icon,
   label,
   solid = false,
+  compact = false,
 }: {
   href: string
   icon: LucideIcon
   label: string
   solid?: boolean
+  /** PillRow の compact と組で使う（高さ40px・字13px。右上の浮いているボタンと同じ高さ） */
+  compact?: boolean
 }) {
   const tone = solid
     ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white hover:bg-[#2a4d7a] dark:border-sky-700 dark:bg-sky-800 dark:hover:bg-sky-700'
@@ -237,9 +249,9 @@ export function PillLink({
       <Link
         href={href}
         prefetch={false}
-        className={`cidao-tile flex min-h-11 items-center justify-center gap-1.5 rounded-full border-[1.5px] px-3 text-sm font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${tone}`}
+        className={`cidao-tile flex ${compact ? 'min-h-10 gap-1 whitespace-nowrap text-[13px]' : 'min-h-11 gap-1.5 text-sm'} items-center justify-center rounded-full border-[1.5px] px-3 font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${tone}`}
       >
-        <Icon aria-hidden className="size-[18px]" strokeWidth={1.75} />
+        <Icon aria-hidden className={compact ? 'size-4' : 'size-[18px]'} strokeWidth={1.75} />
         {label}
       </Link>
     </li>

@@ -26,15 +26,19 @@ export function PageShell({
   width = 'default',
   feature,
   dense = false,
+  topBarRow = false,
 }: {
   children: React.ReactNode
   width?: keyof typeof WIDTH
   feature?: FeatureKey
   /** スマホでの上の余白と、かたまりどうしのすき間を詰める（ホーム用。最初の画面にボタンを全部入れるため・2026-11-25）。パソコンの幅では変わらない */
   dense?: boolean
+  /** dense と組で使う。スマホでの上の余白を、右上に浮いているボタン（連絡・管理・通知ベル。top-3＝12px）と同じにして、
+   *  本文の1行目をそのボタンと同じ行に並べる（会員のホーム・2026-11-25） */
+  topBarRow?: boolean
 }) {
   return (
-    <div className={`min-h-screen bg-slate-50 px-4 ${dense ? 'pt-4 pb-6' : 'py-6'} md:p-12 dark:bg-slate-950${feature ? ` accent-${FEATURES[feature].color}` : ''}`}>
+    <div className={`min-h-screen bg-slate-50 px-4 ${dense ? `${topBarRow ? 'pt-3' : 'pt-4'} pb-6` : 'py-6'} md:p-12 dark:bg-slate-950${feature ? ` accent-${FEATURES[feature].color}` : ''}`}>
       <main className={`mx-auto w-full ${dense ? 'space-y-4 md:space-y-6' : 'space-y-6'} ${WIDTH[width]}`}>{children}</main>
     </div>
   )

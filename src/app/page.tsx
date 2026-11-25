@@ -135,14 +135,18 @@ export default async function Home() {
 
   // ホームのボタンは3段（2026-11-23 事業主決定・A案）。段ごとに形を変えて、色が見えにくくても見分けられるようにする
   // 上段：自分のこと・困ったときの入口。ログイン前も後も、見出しのすぐ下（会員証より上）に置く
+  // 会員の画面では、右上に連絡・管理・通知ベルのボタンが固定で浮いている（layout.tsx。top-3・高さ40px・右から最大148px）。
+  // 会員証の帯を横いっぱいに一番上へ置いたら、帯の右側（登録の種類・QR）にこの3つが重なった（2026-11-25 事業主の指摘）。
+  // そこで会員の画面では、上段を小さい形にして3つのボタンと同じ行の左へ置き、帯はそのすぐ下にした（同日・事業主決定）
+  const isMemberView = Boolean(member && tierInfo)
   const topRow = (
-    <PillRow label="マイページと使い方">
+    <PillRow label="マイページと使い方" compact={isMemberView}>
       {userId ? (
-        <PillLink href="/me" icon={UserRound} label="マイページ" solid />
+        <PillLink href="/me" icon={UserRound} label="マイページ" solid compact={isMemberView} />
       ) : (
         <PillLink href="/login" icon={LogIn} label="ログイン" solid />
       )}
-      <PillLink href="/help" icon={CircleHelp} label="使い方" />
+      <PillLink href="/help" icon={CircleHelp} label="使い方" compact={isMemberView} />
     </PillRow>
   )
 
@@ -228,12 +232,14 @@ export default async function Home() {
   )
 
   return (
-    <PageShell width="narrow" dense>
+    <PageShell width="narrow" dense topBarRow={isMemberView}>
         {member && tierInfo ? (
-          /* 会員の画面：見出しの代わりに、会員証の細い帯を一番上に置く（2026-11-25 事業主決定「メンバーカードは一番上がいい」）。
+          <div className="space-y-2">
+          {topRow}
+          {/* 会員の画面：見出しの代わりに、上段（小さい形）の行と、会員証の細い帯を置く（2026-11-25 事業主決定「メンバーカードは一番上がいい」）。
              前の会員証は高さ約223pxあり、上に置くとボタンが最初の画面から押し出された。帯は約65px。
              「CiDAO」は帯の中に入れ（h1）、大きい見出しの行は出さない。QR は押すと大きく出る（MemberQr）。
-             登録した月・「地域通貨 準備中」の箱は帯には入れていない。名前・貢献度は1行で、長いときは末尾を省く（高さを変えないため） */
+             登録した月・「地域通貨 準備中」の箱は帯には入れていない。名前・貢献度は1行で、長いときは末尾を省く（高さを変えないため） */}
           <section aria-label="会員証">
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <Avatar src={member.avatar_url} name={member.display_name} size="md" />
@@ -253,6 +259,7 @@ export default async function Home() {
               {qrDataUrl && <MemberQr src={qrDataUrl} name={member.display_name} />}
             </div>
           </section>
+          </div>
         ) : (
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
@@ -291,7 +298,7 @@ export default async function Home() {
         )}
 
         <HomeTileEffects />
-        {topRow}
+        {!isMemberView && topRow}
 
         {tiles}
 
