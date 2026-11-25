@@ -149,7 +149,8 @@ export default async function Home() {
   // 中段・下段。ログイン前も後も、上段の直下に置く。
   // 2026-11-25 事業主決定（「スマホで開いた最初の画面でボタンがすべて画面内に入っているとよい」）：
   // それまでログイン後は会員証の下に置いていたが、会員の画面では最初の画面に上段の2つしか入らなかった。
-  // 会員証・通知の案内・次の一歩はボタンの下へ移し、すき間とボタンの高さも詰めた（PageShell の dense・Tile.tsx）
+  // 通知の案内・次の一歩はボタンの下へ移し、すき間とボタンの高さも詰めた（PageShell の dense・Tile.tsx）。
+  // 会員証は、同じ日のうちに細い帯にして一番上（見出しの代わり）へ戻した（下の return の先頭）
   const tiles = (
     <section aria-label="できること" className="space-y-2">
       {/* 中段：CiDAO の主な機能。色は各ページの見出しと同じ（features.ts） */}
@@ -228,6 +229,31 @@ export default async function Home() {
 
   return (
     <PageShell width="narrow" dense>
+        {member && tierInfo ? (
+          /* 会員の画面：見出しの代わりに、会員証の細い帯を一番上に置く（2026-11-25 事業主決定「メンバーカードは一番上がいい」）。
+             前の会員証は高さ約223pxあり、上に置くとボタンが最初の画面から押し出された。帯は約65px。
+             「CiDAO」は帯の中に入れ（h1）、大きい見出しの行は出さない。QR は押すと大きく出る（MemberQr）。
+             登録した月・「地域通貨 準備中」の箱は帯には入れていない。名前・貢献度は1行で、長いときは末尾を省く（高さを変えないため） */
+          <section aria-label="会員証">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <Avatar src={member.avatar_url} name={member.display_name} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                  <h1 className="font-serif text-[15px] font-bold leading-none text-slate-900 dark:text-slate-100">CiDAO</h1>
+                  <span className="truncate text-[10px] uppercase tracking-[0.25em] text-slate-400">Member</span>
+                  <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${tierInfo.color}`}>
+                    {tierInfo.label}
+                  </span>
+                </div>
+                <div className="truncate text-lg font-bold leading-[22px] text-slate-900 dark:text-slate-100">{member.display_name}</div>
+                <div className="truncate text-[11px] leading-[14px] tabular-nums text-slate-500 dark:text-slate-400">
+                  貢献度 累計 {contribTotal} pt ・ 今月 {contribMonthly} pt
+                </div>
+              </div>
+              {qrDataUrl && <MemberQr src={qrDataUrl} name={member.display_name} />}
+            </div>
+          </section>
+        ) : (
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
             Citizen DAO · 市民DAO
@@ -262,6 +288,7 @@ export default async function Home() {
           </>
           )}
         </header>
+        )}
 
         <HomeTileEffects />
         {topRow}
@@ -311,55 +338,14 @@ export default async function Home() {
           </section>
         )}
 
-        {member && tierInfo && (
-          <section aria-label="会員証" className="space-y-2">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-              <div className="px-5 pt-4 pb-2 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] tracking-[0.25em] text-slate-400 uppercase">CiDAO Member</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tierInfo.color}`}>
-                  {tierInfo.label}
-                </span>
-              </div>
-              <div className="p-5 flex items-center gap-5">
-                <div className="flex-1 min-w-0 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar src={member.avatar_url} name={member.display_name} size="md" />
-                    <div className="min-w-0">
-                      <div className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 line-clamp-2 break-words">
-                        {member.display_name}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        登録: {new Date(member.created_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long' })}
-                      </div>
-                    </div>
-                  </div>
-                  <dl className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded bg-slate-50 dark:bg-slate-800 py-2">
-                      <dt className="text-[10px] text-slate-500">貢献度 累計</dt>
-                      <dd className="text-sm font-semibold tabular-nums">{contribTotal} pt</dd>
-                    </div>
-                    <div className="rounded bg-slate-50 dark:bg-slate-800 py-2">
-                      <dt className="text-[10px] text-slate-500">今月</dt>
-                      <dd className="text-sm font-semibold tabular-nums">{contribMonthly} pt</dd>
-                    </div>
-                    <div className="rounded bg-slate-50 dark:bg-slate-800 py-2">
-                      <dt className="text-[10px] text-slate-500">地域通貨</dt>
-                      <dd className="text-[11px] text-slate-400 pt-0.5">準備中</dd>
-                    </div>
-                  </dl>
-                </div>
-                {qrDataUrl && <MemberQr src={qrDataUrl} name={member.display_name} />}
-              </div>
-            </div>
-            {isLight && (
-              <p className="text-xs text-slate-400">
-                ライト登録では提案・投票・団体への応募・メンバーへのコンタクトはできません。{' '}
-                <Link href="/me/edit" className="underline hover:text-slate-600 dark:hover:text-slate-300">
-                  プロフィールを完成させて本登録する →
-                </Link>
-              </p>
-            )}
-          </section>
+        {/* ライト登録の人への注意書き（会員証を帯にして一番上へ移したので、ここに残した） */}
+        {isLight && (
+          <p className="text-xs text-slate-400">
+            ライト登録では提案・投票・団体への応募・メンバーへのコンタクトはできません。{' '}
+            <Link href="/me/edit" className="underline hover:text-slate-600 dark:hover:text-slate-300">
+              プロフィールを完成させて本登録する →
+            </Link>
+          </p>
         )}
 
         {/* プッシュ通知の購読案内（ログイン済み・未購読の人だけに表示） */}

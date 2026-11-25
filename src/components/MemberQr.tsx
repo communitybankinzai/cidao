@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * ホームの会員証の「会員QR」。タップすると大きく表示する（受付で読み取ってもらうため）。
+ * ホームの会員証（一番上の細い帯）の「会員QR」。タップすると大きく表示する（受付で読み取ってもらうため）。
  *
  * - QR は必ず白地・暗いモジュール（反転は読めない端末がある）。拡大時も白い枠で余白（クワイエットゾーン）を取る
  * - 拡大の画像は粗くならないよう、元の画像を大きめ（600px）で作ってある。拡大時は image-rendering: pixelated で
@@ -37,18 +37,18 @@ export function MemberQr({ src, name }: { src: string; name: string }) {
         data-instant="true"
         onClick={() => setOpen(true)}
         aria-label="会員QRを大きく表示する"
-        className="shrink-0 rounded-lg p-1 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+        className="shrink-0 rounded-md transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
       >
+        {/* 帯に入る大きさ（44px）。2026-11-25 に会員証を細い帯にしたので、96px＋説明の2行から小さくした。
+            小さい絵は読み取り用ではなく「ここを押すと大きく出る」目印（読み取りは拡大してから） */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
-          alt="会員識別QRコード（プロフィールページへのリンク）"
-          width={96}
-          height={96}
-          className="rounded border border-slate-200 dark:border-slate-700"
+          alt="会員識別QRコード（押すと大きく表示）"
+          width={44}
+          height={44}
+          className="block size-11 rounded border border-slate-200 dark:border-slate-700"
         />
-        <span className="mt-1 block text-[9px] text-slate-400">会員QR</span>
-        <span className="block text-[10px] font-semibold text-sky-700 underline dark:text-sky-300">タップで拡大</span>
       </button>
 
       {open && (
