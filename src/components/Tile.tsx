@@ -151,17 +151,20 @@ export function Tile({
     ? { box: `${SOLID_BASE} ${solidBox}`, icon: 'text-white', label: 'text-white' }
     : COLORS[color]
   // 高さ（2026-11-25 事業主決定）：スマホで開いた最初の画面に、上段・中段・下段のボタンが全部入るように低くした。
-  // 横いっぱいのタイル（span 6）は、アイコン・名前・件数を横に並べた帯（56px）。半分の幅のタイルは縦並びのまま 80px
-  const shape = span === 6 ? 'min-h-14 flex-row gap-2.5' : 'min-h-20 flex-col gap-1.5'
-  const className = `cidao-tile relative flex h-full ${shape} items-center justify-center rounded-2xl border px-1 py-2 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
+  // 横いっぱいのタイル（span 6＝提案・投票する）は、アイコン・名前・件数を横に並べた帯。
+  // はじめ56pxにしたが「縦幅が小さく、すぐ下の4つにより目立たなくなった」（同日・事業主）ので、
+  // 80px・字20px・アイコン36pxにして、半分の幅のタイルは 80px → 70px に下げた（合計の高さはほぼ同じ。いちばん目立つのは横いっぱいのタイル）
+  const big = span === 6
+  const shape = big ? 'min-h-20 flex-row gap-3 py-2' : 'min-h-[70px] flex-col gap-1 py-1.5'
+  const className = `cidao-tile relative flex h-full ${shape} items-center justify-center rounded-2xl border px-1 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
   const inner = (
     <>
-      <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
-      <span className={`text-base font-semibold leading-tight ${c.label}`}>
+      <Icon aria-hidden className={`${big ? 'size-9' : 'size-7'} ${c.icon}`} strokeWidth={1.75} />
+      <span className={`${big ? 'text-xl' : 'text-base'} font-semibold leading-tight ${c.label}`}>
         <LabelText label={label} />
       </span>
       {note ? (
-        <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold leading-tight text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+        <span className={`rounded-full bg-white/80 px-2.5 py-0.5 ${big ? 'text-xs' : 'text-[11px]'} font-semibold leading-tight text-slate-700 dark:bg-slate-900/60 dark:text-slate-200`}>
           {note}
         </span>
       ) : null}
