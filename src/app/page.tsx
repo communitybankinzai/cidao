@@ -146,9 +146,12 @@ export default async function Home() {
     </PillRow>
   )
 
-  // 中段・下段。ログイン前は上段の直下、ログイン後は会員証の下に置く
+  // 中段・下段。ログイン前も後も、上段の直下に置く。
+  // 2026-11-25 事業主決定（「スマホで開いた最初の画面でボタンがすべて画面内に入っているとよい」）：
+  // それまでログイン後は会員証の下に置いていたが、会員の画面では最初の画面に上段の2つしか入らなかった。
+  // 会員証・通知の案内・次の一歩はボタンの下へ移し、すき間とボタンの高さも詰めた（PageShell の dense・Tile.tsx）
   const tiles = (
-    <section aria-label="できること" className="space-y-3">
+    <section aria-label="できること" className="space-y-2">
       {/* 中段：CiDAO の主な機能。色は各ページの見出しと同じ（features.ts） */}
       <div className="space-y-2 [--stagger-base:120ms]">
         <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">CiDAOでできること</h2>
@@ -224,22 +227,27 @@ export default async function Home() {
   )
 
   return (
-    <PageShell width="narrow">
-        <header className="space-y-2">
+    <PageShell width="narrow" dense>
+        <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
             Citizen DAO · 市民DAO
           </p>
-          <h1 className="text-4xl font-serif font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100">
             CiDAO<span className="text-lg font-sans font-normal text-slate-400 ml-2">（シダオ）</span>
           </h1>
+          {/* 説明文は、はじめての人（ログイン前）にだけ出す。1行に短くして、全文は「くわしく見る」の中へ（2026-11-25）。
+              会員の画面では出さない（ボタンを最初の画面に入れるため） */}
+          {!userId && (
+          <>
           <p className="text-base leading-relaxed text-slate-700 dark:text-slate-300">
-            地域で「やってみたい」「手伝いたい」人と、協力を求める団体をつなぐ、印西市の無料の市民参加サービスです。
+            印西市の、無料の市民参加サービスです。
           </p>
           <details className="text-sm text-slate-600 dark:text-slate-400">
             <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
               くわしく見る
             </summary>
             <div className="mt-2 space-y-1.5 leading-relaxed bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 text-xs">
+              <p>地域で「やってみたい」「手伝いたい」人と、協力を求める団体をつなぐ、印西市の無料の市民参加サービスです。</p>
               <p>CiDAO でできることは、大きく3つです。</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>自分の得意なこと・興味を登録して、団体から活動の声がけを受け取る</li>
@@ -251,12 +259,14 @@ export default async function Home() {
               </p>
             </div>
           </details>
+          </>
+          )}
         </header>
 
         <HomeTileEffects />
         {topRow}
 
-        {!userId && tiles}
+        {tiles}
 
         {/* 初めての人向け：自分に合う入口を選ぶ（未ログイン時のみ） */}
         {!userId && (
@@ -381,8 +391,6 @@ export default async function Home() {
             </Link>
           </section>
         )}
-
-        {userId && tiles}
 
         <Link
           href="/install"

@@ -25,14 +25,17 @@ export function PageShell({
   children,
   width = 'default',
   feature,
+  dense = false,
 }: {
   children: React.ReactNode
   width?: keyof typeof WIDTH
   feature?: FeatureKey
+  /** スマホでの上の余白と、かたまりどうしのすき間を詰める（ホーム用。最初の画面にボタンを全部入れるため・2026-11-25）。パソコンの幅では変わらない */
+  dense?: boolean
 }) {
   return (
-    <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950${feature ? ` accent-${FEATURES[feature].color}` : ''}`}>
-      <main className={`mx-auto w-full space-y-6 ${WIDTH[width]}`}>{children}</main>
+    <div className={`min-h-screen bg-slate-50 px-4 ${dense ? 'pt-4 pb-6' : 'py-6'} md:p-12 dark:bg-slate-950${feature ? ` accent-${FEATURES[feature].color}` : ''}`}>
+      <main className={`mx-auto w-full ${dense ? 'space-y-4 md:space-y-6' : 'space-y-6'} ${WIDTH[width]}`}>{children}</main>
     </div>
   )
 }

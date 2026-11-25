@@ -35,7 +35,7 @@ export function TileGrid({
 }) {
   return (
     <nav aria-label={label}>
-      <ul className={`cidao-stagger grid gap-2.5 sm:gap-3 ${cols === 6 ? 'grid-cols-6' : 'grid-cols-3'}`}>{children}</ul>
+      <ul className={`cidao-stagger grid gap-2 sm:gap-3 ${cols === 6 ? 'grid-cols-6' : 'grid-cols-3'}`}>{children}</ul>
     </nav>
   )
 }
@@ -150,7 +150,10 @@ export function Tile({
   const c: Color = solidBox
     ? { box: `${SOLID_BASE} ${solidBox}`, icon: 'text-white', label: 'text-white' }
     : COLORS[color]
-  const className = `cidao-tile relative flex h-full min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border px-1 py-3 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
+  // 高さ（2026-11-25 事業主決定）：スマホで開いた最初の画面に、上段・中段・下段のボタンが全部入るように低くした。
+  // 横いっぱいのタイル（span 6）は、アイコン・名前・件数を横に並べた帯（56px）。半分の幅のタイルは縦並びのまま 80px
+  const shape = span === 6 ? 'min-h-14 flex-row gap-2.5' : 'min-h-20 flex-col gap-1.5'
+  const className = `cidao-tile relative flex h-full ${shape} items-center justify-center rounded-2xl border px-1 py-2 text-center transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${c.box}`
   const inner = (
     <>
       <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
@@ -262,7 +265,7 @@ export type RoundColor = keyof typeof ROUND_COLORS
 export function RoundRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <nav aria-label={label}>
-      <ul className="cidao-stagger grid grid-cols-4 gap-1 rounded-2xl border border-dashed border-slate-300 px-1 py-3 dark:border-slate-700">
+      <ul className="cidao-stagger grid grid-cols-4 gap-1 rounded-2xl border border-dashed border-slate-300 px-1 py-2 dark:border-slate-700">
         {children}
       </ul>
     </nav>
@@ -291,8 +294,9 @@ export function RoundLink({
     'cidao-tile cidao-round group flex flex-col items-center gap-1.5 rounded-xl py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500'
   const inner = (
     <>
-      <span className={`cidao-round-disc flex size-14 items-center justify-center rounded-full ${ROUND_DISC_BASE} ${c.disc}`}>
-        <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
+      {/* 丸は 56px → 48px（2026-11-25・最初の画面に全部入れるため）。名前の文字は13pxのまま */}
+      <span className={`cidao-round-disc flex size-12 items-center justify-center rounded-full ${ROUND_DISC_BASE} ${c.disc}`}>
+        <Icon aria-hidden className={`size-6 ${c.icon}`} strokeWidth={1.75} />
       </span>
       <span className="inline-flex items-center gap-0.5 text-[13px] font-semibold leading-tight text-slate-800 dark:text-slate-100">
         {label}
