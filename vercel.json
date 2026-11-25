@@ -44,5 +44,16 @@
       "path": "/api/cron/instagram-events-sync",
       "schedule": "35 21 * * 0"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/disaster/inzai-wells/route.ts": {
+      "regions": ["hnd1"]
+    },
+    "src/app/api/disaster/inzai-opendata/route.ts": {
+      "regions": ["hnd1"]
+    },
+    "src/app/api/disaster/inzai-shelters/route.ts": {
+      "regions": ["hnd1"]
+    }
+  }
 }
