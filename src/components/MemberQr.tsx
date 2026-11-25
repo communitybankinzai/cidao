@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ZoomIn } from 'lucide-react'
 
 /**
  * ホームの会員証（一番上の細い帯）の「会員QR」。タップすると大きく表示する（受付で読み取ってもらうため）。
@@ -37,7 +38,7 @@ export function MemberQr({ src, name }: { src: string; name: string }) {
         data-instant="true"
         onClick={() => setOpen(true)}
         aria-label="会員QRを大きく表示する"
-        className="shrink-0 rounded-md transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+        className="relative shrink-0 rounded-md transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
       >
         {/* 帯に入る大きさ（44px）。2026-11-25 に会員証を細い帯にしたので、96px＋説明の2行から小さくした。
             小さい絵は読み取り用ではなく「ここを押すと大きく出る」目印（読み取りは拡大してから） */}
@@ -49,6 +50,14 @@ export function MemberQr({ src, name }: { src: string; name: string }) {
           height={44}
           className="block size-11 rounded border border-slate-200 dark:border-slate-700"
         />
+        {/* 「押すと大きく出る」と分かる印（2026-11-25）。「タップで拡大」の文字を外した代わり。
+            重ねて置くので、帯の高さは変わらない */}
+        <span
+          aria-hidden
+          className="absolute -bottom-1 -right-1 flex size-[18px] items-center justify-center rounded-full bg-sky-700 text-white ring-2 ring-white dark:bg-sky-600 dark:ring-slate-900"
+        >
+          <ZoomIn className="size-3" strokeWidth={2.5} />
+        </span>
       </button>
 
       {open && (
