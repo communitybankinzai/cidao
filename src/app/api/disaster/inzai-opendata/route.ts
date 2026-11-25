@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
+// わが街ガイド（www2.wagmap.jp）は日本国外からの接続を断つため、東京で動かす（2026-11-25・iad1 では接続が10秒で失敗）
+export const preferredRegion = 'hnd1'
 
 type SourceRow = Record<string, string>
 
