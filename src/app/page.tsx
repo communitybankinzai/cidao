@@ -137,7 +137,9 @@ export default async function Home() {
   // 上段：自分のこと・困ったときの入口。ログイン前も後も、見出しのすぐ下（会員証より上）に置く
   // 会員の画面では、右上に連絡・管理・通知ベルのボタンが固定で浮いている（layout.tsx。top-3・高さ40px・右から最大148px）。
   // 会員証の帯を横いっぱいに一番上へ置いたら、帯の右側（登録の種類・QR）にこの3つが重なった（2026-11-25 事業主の指摘）。
-  // そこで会員の画面では、上段を小さい形にして3つのボタンと同じ行の左へ置き、帯はそのすぐ下にした（同日・事業主決定）
+  // そこで会員の画面では、上段を小さい形にして3つのボタンと同じ行の左へ置き、帯はそのすぐ下にした（同日・事業主決定）。
+  // それでも画面を少し下へ動かすと、会員証が3つのボタンの下にもぐって重なった（3つは画面に貼りついたまま・同日の2度目の指摘）。
+  // そこでこの行を、下へ動かしても画面の上に残る帯（背景つき・横いっぱい）にした。会員証は帯の下に隠れる（同日・事業主決定A）
   const isMemberView = Boolean(member && tierInfo)
   const topRow = (
     <PillRow label="マイページと使い方" compact={isMemberView}>
@@ -234,8 +236,14 @@ export default async function Home() {
   return (
     <PageShell width="narrow" dense topBarRow={isMemberView}>
         {member && tierInfo ? (
-          <div className="space-y-2">
-          {topRow}
+          <>
+          {/* 画面の上に残る帯。高さは 上の余白12＋ボタン40＋下の余白8＝60px で、右上の3つのボタン（上から12〜52px）がこの帯の中に収まる。
+             背景はページと同じ色で不透明（下を通る会員証を隠すため。透けさせない）。z は右上のボタン（z-50）より下・本文より上。
+             mb-0 は main の段のすき間（space-y）を打ち消して、会員証を帯のすぐ下（上から60px）に置くため。
+             パソコンの幅では PageShell の上の余白（48px）が残るので、md:-mt-3 で開いた直後の位置をそろえる */}
+          <div className="sticky top-0 z-40 -mx-4 mb-0 bg-slate-50 px-4 pt-3 pb-2 md:-mt-3 dark:bg-slate-950">
+            {topRow}
+          </div>
           {/* 会員の画面：見出しの代わりに、上段（小さい形）の行と、会員証の細い帯を置く（2026-11-25 事業主決定「メンバーカードは一番上がいい」）。
              前の会員証は高さ約223pxあり、上に置くとボタンが最初の画面から押し出された。帯は約65px。
              「CiDAO」は帯の中に入れ（h1）、大きい見出しの行は出さない。QR は押すと大きく出る（MemberQr）。
@@ -259,7 +267,7 @@ export default async function Home() {
               {qrDataUrl && <MemberQr src={qrDataUrl} name={member.display_name} />}
             </div>
           </section>
-          </div>
+          </>
         ) : (
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">
