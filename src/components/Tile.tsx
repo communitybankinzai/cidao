@@ -6,7 +6,8 @@ import { ArrowUpRight, type LucideIcon } from 'lucide-react'
  *
  * 初めて使う人が、文章を読まずに「何ができるか」を絵と短い言葉で選べるようにする。
  * 1画面に並べるのは10個まで、ラベルは5〜6文字までを目安にする（2026-11-23 事業主決定で「病院」を足し、9個→10個）。
- * ホームの中段だけは、2026-11-25 の事業主決定で行動を伴う言い方にしたので、この目安より長い（最長12文字・半分の幅のタイルに1行で収まる）。
+ * ホームの中段だけは、2026-11-25 の事業主決定で行動を伴う言い方にしたので、この目安より長い（最長12文字）。
+ * 同じ日の事業主決定で、タイルの名前の文字を 13px → 16px にした（見本の B）。最長の名前は幅375px以上で1行、それより狭いと「・」の後ろで折れて2行になる。
  *
  * 2026-11-23（事業主決定・A案）：ホームを3段に分け、段ごとに形を変えた。
  *   上段＝横長の丸ボタン（PillLink：マイページ・使い方）
@@ -153,7 +154,9 @@ export function Tile({
   const inner = (
     <>
       <Icon aria-hidden className={`size-7 ${c.icon}`} strokeWidth={1.75} />
-      <span className={`text-[13px] font-semibold leading-tight ${c.label}`}>{label}</span>
+      <span className={`text-base font-semibold leading-tight ${c.label}`}>
+        <LabelText label={label} />
+      </span>
       {note ? (
         <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold leading-tight text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
           {note}
@@ -174,6 +177,25 @@ export function Tile({
         </Link>
       )}
     </li>
+  )
+}
+
+/**
+ * タイルの名前。「・」の後ろでだけ折れるようにする（2026-11-25）。
+ * 文字を16pxにしたので、幅の狭いスマホでは「イベントを見る・登録する」が2行になる。
+ * そのままだと「登録す／る」のように途中で折れるため、「・」までをひとかたまりにする
+ */
+function LabelText({ label }: { label: string }) {
+  const parts = label.split('・')
+  if (parts.length === 1) return <>{label}</>
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i} className="inline-block">
+          {i < parts.length - 1 ? `${p}・` : p}
+        </span>
+      ))}
+    </>
   )
 }
 
