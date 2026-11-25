@@ -792,12 +792,13 @@ function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: numbe
 }
 
 /**
- * 「○月○日 のイベント」の行の右端に出す、チラシの縮小版（2026-11-25）。
+ * 「○月○日 のイベント」の行の左端に出す、チラシの縮小版（2026-11-25）。
  * 上の「開催中の期間イベント」の欄には縮小版が出るのに、日付を押して出る欄は 📎 の印だけだった（事業主の指摘）。
- * 大きさは期間イベントの欄と同じ。右端に置くのは、チラシの無い行と時刻の位置をそろえるため
+ * 大きさも置き場所（左端）も、期間イベントの欄と同じにする（はじめ右端に置いたが、同日の事業主の指摘「期間イベントは左にチラシがある」で左へ）。
+ * チラシの無い行は同じ幅を空けて、時刻の位置をそろえる
  */
 function FlyerThumb({ url }: { url: string | null }) {
-  if (!url) return null
+  if (!url) return <span aria-hidden className="w-8 shrink-0" />
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={url} alt="" loading="lazy" decoding="async" className="w-8 h-9 object-cover rounded border border-slate-200 dark:border-slate-700 shrink-0" />
@@ -922,6 +923,7 @@ function CalendarView({
           {dayGroups.map(({ main: e, members }) => (
             <li key={e.id}>
               <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
+                <FlyerThumb url={groupFlyerUrl(e, members)} />
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">{hmFmt.format(new Date(e.start_at))}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
@@ -930,7 +932,6 @@ function CalendarView({
                   </span>
                   <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{organizerLabel(e)}</span>
                 </span>
-                <FlyerThumb url={groupFlyerUrl(e, members)} />
               </Link>
               {members.length > 1 && (
                 <div className="mt-1 flex flex-wrap items-center gap-1 pl-3 text-[11px] text-slate-500 dark:text-slate-400">
@@ -945,6 +946,7 @@ function CalendarView({
           {periodGroups.map(({ main: e, members }) => (
             <li key={e.id}>
               <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
+                <FlyerThumb url={groupFlyerUrl(e, members)} />
                 <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400 pt-0.5 shrink-0">期間</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm text-slate-900 dark:text-slate-100 leading-snug">
@@ -955,7 +957,6 @@ function CalendarView({
                     {formatPeriodRange(ymdInJst(new Date(e.start_at)), periodEndYmd(e))}・{organizerLabel(e)}
                   </span>
                 </span>
-                <FlyerThumb url={groupFlyerUrl(e, members)} />
               </Link>
               {members.length > 1 && (
                 <div className="mt-1 flex flex-wrap items-center gap-1 pl-3 text-[11px] text-slate-500 dark:text-slate-400">
