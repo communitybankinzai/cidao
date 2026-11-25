@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PushHowtoVideo } from '@/components/PushHowtoVideo'
 import { canPromptInstall, promptInstall, subscribeInstallPrompt, wasInstalled } from '@/lib/install-prompt'
 import { trackInstall } from '@/lib/install-track'
+import { detectDevice, externalBrowserUrl } from '@/lib/install-nudge'
 
 type Device = 'ios' | 'android' | 'other'
 
@@ -23,20 +24,17 @@ export default function InstallPage() {
   const [canPrompt, setCanPrompt] = useState(false)
   const [added, setAdded] = useState(false)
 
-  useEffect(() => {
-    const ua = navigator.userAgent || ''
-    if (/iphone|ipad|ipod/i.test(ua)) setDevice('ios')
-    else if (/android/i.test(ua)) setDevice('android')
-    // LINEアプリ内ブラウザでは「ホーム画面に追加」が使えないため警告する
-    if (/\bLine\//i.test(ua)) setInLineBrowser(true)
-    // すでにホーム画面から起動している場合
-    if (window.matchMedia('(display-mode: standalone)').matches) setStandalone(true)
-  }, [])
-
+  // 端末の判定は、保存直後の案内（InstallNudge）と同じ部品（lib/install-nudge.ts）を使う。
   // Android の Chrome では、ボタン1つで追加の確認を出せる（2026-11-25）。
   // 合図は layout の InstallPromptCapture が先に受け取っている。あとから届いたとき・追加が済んだときにも読み直す
   useEffect(() => {
     const read = () => {
+      const d = detectDevice(navigator.userAgent || '')
+      setDevice(d.isIos ? 'ios' : d.isAndroid ? 'android' : 'other')
+      // LINEアプリ内ブラウザでは「ホーム画面に追加」が使えないため警告する
+      setInLineBrowser(d.inLineBrowser)
+      // すでにホーム画面から起動している場合
+      setStandalone(window.matchMedia('(display-mode: standalone)').matches)
       setCanPrompt(canPromptInstall())
       if (wasInstalled()) setAdded(true)
     }
@@ -57,15 +55,10 @@ export default function InstallPage() {
 
   function openInExternalBrowser() {
     const url = window.location.href
-    const ua = navigator.userAgent || ''
-    if (/iphone|ipad|ipod/i.test(ua)) {
-      window.location.href = url.replace(/^https?:\/\//i, 'x-safari-https://')
-    } else if (/android/i.test(ua)) {
-      const stripped = url.replace(/^https?:\/\//i, '')
-      window.location.href = `intent://${stripped}#Intent;scheme=https;package=com.android.chrome;end`
-    } else {
-      window.open(url, '_blank')
-    }
+    // 宛先の作り方は、保存直後の案内と同じ（iPhone＝Safari・Android＝Chrome・ほかは新しいタブ）
+    const target = externalBrowserUrl(url, navigator.userAgent || '')
+    if (target) window.location.href = target
+    else window.open(url, '_blank')
   }
 
   return (
