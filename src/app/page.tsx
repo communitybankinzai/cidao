@@ -153,15 +153,17 @@ export default async function Home() {
       <div className="space-y-2 [--stagger-base:120ms]">
         <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400">CiDAOでできること</h2>
         {/* 並び（2026-11-23 事業主決定）：提案・投票は横いっぱい／団体・人材は同じ行／イベント・掲示板は同じ行。
-            色（同日・案1）：中段は濃い塗り（solid）、下段は線だけの丸。主な機能のほうを目立たせる */}
+            色（同日・案1）：中段は濃い塗り（solid）、下段は線だけの丸。主な機能のほうを目立たせる
+            名前（2026-11-25 事業主決定）：項目の名前だけでなく、行動を伴う言い方にする（提案・投票する／イベントを見る・登録する／掲示板で伝える）。
+            いちばん長い「イベントを見る・登録する」が、幅320pxでも1行に収まることを確かめてある */}
         <TileGrid label="CiDAOでできること" cols={6}>
-          <Tile href="/proposals" icon={Vote} label="提案・投票" color="indigo" span={6} note={proposalsNote} solid />
+          <Tile href="/proposals" icon={Vote} label="提案・投票する" color="indigo" span={6} note={proposalsNote} solid />
           <Tile href="/orgs" icon={Building2} label="団体をさがす" color="emerald" span={3} solid />
           <Tile href="/talent" icon={Users} label="人材をさがす" color="violet" span={3} solid />
           <Tile
             href="/events"
             icon={CalendarDays}
-            label="イベント"
+            label="イベントを見る・登録する"
             color="orange"
             span={3}
             solid
@@ -171,7 +173,7 @@ export default async function Home() {
           <Tile
             href="/freefree"
             icon={Megaphone}
-            label="掲示板"
+            label="掲示板で伝える"
             color="amber"
             span={3}
             solid
