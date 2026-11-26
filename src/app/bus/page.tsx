@@ -26,7 +26,7 @@ export default function BusPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <ul className="list-disc space-y-1 pl-5">
           <li>いま載せているのは、ふれあいバス（7ルート・令和8年2月1日改正の時刻表）と、宗像路線（赤ルート・青ルート）・六合路線です。京成バスの路線は、順に追加します。</li>
-          <li>ふれあいバスは、市が公開している時刻表をもとに、この地図の運営が時刻を写したものです。路線の線は、バス停どうしを直線で結んでいます（実際の道とは少しずれます）。</li>
+          <li>ふれあいバスは、市が公開している時刻表をもとに、この地図の運営が時刻を写したものです。路線の線とバスの動きは、バス停からバス停までを道路に沿ってたどって作っています（実際に通る道と違う所があるかもしれません）。</li>
           <li>
             このページは、市民活動団体が自主的に作ったもので、印西市やバス会社が作ったものではありません。まちがいを見つけたら
             <a href="/bug-report?source=cidao_app&category=question" className="mx-1 text-blue-600 hover:underline">

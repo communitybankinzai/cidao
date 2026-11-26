@@ -49,10 +49,93 @@ def clean_name(s: str) -> str:
     return re.sub(r"\((着|発)\)", "", unicodedata.normalize("NFKC", s)).strip()
 
 
+def lay_on_roads(graph_path: str, stops: dict, trips: list, interp: set) -> tuple[dict, dict]:
+    """便ごとに、バス停からバス停までを道なりにたどった線（形）を作り、各バス停の「起点からの距離」を入れる。
+
+    画面は、この距離を時刻で按分してバスの位置を出す（＝道路に沿って走り、時刻表の時刻にバス停を通る）。
+    位置が町の代表点しか無いバス停（interp）は、前後のバス停を結ぶ道の上に、時刻の割合で置き直す。
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from route_on_roads import Roads, dist_m
+
+    roads = Roads(graph_path)
+    legs: dict[tuple[str, str], list] = {}
+    notes: dict[str, int] = {}
+    placed: set[str] = set()
+
+    def leg(a: str, b: str) -> list:
+        if (a, b) not in legs:
+            pa, pb = (stops[a]["lat"], stops[a]["lon"]), (stops[b]["lat"], stops[b]["lon"])
+            pts, note = (None, "同じ場所") if a == b else roads.path(pa, pb)
+            key = note or "道なり"
+            if pts is None:
+                pts = [pa, pb]
+                key = "直線のまま（" + note + "）"
+            notes[key] = notes.get(key, 0) + 1
+            if key.startswith("直線") and a != b:
+                notes.setdefault("直線の区間", [])  # type: ignore[arg-type]
+                notes["直線の区間"].append(f"{stops[a]['name']}→{stops[b]['name']}")  # type: ignore[union-attr]
+            legs[(a, b)] = pts
+        return legs[(a, b)]
+
+    def at(pts: list, cum: list, d: float):
+        for i in range(len(pts) - 1):
+            if d <= cum[i + 1] or i == len(pts) - 2:
+                f = 0.0 if cum[i + 1] == cum[i] else max(0.0, min(1.0, (d - cum[i]) / (cum[i + 1] - cum[i])))
+                return (pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f)
+        return pts[-1]
+
+    shapes: dict[str, list] = {}
+    shape_of: dict[tuple, tuple[str, list]] = {}
+    for trip in trips:
+        st = trip["st"]
+        key = (trip["route"],) + tuple(x[0] for x in st) + tuple(x[1] for x in st if x[0] in interp)
+        anchors = [i for i, x in enumerate(st) if x[0] not in interp or x[0] in placed or i in (0, len(st) - 1)]
+        if key in shape_of:
+            sid, dists = shape_of[key]
+        else:
+            pts: list = []
+            dists: list = [0.0] * len(st)
+            total = 0.0
+            for i, j in zip(anchors, anchors[1:]):
+                seg = leg(st[i][0], st[j][0])
+                cum = [0.0]
+                for u, v in zip(seg, seg[1:]):
+                    cum.append(cum[-1] + dist_m(u, v))
+                dists[i] = total
+                span = st[j][1] - st[i][2]
+                for k in range(i + 1, j):  # 間にある、位置が目安のバス停
+                    f = (st[k][1] - st[i][2]) / span if span > 0 else (k - i) / (j - i)
+                    f = max(0.0, min(1.0, f))
+                    dists[k] = total + cum[-1] * f
+                    if st[k][0] not in placed:
+                        la, lo = at(seg, cum, cum[-1] * f)
+                        stops[st[k][0]]["lat"], stops[st[k][0]]["lon"] = round(la, 6), round(lo, 6)
+                        stops[st[k][0]]["approx"] = "前後のバス停を結ぶ道の上に、時刻表の時間の割合で置いた位置"
+                        placed.add(st[k][0])
+                pts += seg if not pts else seg[1:]
+                total += cum[-1]
+                dists[j] = total
+            cum_all = [0.0]
+            for u, v in zip(pts, pts[1:]):
+                cum_all.append(cum_all[-1] + dist_m(u, v))
+            sid = f"fureai:s{len(shapes) + 1}"
+            shapes[sid] = [[round(pt[0], 5), round(pt[1], 5), round(c)] for pt, c in zip(pts, cum_all)]
+            shape_of[key] = (sid, dists)
+        trip["shape"] = sid
+        for x, dv in zip(st, dists):
+            if len(x) == 3:
+                x.append(round(dv))
+            else:
+                x[3] = round(dv)
+    return shapes, notes
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--work", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--roads", default="", help="道路のつながりのデータ（cbi-site の route_graph.json）。あれば、バス停の間を道なりにたどる")
     ap.add_argument("--holidays-from", default="", help="祝日の一覧を借りる network.json（印西市のGTFSの「平日」から外れている日）")
     args = ap.parse_args()
 
@@ -86,6 +169,7 @@ def main() -> int:
     }
 
     stops: dict[str, dict] = {}
+    interp: set[str] = set()
     no_pos: set[str] = set()
 
     def stop_id(name: str) -> str | None:
@@ -99,6 +183,8 @@ def main() -> int:
         elif key in approx:
             v = approx[key]
             stops[sid] = {"id": sid, "name": clean_name(name), "lat": v["lat"], "lon": v["lon"], "approx": v["how"]}
+            if "町名" in v["how"]:
+                interp.add(sid)  # 町の代表点は当てにならないので、あとで前後のバス停の間の道の上に置き直す
         else:
             no_pos.add(clean_name(name))
             return None
@@ -140,11 +226,15 @@ def main() -> int:
                 "st": st,
             })
 
+    shapes, road_notes = {}, {}
+    if args.roads:
+        shapes, road_notes = lay_on_roads(args.roads, stops, trips, interp)
+
     out = {
         "source": {"key": "fureai", "publisher": "印西市 ふれあいバス（市の時刻表PDFからCBIが作成）", "start": START, "end": "", "version": "令和8年2月1日改正"},
         "routes": routes,
         "stops": list(stops.values()),
-        "shapes": {},
+        "shapes": shapes,
         "trips": trips,
         "services": services,
     }
@@ -153,6 +243,8 @@ def main() -> int:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     ap_n = sum(1 for s in stops.values() if s.get("approx"))
     print(f"路線{len(routes)} バス停{len(stops)}（うち位置が目安 {ap_n}） 便{len(trips)} 祝日など{len(special)}日")
+    if args.roads:
+        print(f"道なりの線 {len(shapes)}本／区間の結果 {road_notes}")
     if no_pos:
         print("⚠ 位置が無く、載せていないバス停:", "・".join(sorted(no_pos)))
     return 0

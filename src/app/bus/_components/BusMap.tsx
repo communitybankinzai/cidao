@@ -720,7 +720,7 @@ export function BusMap() {
             })}
           </ul>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            データ：{net.sources.map((x) => `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月${Number(x.start.slice(6, 8))}日からの時刻）`).join('、')}／バス停の位置：国土数値情報（バス停留所・国土交通省）ほか／{net.builtAt} 取りこみ
+            データ：{net.sources.map((x) => `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月${Number(x.start.slice(6, 8))}日からの時刻）`).join('、')}／バス停の位置：国土数値情報（バス停留所・国土交通省）ほか／道路：© OpenStreetMap contributors／{net.builtAt} 取りこみ
           </p>
         </section>
       ) : null}
