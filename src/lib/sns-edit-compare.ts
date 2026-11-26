@@ -17,6 +17,9 @@ export function comparableSnsContent(text: string | null | undefined): string {
     .replace(/^⏳[^\n]*\n/, '')
     // リンクの utm（媒体別の計測用・2026-11-07 に付け始めた）は中身の違いではないので除いて比べる
     .replace(/\?utm_[^\s]*/g, '')
+    // 掲示板の呼び方（2026-11-26 に「FreeFree 掲示板」→「地域応援掲示板」に変えた定型の文）も中身の違いではない。
+    // そろえないと、Instagram に出した掲載を編集しただけで、紹介文を変えていなくても出し直しになる
+    .replace(/「FreeFree 掲示板」/g, '「地域応援掲示板」')
     .split('\n')
     .map((line) => line.replace(/[ \t　]+$/g, ''))
     .join('\n')

@@ -26,6 +26,13 @@ describe('isSameSnsContent', () => {
     expect(isSameSnsContent(after.replace(/threads/g, 'facebook'), after)).toBe(true)
     expect(isSameSnsContent(after, after.replace('/freefree/abc', '/freefree/xyz'))).toBe(false)
   })
+  it('掲示板の呼び方の言い換え（2026-11-26）だけなら同じ。前の配信と比べても出し直しにならない', () => {
+    const before = '【印西応援🩰】\n本文\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援'
+    const after = before.replace('「FreeFree 掲示板」', '「地域応援掲示板」')
+    expect(after).not.toBe(before)
+    expect(isSameSnsContent(before, after)).toBe(true)
+    expect(isSameSnsContent(before, after.replace('本文', '本文を直した'))).toBe(false)
+  })
   it('文の途中にある ⏳ は消さない', () => {
     expect(comparableSnsContent('本文 ⏳ 途中\n続き')).toBe('本文 ⏳ 途中\n続き')
   })
