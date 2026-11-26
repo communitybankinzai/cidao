@@ -143,7 +143,7 @@ export async function renderImportCard(input: CardInput): Promise<Buffer | null>
 
 // 写真つき掲載の Instagram 画像の上に付ける見出しの帯。プロフィールの一覧で何の投稿か分かるようにする
 export const HEADLINE_BAND_H = 300
-const HEADLINE_LABEL = 'FreeFree 地域応援掲示板'
+const HEADLINE_LABEL = '地域応援掲示板'
 const HEADLINE_MAX_CHARS = 44
 
 /** 見出しの帯（PNG・1080x300）。フォントが取れなければ null（呼び出し側は帯なしで続ける） */

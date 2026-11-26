@@ -79,7 +79,7 @@ export async function notifyFreefreeComment(input: {
         recipientId,
         actorId: input.commenterId,
         kind: 'comment',
-        title: `FreeFree「${String(post.title)}」に応援メッセージが届きました`,
+        title: `地域応援掲示板「${String(post.title)}」に応援メッセージが届きました`,
         body: `${name}：${commentPreview(input.body)}`,
         linkUrl: `/freefree/${input.postId}`,
       })

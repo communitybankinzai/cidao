@@ -13,7 +13,7 @@ export default async function BugReportPage({
   const { data: { user } } = await supabase.auth.getUser()
 
   // 相談の入口（提案を書く画面・ヘルプ）から来た場合：種別を「使い方の質問・相談」にし、話題を本文の先頭に入れる
-  const TOPICS: Record<string, string> = { proposal: '提案の書き方', freefree: 'FreeFree掲示板の使い方', event: 'イベントの登録' }
+  const TOPICS: Record<string, string> = { proposal: '提案の書き方', freefree: '地域応援掲示板の使い方', event: 'イベントの登録' }
   const topicLabel = about ? TOPICS[about] : undefined
   const defaultCategory = category === 'question' || topicLabel ? ('question' as const) : undefined
 

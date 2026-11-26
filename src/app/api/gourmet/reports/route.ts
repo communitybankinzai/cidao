@@ -273,7 +273,7 @@ export async function POST(request: Request) {
     if (!data || data.status !== 'active' || typeof data.lat !== 'number' || typeof data.lon !== 'number') {
       return json(request, { error: 'unknown_shop' }, 400)
     }
-    const name = normalizeText(field(form, 'shopName'), MAX_SHOP_NAME) || normalizeText(data.title, MAX_SHOP_NAME) || 'FreeFreeの掲載'
+    const name = normalizeText(field(form, 'shopName'), MAX_SHOP_NAME) || normalizeText(data.title, MAX_SHOP_NAME) || '掲示板の掲載'
     shop = { ref: ref.ref, name, lat: data.lat, lon: data.lon }
   } else if (field(form, 'shopRef')) {
     return json(request, { error: 'unknown_shop' }, 400)

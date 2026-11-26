@@ -9,7 +9,7 @@ export type FaqGroupKey = 'login' | 'events' | 'freefree' | 'orgs' | 'rules' | '
 export const FAQ_GROUPS: { key: FaqGroupKey; label: string; emoji: string }[] = [
   { key: 'login', label: 'ログイン・登録', emoji: '🔑' },
   { key: 'events', label: 'イベントの登録・申込', emoji: '📅' },
-  { key: 'freefree', label: 'FreeFree掲示板', emoji: '📣' },
+  { key: 'freefree', label: '地域応援掲示板', emoji: '📣' },
   { key: 'orgs', label: '団体をさがす', emoji: '🏢' },
   { key: 'rules', label: '投稿のルール', emoji: '🛡' },
   { key: 'notify', label: '通知', emoji: '🔔' },
@@ -84,13 +84,13 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     id: 'freefree-camera',
     group: 'freefree',
-    q: 'FreeFree掲示板で、写真を AI に読み取ってもらえますか？ カメラからも使えますか？',
+    q: '地域応援掲示板で、写真を AI に読み取ってもらえますか？ カメラからも使えますか？',
     a: [
       '使えます。掲載の画面の上のほうにある「チラシや店頭の写真から自動入力する」の枠で、「📸 カメラで撮る」か「📷 チラシ・写真を選ぶ」を押してください。タイトル・本文・カテゴリ・場所が下の欄に入ります。',
       '「カメラで撮る」は2026年11月22日に足しました。読み取った内容は、必ずご自身で確かめて直してください。',
     ],
     added: '2026-11-22',
-    link: { href: '/freefree/new', label: 'FreeFreeに掲載する' },
+    link: { href: '/freefree/new', label: '掲示板に掲載する' },
   },
   {
     id: 'orgs-kind-filter',

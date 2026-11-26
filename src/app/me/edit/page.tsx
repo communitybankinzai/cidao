@@ -337,8 +337,8 @@ export default async function EditProfilePage({
                   className="mt-1"
                 />
                 <span>
-                  FreeFree通知を受け取る
-                  <span className="block text-xs text-slate-500">FreeFree掲示板に新しい掲載があったときにベル🔔でお知らせします。外すと、新しい掲載に気づく手段がなくなります</span>
+                  掲示板の通知を受け取る
+                  <span className="block text-xs text-slate-500">地域応援掲示板に新しい掲載があったときにベル🔔でお知らせします。外すと、新しい掲載に気づく手段がなくなります</span>
                 </span>
               </label>
               {wasLight && (

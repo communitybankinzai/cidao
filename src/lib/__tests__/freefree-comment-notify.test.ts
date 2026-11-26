@@ -50,7 +50,7 @@ describe('応援メッセージの通知', () => {
       recipientId: 'owner',
       actorId: 'fan',
       kind: 'comment',
-      title: 'FreeFree「3歳からのバレエ教室」に応援メッセージが届きました',
+      title: '地域応援掲示板「3歳からのバレエ教室」に応援メッセージが届きました',
       body: 'ゆうさん：応援しています！',
       linkUrl: '/freefree/p1',
     })

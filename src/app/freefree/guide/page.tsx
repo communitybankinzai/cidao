@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 const CONTACT_EMAIL = 'communitybankinzai@gmail.com'
 
 export const metadata = {
-  title: 'ご利用ガイド | FreeFree 地域応援掲示板',
-  description: '印西のお店・教室・団体向けに、FreeFree 地域応援掲示板の説明、掲載するメリット、掲載から取り下げまでの手順をまとめました。',
+  title: 'ご利用ガイド | 地域応援掲示板',
+  description: '印西のお店・教室・団体向けに、地域応援掲示板の説明、掲載するメリット、掲載から取り下げまでの手順をまとめました。',
 }
 
 const FACTS = [
@@ -49,7 +49,7 @@ function Num({ n }: { n: number }) {
 }
 
 export default function FreefreeGuidePage() {
-  const mail = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載の取り下げ')}`
+  const mail = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('地域応援掲示板の掲載の取り下げ')}`
   return (
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-6">
@@ -64,7 +64,7 @@ export default function FreefreeGuidePage() {
         </header>
 
         <section className="bg-white dark:bg-slate-900 border rounded-lg p-6 space-y-4">
-          <h2 className="text-lg font-semibold">FreeFree 地域応援掲示板とは？</h2>
+          <h2 className="text-lg font-semibold">地域応援掲示板とは？</h2>
           <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_200px] items-start">
             <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300 min-w-0">
               <p>印西の小さなお店・個人事業・団体・企業・行政を応援する、インターネット上の掲示板です。お店の紹介、教室や催しの案内、クーポンなどを載せて、地域の人に知ってもらうことができます。</p>
@@ -78,7 +78,7 @@ export default function FreefreeGuidePage() {
               </div>
             </div>
             <div className="max-w-[220px] mx-auto sm:max-w-none">
-              <video className="w-full aspect-[9/16] rounded-lg border bg-black" controls playsInline preload="metadata" poster="/freefree/promo-poster.jpg" aria-label="FreeFree の紹介動画（約13秒）">
+              <video className="w-full aspect-[9/16] rounded-lg border bg-black" controls playsInline preload="metadata" poster="/freefree/promo-poster.jpg" aria-label="地域応援掲示板の紹介動画（約13秒）">
                 <source src="/freefree/promo.mp4" type="video/mp4" />
                 お使いのブラウザでは動画を再生できません。
               </video>
@@ -138,7 +138,7 @@ export default function FreefreeGuidePage() {
             <Num n={3} />
             <div className="space-y-1">
               <p className="font-medium">公開する</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">入力を確認して公開すると、FreeFree の一覧に載ります。SNSでの紹介を許可した場合は、紹介する前にCBI運営が内容を確認します。</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">入力を確認して公開すると、掲示板の一覧に載ります。SNSでの紹介を許可した場合は、紹介する前にCBI運営が内容を確認します。</p>
             </div>
           </div>
 
@@ -176,7 +176,7 @@ export default function FreefreeGuidePage() {
           </ul>
         </section>
 
-        <p className="text-xs text-slate-500">FreeFree 地域応援掲示板（CiDAO）／運営：コミュニティバンク印西（CBI）</p>
+        <p className="text-xs text-slate-500">地域応援掲示板（CiDAO）／運営：コミュニティバンク印西（CBI）</p>
       </article>
     </div>
   )

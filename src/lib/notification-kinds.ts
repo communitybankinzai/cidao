@@ -18,7 +18,7 @@ export const KIND_LABEL: Record<string, string> = {
   vote: '投票',
   proposal: '提案',
   system: 'お知らせ',
-  freefree: 'FreeFree',
+  freefree: '掲示板',
   event: 'イベント',
   member: 'メンバー',
   org: '団体',

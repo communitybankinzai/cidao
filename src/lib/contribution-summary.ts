@@ -40,7 +40,7 @@ export const ACTION_LABELS: Record<string, string> = {
   event_attended:       'イベント参加',
   event_staff:          'イベントスタッフ',
   event_submitted:      'イベント情報提供',
-  freefree_posted:      'FreeFree 掲載',
+  freefree_posted:      '掲示板への掲載',
   freefree_coupon_used: 'クーポン利用',
   freefree_support:     '応援',
   org_membership:       '団体所属',

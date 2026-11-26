@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 const CONTACT_EMAIL = 'communitybankinzai@gmail.com'
 
 export const metadata = {
-  title: 'お店の方へ | FreeFree 地域応援掲示板',
+  title: 'お店の方へ | 地域応援掲示板',
   description: '印西のお店・教室・団体を無料で掲載できます。写真とPR文を、ご自身で登録できます。',
 }
 
@@ -42,14 +42,14 @@ export default function ForShopsPage() {
   return (
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-8">
-        <BackLink href="/freefree">FreeFree</BackLink>
+        <BackLink href="/freefree">掲示板</BackLink>
         <FeatureEyebrow feature="freefree" />
 
         <header className="space-y-3">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">For Shops</p>
           <h1 className="text-2xl md:text-3xl font-serif font-bold">お店の方へ</h1>
           <p className="text-slate-700 dark:text-slate-300">
-            FreeFree 地域応援掲示板は、印西の小さなお店・教室・団体を応援する掲示板です。
+            地域応援掲示板は、印西の小さなお店・教室・団体を応援する掲示板です。
             <strong>無料で掲載できます。</strong>写真とPR文は、ご自身で登録できます。
           </p>
         </header>
@@ -107,7 +107,7 @@ export default function ForShopsPage() {
             <li>内容の訂正や、掲載の削除をご希望の場合も、下の連絡先までお知らせください。</li>
           </ul>
           <p className="text-sm">
-            連絡先：<a className="text-sky-700 dark:text-sky-400 hover:underline" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('FreeFree掲載について')}`}>{CONTACT_EMAIL}</a>（CBI）
+            連絡先：<a className="text-sky-700 dark:text-sky-400 hover:underline" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('地域応援掲示板の掲載について')}`}>{CONTACT_EMAIL}</a>（CBI）
           </p>
         </section>
 

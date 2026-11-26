@@ -65,7 +65,7 @@ export default async function FreefreePage() {
   return (
     <PageShell feature="freefree" width="default">
       <PageHeader feature="freefree"
-        title="FreeFree 地域応援掲示板"
+        title="地域応援掲示板"
         description={
           <>
             印西の小さなお店・個人事業・団体・企業・行政を応援

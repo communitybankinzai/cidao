@@ -186,7 +186,7 @@ export function generateImportSnsContent(target: SnsTarget, medium: SnsMedium): 
   }
   if (medium === 'instagram') {
     // Instagram はキャプション内の URL を押せないため、プロフィールのリンクへ誘導する（提案告知と同じ運用）
-    return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。検索なら「CiDAO 印西」で。${credit}\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
+    return `${prefix}\n${name}${intro ? `\n${truncate(intro, 80)}` : ''}\n\n${made}\n${ask}\n\nくわしくは、プロフィールのリンクから CiDAO の「地域応援掲示板」へ。検索なら「CiDAO 印西」で。${credit}\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
   }
   // 紹介文は 65 字まで（リンク2本の utm の分を含めて Threads の500字に収める・2026-11-07）
   return `${prefix}\n${name}${intro ? `\n${truncate(intro, 65)}` : ''}\n\n${made}\n${ask}\n\n▶ 掲載ページ\n${link}\n▶ お店の方へ\n${forShops}${credit}\n\n#印西市 #FreeFree #印西応援`
@@ -261,7 +261,7 @@ export function generateSnsContent(target: SnsTarget, medium: SnsMedium, now = D
   if (target.target_type === 'freefree') {
     // Instagram はキャプション内の URL を押せないため、プロフィールのリンクへ誘導する（提案告知と同じ運用）
     if (medium === 'instagram') {
-      return `${head}${prefix}\n${body}\n\nくわしくは、プロフィールのリンクから CiDAO の「FreeFree 掲示板」へ。\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
+      return `${head}${prefix}\n${body}\n\nくわしくは、プロフィールのリンクから CiDAO の「地域応援掲示板」へ。\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n\n#印西市 #印西 #FreeFree #印西応援 #地域応援`
     }
     return `${head}${prefix}\n${body}\n\n▶ くわしくはこちら\n${link}\n\n印西で活動する人を、市民の手で応援する掲示板です。掲載は無料です。\n${withUtm('/freefree', medium, 'freefree_board')}\n${tagLine}`
   }

@@ -87,7 +87,7 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
   return (
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-6">
-        <BackLink href="/freefree">FreeFree</BackLink>
+        <BackLink href="/freefree">掲示板</BackLink>
         <FeatureEyebrow feature="freefree" />
 
         <header className="space-y-2">

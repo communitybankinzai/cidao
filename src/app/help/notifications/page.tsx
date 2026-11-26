@@ -56,7 +56,7 @@ export default function HelpNotesPage() {
           <h3 className="text-sm font-semibold">どんなときに届くか</h3>
           <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc pl-5">
             <li>新しいイベントが登録されたとき</li>
-            <li>FreeFree掲示板に新しい掲載があったとき</li>
+            <li>地域応援掲示板に新しい掲載があったとき</li>
             <li>新しい提案が出されたとき</li>
             <li>新しいメンバーが登録したとき</li>
             <li>あなたの人材バンクの紹介文が運営に承認され、「登録メンバー」一覧に載ったとき</li>
@@ -111,7 +111,7 @@ export default function HelpNotesPage() {
           <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc pl-5">
             <li>「新しいイベントのお知らせ」で「毎日18時にまとめて」を選ぶ → 新しいイベントを、毎日18時に1通でお知らせします（登録のたびのお知らせは届かなくなります）</li>
             <li>「新しいイベントのお知らせ」で「受け取らない」を選ぶ → 新しいイベントのお知らせと、参加登録・「行く予定」にしたイベントの前日のお知らせが止まります</li>
-            <li>「FreeFree通知を受け取る」のチェックを外す → 新しい掲載の通知が止まります</li>
+            <li>「掲示板の通知を受け取る」のチェックを外す → 新しい掲載の通知が止まります</li>
             <li>「提案・投票のメール通知を受け取る」のチェックを外す → 投票のご案内メールが止まります</li>
           </ul>
           <p className="text-sm text-slate-600 dark:text-slate-400">
@@ -174,7 +174,7 @@ export default function HelpNotesPage() {
       </section>
 
       <p className="text-xs text-slate-500 text-center">
-        この先、FreeFree掲示板の使い方も順次ここに追加していきます。
+        この先、地域応援掲示板の使い方も順次ここに追加していきます。
       </p>
     </PageShell>
   )

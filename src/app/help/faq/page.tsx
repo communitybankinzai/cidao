@@ -10,7 +10,7 @@ import { OpenDetailsFromHash } from '@/components/OpenDetailsFromHash'
 
 export const metadata: Metadata = {
   title: 'よくある質問（Q&A） | 使い方ヘルプ | CiDAO',
-  description: 'CiDAOの使い方でよくいただく質問と、その解決策のまとめ。ログイン、イベントの登録、FreeFree掲示板、団体さがし、投稿のルール、通知。',
+  description: 'CiDAOの使い方でよくいただく質問と、その解決策のまとめ。ログイン、イベントの登録、地域応援掲示板、団体さがし、投稿のルール、通知。',
 }
 
 function formatDate(ymd: string): string {
