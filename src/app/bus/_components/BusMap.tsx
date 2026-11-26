@@ -28,7 +28,7 @@ type LLeaflet = {
 }
 
 type Route = { id: string; name: string; color: string; agency: string; agencyUrl: string; agencyTel: string; feed: string }
-type Stop = { id: string; name: string; lat: number; lon: number }
+type Stop = { id: string; name: string; lat: number; lon: number; approx?: string } // approx＝位置が目安（町名の代表点など）のときの説明
 type StopTime = [string, number, number, number?] // バス停ID, 着く秒, 出る秒, 起点からの距離m
 type Trip = { id: string; route: string; service: string; headsign: string; shape: string; st: StopTime[] }
 type Service = { days: number[]; start: string; end: string; add: string[]; remove: string[] }
@@ -94,6 +94,11 @@ function serviceRuns(sv: Service | undefined, ymd: string, dow: number): boolean
   if (sv.start && ymd < sv.start) return false
   if (sv.end && ymd > sv.end) return false
   return sv.days[dow] === 1
+}
+
+// 行き先の書き方。「〜回り」「循環」はそのまま、ふつうの行き先には「行き」を付ける
+function dest(h: string): string {
+  return /回り$|循環$/.test(h) ? h : `${h} 行き`
 }
 
 function hm(sec: number): string {
@@ -367,7 +372,7 @@ export function BusMap() {
     for (const b of buses) {
       seen.add(b.trip.id)
       const r = routeById.get(b.trip.route)
-      const html = `<div style="font-size:14px;line-height:1.5"><b>${esc(r?.name ?? '')}</b><br>${esc(b.trip.headsign)} 行き<br>次は <b>${esc(b.nextStop)}</b>（${hm(b.nextSec)} の予定）<br><span style="font-size:12px;color:#b45309">位置は時刻表からの予測です</span></div>`
+      const html = `<div style="font-size:14px;line-height:1.5"><b>${esc(r?.name ?? '')}</b><br>${esc(dest(b.trip.headsign))}<br>次は <b>${esc(b.nextStop)}</b>（${hm(b.nextSec)} の予定）<br><span style="font-size:12px;color:#b45309">位置は時刻表からの予測です</span></div>`
       const cur = m.buses.get(b.trip.id)
       if (cur) {
         cur.setLatLng(b.pos).setPopupContent(html)
@@ -412,7 +417,7 @@ export function BusMap() {
     return net.stops.filter((x) => !visible || visible.has(x.id))
   }, [net, routeId, stopsOfRoute])
   const buses3d = useMemo<Bus3DBus[]>(
-    () => buses.map((b) => ({ id: b.trip.id, color: colorOf.get(b.trip.route) ?? '#2563eb', lat: b.pos[0], lon: b.pos[1], label: `${b.trip.headsign}行き` })),
+    () => buses.map((b) => ({ id: b.trip.id, color: colorOf.get(b.trip.route) ?? '#2563eb', lat: b.pos[0], lon: b.pos[1], label: dest(b.trip.headsign) })),
     [buses, colorOf],
   )
 
@@ -597,7 +602,7 @@ export function BusMap() {
                           <b className="tabular-nums">{hm(l.depSec)}</b> {stopById.get(l.fromStop)?.name} で乗る
                         </div>
                         <div className="ml-3 border-l-4 pl-3 text-sm text-slate-600 dark:text-slate-300" style={{ borderColor: colorOf.get(l.route) ?? '#64748b' }}>
-                          {r?.name}（{r?.agency}）{l.headsign} 行き{l.stopsBetween > 0 ? `・途中${l.stopsBetween}停留所` : ''}
+                          {r?.name}（{r?.agency}）{dest(l.headsign)}{l.stopsBetween > 0 ? `・途中${l.stopsBetween}停留所` : ''}
                         </div>
                         <div>
                           <b className="tabular-nums">{hm(l.arrSec)}</b> {stopById.get(l.toStop)?.name} で降りる
@@ -660,6 +665,9 @@ export function BusMap() {
                 {isFav ? '★ よく使うバス停から外す' : '☆ よく使うバス停に入れる'}
               </button>
             </div>
+            {net?.stops.some((x) => x.name === stopName && x.approx) ? (
+              <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">📍 このバス停の地図上の位置は、おおよそです（新しいバス停で、正確な位置のデータがまだありません）。時刻は市の時刻表のとおりです。</p>
+            ) : null}
             {upcoming.length ? (
               <ul className="space-y-2">
                 {(showAll ? upcoming : upcoming.slice(0, 3)).map((d) => {
@@ -668,7 +676,7 @@ export function BusMap() {
                     <li key={d.key} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                       <span className="w-16 shrink-0 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{hm(d.sec)}</span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-base font-semibold text-slate-900 dark:text-slate-100">{d.headsign} 行き</span>
+                        <span className="block text-base font-semibold text-slate-900 dark:text-slate-100">{dest(d.headsign)}</span>
                         <span className="block text-sm text-slate-600 dark:text-slate-300">
                           <span aria-hidden className="mr-1 inline-block h-3 w-3 rounded-full align-middle" style={{ background: d.route ? colorOf.get(d.route.id) : '#64748b' }} />
                           {d.route?.name}
@@ -712,7 +720,7 @@ export function BusMap() {
             })}
           </ul>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            データ：{net.sources.map((s) => `${s.publisher}（${s.start.slice(0, 4)}年${Number(s.start.slice(4, 6))}月${Number(s.start.slice(6, 8))}日からの時刻）`).join('、')}・CC BY 4.0／{net.builtAt} 取りこみ
+            データ：{net.sources.map((x) => `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月${Number(x.start.slice(6, 8))}日からの時刻）`).join('、')}／バス停の位置：国土数値情報（バス停留所・国土交通省）ほか／{net.builtAt} 取りこみ
           </p>
         </section>
       ) : null}

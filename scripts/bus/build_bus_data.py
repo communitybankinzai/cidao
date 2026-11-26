@@ -171,9 +171,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--gtfs", action="append", default=[], metavar="NAME=ZIP")
+    ap.add_argument("--json", action="append", default=[], metavar="NAME=JSON", help="同じ形のかけら（GTFS の無い路線を手で起こしたもの）を混ぜる")
     args = ap.parse_args()
-    if not args.gtfs:
-        print("--gtfs なまえ=zip を1つ以上指定してください", file=sys.stderr)
+    if not args.gtfs and not args.json:
+        print("--gtfs なまえ=zip か --json なまえ=json を1つ以上指定してください", file=sys.stderr)
         return 1
 
     net = {
@@ -198,6 +199,18 @@ def main() -> int:
         net["trips"] += feed["trips"]
         net["services"].update(feed["services"])
         print(f"[{key}] 路線{len(feed['routes'])} バス停{len(feed['stops'])} 便{len(feed['trips'])} 形{len(feed['shapes'])}")
+
+    for spec in args.json:
+        key, path = spec.split("=", 1)
+        with open(path, encoding="utf-8") as f:
+            feed = json.load(f)
+        net["sources"].append(feed["source"])
+        net["routes"] += feed["routes"]
+        net["stops"] += feed["stops"]
+        net["shapes"].update(feed["shapes"])
+        net["trips"] += feed["trips"]
+        net["services"].update(feed["services"])
+        print(f"[{key}] 路線{len(feed['routes'])} バス停{len(feed['stops'])} 便{len(feed['trips'])}（かけら）")
 
     # 使われていないバス停・形は捨てる
     used_stops = {s[0] for t in net["trips"] for s in t["st"]}
