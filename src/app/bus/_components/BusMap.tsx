@@ -195,6 +195,8 @@ export function BusMap() {
   const [planTime, setPlanTime] = useState('') // 空＝いま
   const mapEl = useRef<HTMLDivElement>(null)
   const panelEl = useRef<HTMLDivElement>(null)
+  // 路線全体が入る範囲。地図の大きさが決まる前に合わせると引きすぎるので、大きさが変わったら（利用者が触るまでは）合わせ直す
+  const fitRef = useRef<{ bounds: LatLon[] | null; touched: boolean }>({ bounds: null, touched: false })
   const ref = useRef<{ L: LLeaflet; map: LMap; lines: LLayer[]; stops: Map<string, LLayer>; buses: Map<string, LLayer> } | null>(null)
 
   const favRaw = useSyncExternalStore(favSubscribe, favRead, () => '[]')
@@ -287,8 +289,18 @@ export function BusMap() {
           attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">地理院タイル</a>',
         }).addTo(map)
         ref.current = { L, map, lines: [], stops: new Map(), buses: new Map() }
-        ro = new ResizeObserver(() => map.invalidateSize())
-        ro.observe(mapEl.current)
+        const box = mapEl.current
+        const touch = () => {
+          fitRef.current.touched = true
+        }
+        box.addEventListener('pointerdown', touch)
+        box.addEventListener('wheel', touch)
+        ro = new ResizeObserver(() => {
+          map.invalidateSize()
+          const f = fitRef.current
+          if (f.bounds && !f.touched && box.clientWidth > 0 && box.clientHeight > 0) map.fitBounds(f.bounds, { padding: [24, 24] })
+        })
+        ro.observe(box)
         setReady(true)
       })
       .catch(() => {
@@ -337,7 +349,10 @@ export function BusMap() {
         })
       m.stops.set(s.id, mk)
     }
-    if (bounds.length) m.map.fitBounds(bounds, { padding: [24, 24] })
+    if (bounds.length) {
+      fitRef.current = { bounds, touched: false }
+      m.map.fitBounds(bounds, { padding: [24, 24] })
+    }
   }, [ready, net, routeId, colorOf, stopById, stopsOfRoute])
 
   // 選んだバス停を目立たせる
