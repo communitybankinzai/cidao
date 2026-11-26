@@ -44,10 +44,10 @@ type World = {
   busLayer: THREE_NS.Group
   toXZ(lat: number, lon: number): [number, number]
   yAt(lat: number, lon: number): number
-  stopMesh: THREE_NS.InstancedMesh | null
+  stopPos: THREE_NS.Vector3[] // バス停の位置（押した場所からいちばん近いものを探す）
   stopNames: string[]
-  mark: THREE_NS.Mesh
-  hereMark: THREE_NS.Mesh
+  mark: THREE_NS.Sprite
+  hereMark: THREE_NS.Sprite
   span: number
   buses: Map<string, { obj: THREE_NS.Group; from: THREE_NS.Vector3; to: THREE_NS.Vector3; t0: number }>
 }
@@ -119,8 +119,32 @@ function labelSprite(THREE: Three, text: string, bg: string): THREE_NS.Sprite {
   g.fillText(text, 18, 34, w - 36)
   const tex = new THREE.CanvasTexture(c)
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }))
-  sp.scale.set((w / 64) * 0.034, 0.034, 1) // 画面上の大きさを一定に（遠くても読める）
+  sp.scale.set((w / 64) * 0.026, 0.026, 1) // 画面上の大きさを一定に（遠くても読める）
+  sp.center.set(0.5, -0.9) // 印の少し上に出す
   sp.renderOrder = 5
+  return sp
+}
+
+// 丸い印（画面上の大きさが一定の点）。平面の地図の印と同じ見た目にそろえる
+function dotSprite(THREE: Three, fill: string, ring: string, size: number, emoji?: string): THREE_NS.Sprite {
+  const c = document.createElement('canvas')
+  c.width = c.height = 96
+  const g = c.getContext('2d')!
+  g.beginPath()
+  g.arc(48, 48, 38, 0, Math.PI * 2)
+  g.fillStyle = fill
+  g.fill()
+  g.lineWidth = 10
+  g.strokeStyle = ring
+  g.stroke()
+  if (emoji) {
+    g.font = '46px sans-serif'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText(emoji, 48, 51)
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true, sizeAttenuation: false }))
+  sp.scale.set(size, size, 1)
   return sp
 }
 
@@ -345,39 +369,44 @@ export function Bus3D({
         const layer = new THREE.Group()
         const busLayer = new THREE.Group()
         scene.add(layer, busLayer)
-        // えらんだバス停の印
-        const mark = new THREE.Mesh(new THREE.ConeGeometry(110, 260, 16), new THREE.MeshBasicMaterial({ color: 0xfacc15, depthTest: false }))
-        mark.rotation.x = Math.PI
+        // えらんだバス停の印（黄色の丸）と、現在地の印（青い丸）
+        const mark = dotSprite(THREE, '#facc15', '#0f172a', 0.036)
         mark.renderOrder = 4
         mark.visible = false
         scene.add(mark)
-
-        // 現在地の印（青い玉と柱）
-        const hereMark = new THREE.Mesh(new THREE.SphereGeometry(95, 20, 14), new THREE.MeshBasicMaterial({ color: 0x2563eb, depthTest: false }))
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 260, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }))
-        pole.position.y = -130
-        hereMark.add(pole)
+        const hereMark = dotSprite(THREE, '#2563eb', '#ffffff', 0.034)
         hereMark.renderOrder = 6
         hereMark.visible = false
         scene.add(hereMark)
 
-        const w: World = { THREE, scene, camera, renderer, controls, layer, busLayer, toXZ, yAt, stopMesh: null, stopNames: [], mark, hereMark, span, buses: new Map() }
+        const w: World = { THREE, scene, camera, renderer, controls, layer, busLayer, toXZ, yAt, stopPos: [], stopNames: [], mark, hereMark, span, buses: new Map() }
         world.current = w
         setCredit(t.credit)
 
         // バス停を押す（指を動かさずに離したときだけ）
-        const ray = new THREE.Raycaster()
         let down: { x: number; y: number } | null = null
         const onDown = (e: PointerEvent) => {
           down = { x: e.clientX, y: e.clientY }
         }
         const onUp = (e: PointerEvent) => {
-          if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8 || !w.stopMesh) return
+          if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return
+          // 押した場所から、画面の上でいちばん近いバス停（指の太さを考えて 22px 以内）
           const rect = renderer.domElement.getBoundingClientRect()
-          const v = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
-          ray.setFromCamera(v, camera)
-          const hit = ray.intersectObject(w.stopMesh)[0]
-          if (hit && hit.instanceId != null) pickRef.current(w.stopNames[hit.instanceId])
+          const v = new THREE.Vector3()
+          let best = -1
+          let bestD = 22
+          w.stopPos.forEach((pt, i) => {
+            v.copy(pt).project(camera)
+            if (v.z > 1) return
+            const sx = rect.left + ((v.x + 1) / 2) * rect.width
+            const sy = rect.top + ((1 - v.y) / 2) * rect.height
+            const d = Math.hypot(sx - e.clientX, sy - e.clientY)
+            if (d < bestD) {
+              bestD = d
+              best = i
+            }
+          })
+          if (best >= 0) pickRef.current(w.stopNames[best])
         }
         renderer.domElement.addEventListener('pointerdown', onDown)
         renderer.domElement.addEventListener('pointerup', onUp)
@@ -439,33 +468,31 @@ export function Bus3D({
         const [x, z] = w.toXZ(lat, lon)
         return [x, w.yAt(lat, lon) + 9, z] as [number, number, number]
       })
-      const g = ribbon(THREE, pts, 55)
+      const g = ribbon(THREE, pts, 34) // 路線の帯の幅（m）
       if (!g) continue
       const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(line.color), side: THREE.DoubleSide, depthTest: false, depthWrite: false }))
       mesh.renderOrder = 2
       w.layer.add(mesh)
     }
-    const inst = new THREE.InstancedMesh(new THREE.CylinderGeometry(42, 42, 70, 14), new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, stops.length))
-    inst.count = stops.length
-    const m4 = new THREE.Matrix4()
+    // バス停は、画面上で小さく見える白い丸（近づいても大きくならない）
     const named = new Set<string>()
-    stops.forEach((s, i) => {
-      const [x, z] = w.toXZ(s.lat, s.lon)
-      const y = w.yAt(s.lat, s.lon)
-      m4.makeTranslation(x, y + 35, z)
-      inst.setMatrixAt(i, m4)
+    w.stopPos = []
+    for (const st of stops) {
+      const [x, z] = w.toXZ(st.lat, st.lon)
+      const y = w.yAt(st.lat, st.lon) + 14
+      const dot = dotSprite(THREE, '#ffffff', '#0f172a', 0.017)
+      dot.position.set(x, y, z)
+      dot.renderOrder = 3
+      w.layer.add(dot)
+      w.stopPos.push(new THREE.Vector3(x, y, z))
       // 名前の札は、目印になるバス停（駅・病院・支所など）だけ。同じ名前は1つ
-      if (/駅|病院|支所|市役所/.test(s.name) && !named.has(s.name)) {
-        named.add(s.name)
-        const sp = labelSprite(THREE, s.name, 'rgba(15,23,42,0.82)')
-        sp.position.set(x, y + 330, z)
+      if (/駅|病院|支所|市役所/.test(st.name) && !named.has(st.name)) {
+        named.add(st.name)
+        const sp = labelSprite(THREE, st.name, 'rgba(15,23,42,0.82)')
+        sp.position.set(x, y, z)
         w.layer.add(sp)
       }
-    })
-    inst.instanceMatrix.needsUpdate = true
-    inst.renderOrder = 3
-    w.layer.add(inst)
-    w.stopMesh = inst
+    }
     w.stopNames = stops.map((s) => s.name)
   }, [ready, lines, stops])
 
@@ -477,7 +504,7 @@ export function Bus3D({
     w.mark.visible = !!s
     if (s) {
       const [x, z] = w.toXZ(s.lat, s.lon)
-      w.mark.position.set(x, w.yAt(s.lat, s.lon) + 230, z)
+      w.mark.position.set(x, w.yAt(s.lat, s.lon) + 14, z)
     }
   }, [ready, selectedStop, stops])
 
@@ -489,7 +516,7 @@ export function Bus3D({
     if (!here) return
     const [x, z] = w.toXZ(here[0], here[1])
     const y = w.yAt(here[0], here[1])
-    w.hereMark.position.set(x, y + 300, z)
+    w.hereMark.position.set(x, y + 14, z)
     w.controls.target.set(x, y, z)
     w.camera.position.set(x, y + 2300, z + 2600)
   }, [ready, here, focusN])
@@ -512,25 +539,21 @@ export function Bus3D({
     for (const b of buses) {
       seen.add(b.id)
       const [x, z] = w.toXZ(b.lat, b.lon)
-      const to = new THREE.Vector3(x, w.yAt(b.lat, b.lon) + 60, z)
+      const to = new THREE.Vector3(x, w.yAt(b.lat, b.lon) + 20, z)
       const cur = w.buses.get(b.id)
       if (cur) {
         cur.from.copy(cur.obj.position)
         cur.to.copy(to)
         cur.t0 = now
-        const dx = to.x - cur.from.x
-        const dz = to.z - cur.from.z
-        if (Math.hypot(dx, dz) > 1) cur.obj.children[0].rotation.y = Math.atan2(-dz, dx)
       } else {
+        // バスは、路線の色の丸にバスの絵（平面の地図と同じ印）と、小さな行き先の札
         const g = new THREE.Group()
-        const body = new THREE.Mesh(new THREE.BoxGeometry(230, 90, 100), new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color) }))
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(236, 14, 106), new THREE.MeshLambertMaterial({ color: 0xffffff }))
-        roof.position.y = 52
-        body.add(roof)
-        body.renderOrder = 4
-        g.add(body)
-        const sp = labelSprite(THREE, '🚌 ' + b.label, 'rgba(180,83,9,0.9)')
-        sp.position.y = 260
+        const icon = dotSprite(THREE, b.color, '#ffffff', 0.046, '🚌')
+        icon.renderOrder = 5
+        g.add(icon)
+        const sp = labelSprite(THREE, b.label, 'rgba(15,23,42,0.78)')
+        sp.scale.multiplyScalar(0.85)
+        sp.center.set(0.5, -1.4)
         g.add(sp)
         g.position.copy(to)
         w.busLayer.add(g)
@@ -554,7 +577,7 @@ export function Bus3D({
         {!ready && !error ? <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-600">立体の地図を準備しています…</p> : null}
       </div>
       <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        1本指でまわす・2本指でひろげる／うごかす。白い丸い柱がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。{photo === 'on' ? '地面の写真：国土地理院「全国最新写真（シームレス）」（撮影の時期は場所によって違い、いまの様子と違うことがあります）。' : photo === 'loading' ? '地面の写真を読み込んでいます…。' : `水色は標高${LOW_M}m未満の低い土地や水面です。`}青い玉は現在地です（この端末の中だけで使い、どこにも送りません）。{credit}
+        1本指でまわす・2本指でひろげる／うごかす。白い小さな丸がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。{photo === 'on' ? '地面の写真：国土地理院「全国最新写真（シームレス）」（撮影の時期は場所によって違い、いまの様子と違うことがあります）。' : photo === 'loading' ? '地面の写真を読み込んでいます…。' : `水色は標高${LOW_M}m未満の低い土地や水面です。`}青い丸は現在地です（この端末の中だけで使い、どこにも送りません）。{credit}
       </p>
     </div>
   )
