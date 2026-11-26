@@ -5,6 +5,7 @@
 // データは public/bus/network.json（scripts/bus/build_bus_data.py が GTFS から作る）。サーバーの処理は使わない。
 // 地図は病院マップ（HospitalMap）と同じ Leaflet（CDN）＋国土地理院の標準地図。
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Bus3D, type Bus3DBus, type Bus3DLine } from './Bus3D'
 import { MAX_TRANSFERS, WALK_MAX_M, buildNeighbors, searchJourneyOptions, type Journey } from './journey'
 
 const LEAFLET_JS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
@@ -182,6 +183,7 @@ export function BusMap() {
   const [routeId, setRouteId] = useState<string>('all')
   const [stopName, setStopName] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [view, setView] = useState<'flat' | 'solid'>('flat') // 平面（地図）／立体（自作の地形の模型・地図タイルを読まない）
   // 乗り方をさがす（乗るバス停・降りるバス停・出る時刻）
   const [fromName, setFromName] = useState('')
   const [toName, setToName] = useState('')
@@ -387,6 +389,33 @@ export function BusMap() {
     }
   }, [buses, ready, colorOf, routeById])
 
+  // 立体表示に渡すもの（路線の線・バス停・バス）
+  const lines3d = useMemo<Bus3DLine[]>(() => {
+    if (!net) return []
+    const out: Bus3DLine[] = []
+    const drawn = new Set<string>()
+    for (const t of net.trips) {
+      if (routeId !== 'all' && t.route !== routeId) continue
+      const key = t.shape || `${t.route}|${t.st.map((x) => x[0]).join('>')}`
+      if (drawn.has(key)) continue
+      drawn.add(key)
+      const pts: [number, number][] = t.shape
+        ? net.shapes[t.shape].map((q) => [q[0], q[1]] as [number, number])
+        : t.st.map((x) => stopById.get(x[0])).filter((x): x is Stop => !!x).map((x) => [x.lat, x.lon] as [number, number])
+      if (pts.length >= 2) out.push({ route: t.route, color: colorOf.get(t.route) ?? '#2563eb', pts })
+    }
+    return out
+  }, [net, routeId, stopById, colorOf])
+  const stops3d = useMemo(() => {
+    if (!net) return []
+    const visible = routeId === 'all' ? null : stopsOfRoute.get(routeId)
+    return net.stops.filter((x) => !visible || visible.has(x.id))
+  }, [net, routeId, stopsOfRoute])
+  const buses3d = useMemo<Bus3DBus[]>(
+    () => buses.map((b) => ({ id: b.trip.id, color: colorOf.get(b.trip.route) ?? '#2563eb', lat: b.pos[0], lon: b.pos[1], label: `${b.trip.headsign}行き` })),
+    [buses, colorOf],
+  )
+
   // 選んだバス停の、きょうの時刻表（同じ名前の乗り場をまとめる。終点に着くだけの便は出さない）
   const departures = useMemo(() => {
     if (!net || !stopName) return []
@@ -460,9 +489,29 @@ export function BusMap() {
       </section>
 
       {mapError ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{mapError}</p> : null}
-      <div ref={mapEl} className="h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700" />
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="地図の見え方">
+        <button type="button" className={chip(view === 'flat')} onClick={() => setView('flat')}>
+          🗺 平面
+        </button>
+        <button type="button" className={chip(view === 'solid')} onClick={() => setView('solid')}>
+          🏔 立体
+        </button>
+      </div>
+      <div ref={mapEl} className={`h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700${view === 'flat' ? '' : ' hidden'}`} />
+      {view === 'solid' ? (
+        <Bus3D
+          stops={stops3d}
+          lines={lines3d}
+          buses={buses3d}
+          selectedStop={stopName}
+          onPickStop={(name) => {
+            setStopName(name)
+            setShowAll(false)
+          }}
+        />
+      ) : null}
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}白い丸がバス停です。押すと、下に時刻表が出ます。
+        {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}{view === 'flat' ? '白い丸がバス停です。押すと、下に時刻表が出ます。' : ''}
       </p>
 
       <section aria-label="乗り方をさがす" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
