@@ -17,6 +17,7 @@ import {
   CalendarDays,
   CircleHelp,
   Hospital,
+  Bus,
   Lightbulb,
   LogIn,
   Map as MapIcon,
@@ -204,6 +205,8 @@ export default async function Home() {
           <RoundLink href={DISASTER_MAP_URL} icon={ShieldAlert} label="防災" color="yellow" external track="bousai" />
           {/* 病院マップ（2026-11-23）。休日に病院を探して困る人のため */}
           <RoundLink href="/hospitals" icon={Hospital} label="病院" color="teal" track="hospitals" />
+          {/* 印西バスマップ（2026-11-27 試作）。市内のバスを1枚の地図に。提案 c0ba6528 の試作 */}
+          <RoundLink href="/bus" icon={Bus} label="バス" color="violet" track="bus" />
         </RoundRow>
         {/* 実例を見た人を、次の「あったらいいな」の提案へつなぐ（2026-11-23 事業主決定）。未ログインはログイン後に投稿画面へ */}
         <Link

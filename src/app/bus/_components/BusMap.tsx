@@ -188,6 +188,9 @@ export function BusMap() {
   const [routeId, setRouteId] = useState<string>('all')
   const [stopName, setStopName] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [geoMsg, setGeoMsg] = useState('') // 現在地の取得の結果（取れなかったときの案内）
+  const hereRef = useRef<LLayer | null>(null)
+  const locatedOnce = useRef(false)
   const [view, setView] = useState<'flat' | 'solid'>('flat') // 平面（地図）／立体（自作の地形の模型・地図タイルを読まない）
   // 乗り方をさがす（乗るバス停・降りるバス停・出る時刻）
   const [fromName, setFromName] = useState('')
@@ -282,7 +285,8 @@ export function BusMap() {
     loadLeaflet()
       .then((L) => {
         if (cancelled || !mapEl.current) return
-        const map = L.map(mapEl.current, { scrollWheelZoom: false })
+        // PC はホイール、スマホは2本指（ピンチ）で拡大縮小できる
+        const map = L.map(mapEl.current, { scrollWheelZoom: true, touchZoom: true, doubleClickZoom: true })
         map.setView(CENTER, 12)
         L.tileLayer(TILE_URL, {
           maxZoom: 18,
@@ -354,6 +358,15 @@ export function BusMap() {
       m.map.fitBounds(bounds, { padding: [24, 24] })
     }
   }, [ready, net, routeId, colorOf, stopById, stopsOfRoute])
+
+  // 開いたときに1回だけ、現在地へ寄せる（路線の線を描いたあと）
+  useEffect(() => {
+    if (!ready || !net || locatedOnce.current) return
+    locatedOnce.current = true
+    const id = window.setTimeout(() => locate(true), 300)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, net])
 
   // 選んだバス停を目立たせる
   useEffect(() => {
@@ -468,6 +481,46 @@ export function BusMap() {
   const upcoming = departures.filter((d) => d.sec >= nowSec)
   const isFav = stopName ? favs.includes(stopName) : false
 
+  // 現在地へ地図を寄せる。位置は端末の中で地図を動かすためだけに使い、どこにも送らない。
+  // auto＝開いたときの自動（路線の範囲の外にいるとき・許可が無いときは、何もせず全体のまま）
+  function locate(auto: boolean) {
+    const m = ref.current
+    if (!m || !net) return
+    if (!('geolocation' in navigator)) {
+      if (!auto) setGeoMsg('この端末では現在地を使えません。')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const cur = ref.current
+        if (!cur) return
+        const p: LatLon = [pos.coords.latitude, pos.coords.longitude]
+        const lats = net.stops.map((x) => x.lat)
+        const lons = net.stops.map((x) => x.lon)
+        const inside = p[0] > Math.min(...lats) - 0.02 && p[0] < Math.max(...lats) + 0.02 && p[1] > Math.min(...lons) - 0.025 && p[1] < Math.max(...lons) + 0.025
+        if (!inside) {
+          if (!auto) setGeoMsg('現在地が、バス路線の範囲の外です。地図は全体を表示しています。')
+          return
+        }
+        if (hereRef.current) hereRef.current.setLatLng(p)
+        else hereRef.current = cur.L.circleMarker(p, { radius: 9, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1, interactive: false }).addTo(cur.map)
+        hereRef.current.bringToFront()
+        fitRef.current.touched = true // 大きさが変わっても、全体へ合わせ直さない
+        cur.map.setView(p, 15)
+        setGeoMsg('')
+      },
+      () => {
+        if (!auto) setGeoMsg('現在地を取れませんでした。端末やブラウザの設定で、位置情報を許可してください。')
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+    )
+  }
+  function showAllRoutes() {
+    const m = ref.current
+    const b = fitRef.current.bounds
+    if (m && b) m.map.fitBounds(b, { padding: [24, 24] })
+  }
+
   function pickStop(name: string) {
     setStopName(name || null)
     setShowAll(false)
@@ -516,7 +569,18 @@ export function BusMap() {
         <button type="button" className={chip(view === 'solid')} onClick={() => setView('solid')}>
           🏔 立体
         </button>
+        {view === 'flat' ? (
+          <>
+            <button type="button" className={chip(false)} onClick={() => locate(false)}>
+              📍 現在地
+            </button>
+            <button type="button" className={chip(false)} onClick={showAllRoutes}>
+              🗾 全体
+            </button>
+          </>
+        ) : null}
       </div>
+      {geoMsg ? <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{geoMsg}</p> : null}
       <div ref={mapEl} className={`h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700${view === 'flat' ? '' : ' hidden'}`} />
       {view === 'solid' ? (
         <Bus3D
@@ -531,7 +595,7 @@ export function BusMap() {
         />
       ) : null}
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}{view === 'flat' ? '白い丸がバス停です。押すと、下に時刻表が出ます。' : ''}
+        {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}{view === 'flat' ? '白い丸がバス停です。押すと、下に時刻表が出ます。拡大・縮小は、2本指でひろげる（スマホ）か、ホイール（パソコン）で。青い丸は現在地です（この端末の中だけで使い、どこにも送りません）。' : ''}
       </p>
 
       <section aria-label="乗り方をさがす" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

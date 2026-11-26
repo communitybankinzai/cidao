@@ -273,6 +273,8 @@ const ROUND_COLORS = {
   // 黄は白地だと線が見えないので、濃い黄土にする
   yellow: { disc: 'border-yellow-700 dark:border-yellow-400', icon: 'text-yellow-700 dark:text-yellow-300' },
   teal: { disc: 'border-teal-600 dark:border-teal-400', icon: 'text-teal-600 dark:text-teal-300' },
+  // バスマップ（2026-11-27）
+  violet: { disc: 'border-violet-600 dark:border-violet-400', icon: 'text-violet-600 dark:text-violet-300' },
 } satisfies Record<string, { disc: string; icon: string }>
 
 export type RoundColor = keyof typeof ROUND_COLORS
