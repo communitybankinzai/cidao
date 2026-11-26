@@ -5,6 +5,7 @@
 // データは public/bus/network.json（scripts/bus/build_bus_data.py が GTFS から作る）。サーバーの処理は使わない。
 // 地図は病院マップ（HospitalMap）と同じ Leaflet（CDN）＋国土地理院の標準地図。
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { MAX_TRANSFERS, WALK_MAX_M, buildNeighbors, searchJourneyOptions, type Journey } from './journey'
 
 const LEAFLET_JS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
 const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'
@@ -181,6 +182,10 @@ export function BusMap() {
   const [routeId, setRouteId] = useState<string>('all')
   const [stopName, setStopName] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  // 乗り方をさがす（乗るバス停・降りるバス停・出る時刻）
+  const [fromName, setFromName] = useState('')
+  const [toName, setToName] = useState('')
+  const [planTime, setPlanTime] = useState('') // 空＝いま
   const mapEl = useRef<HTMLDivElement>(null)
   const panelEl = useRef<HTMLDivElement>(null)
   const ref = useRef<{ L: LLeaflet; map: LMap; lines: LLayer[]; stops: Map<string, LLayer>; buses: Map<string, LLayer> } | null>(null)
@@ -395,6 +400,20 @@ export function BusMap() {
     return out.sort((a, b) => a.sec - b.sec)
   }, [net, stopName, todayTrips, routeById])
 
+  // 乗り方の案（会社をまたいだ乗り継ぎも含む。計算は端末の中だけ）
+  const neighbors = useMemo(() => buildNeighbors(net?.stops ?? []), [net])
+  const nowMinute = clock ? Math.floor(clock.sec / 60) * 60 : null
+  const planDepart = useMemo(() => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(planTime)
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60
+    return nowMinute
+  }, [planTime, nowMinute])
+  const plans = useMemo<Journey[] | null>(() => {
+    if (!net || !fromName || !toName || fromName === toName || planDepart == null) return null
+    const ids = (name: string) => net.stops.filter((s) => s.name === name).map((s) => s.id)
+    return searchJourneyOptions(todayTrips, neighbors, ids(fromName), ids(toName), planDepart, 3)
+  }, [net, fromName, toName, planDepart, todayTrips, neighbors])
+
   const stopNames = useMemo(() => [...new Set(net?.stops.map((s) => s.name) ?? [])].sort((a, b) => a.localeCompare(b, 'ja')), [net])
   const nowSec = clock?.sec ?? 0
   const upcoming = departures.filter((d) => d.sec >= nowSec)
@@ -445,6 +464,111 @@ export function BusMap() {
       <p className="text-sm text-slate-600 dark:text-slate-300">
         {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}白い丸がバス停です。押すと、下に時刻表が出ます。
       </p>
+
+      <section aria-label="乗り方をさがす" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">🧭 乗り方をさがす</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-300">乗るバス停と降りるバス停をえらぶと、いちばん早く着く乗り方を出します。バス会社がちがっても、乗り継ぎの案を出します。</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            乗るバス停
+            <select className="mt-1 block min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base dark:border-slate-700 dark:bg-slate-950" value={fromName} onChange={(e) => setFromName(e.target.value)}>
+              <option value="">（えらぶ）</option>
+              {stopNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            降りるバス停
+            <select className="mt-1 block min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base dark:border-slate-700 dark:bg-slate-950" value={toName} onChange={(e) => setToName(e.target.value)}>
+              <option value="">（えらぶ）</option>
+              {stopNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={chip(planTime === '')} onClick={() => setPlanTime('')}>
+            いま出る
+          </button>
+          <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            時刻をえらぶ
+            <input
+              type="time"
+              className="min-h-11 rounded-lg border border-slate-300 bg-white px-2 text-base dark:border-slate-700 dark:bg-slate-950"
+              value={planTime}
+              onChange={(e) => setPlanTime(e.target.value)}
+            />
+          </label>
+          {fromName && toName ? (
+            <button
+              type="button"
+              className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold dark:border-slate-700"
+              onClick={() => {
+                setFromName(toName)
+                setToName(fromName)
+              }}
+            >
+              ⇅ 入れかえる
+            </button>
+          ) : null}
+        </div>
+        {fromName && toName && fromName === toName ? <p className="text-base text-slate-700 dark:text-slate-200">乗るバス停と降りるバス停が同じです。</p> : null}
+        {plans && plans.length === 0 ? (
+          <p className="text-base text-slate-700 dark:text-slate-200">
+            きょうのこの時刻からは、乗り継いでも着ける便が見つかりませんでした（乗り換えは{MAX_TRANSFERS}回まで・歩く乗り換えは{WALK_MAX_M}mまでで調べています）。
+          </p>
+        ) : null}
+        {plans && plans.length ? (
+          <ol className="space-y-3" data-testid="bus-plans">
+            {plans.map((j, idx) => (
+              <li key={j.legs.map((l) => l.tripId + l.fromStop).join('|')} className="rounded-lg border-2 border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                    {idx === 0 ? '⭐ ' : ''}
+                    {hm(j.depSec)} 発 → {hm(j.arrSec)} 着
+                  </span>
+                  <span className="text-sm font-semibold text-sky-700 dark:text-sky-300">
+                    {Math.round((j.arrSec - j.depSec) / 60)}分・{j.transfers === 0 ? '乗り換えなし' : `乗り換え${j.transfers}回`}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-2">
+                  {j.legs.map((l, i) => {
+                    const r = routeById.get(l.route)
+                    const next = j.legs[i + 1]
+                    const w = next ? j.walks[i] : null
+                    return (
+                      <li key={l.tripId + i} className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
+                        <div>
+                          <b className="tabular-nums">{hm(l.depSec)}</b> {stopById.get(l.fromStop)?.name} で乗る
+                        </div>
+                        <div className="ml-3 border-l-4 pl-3 text-sm text-slate-600 dark:text-slate-300" style={{ borderColor: colorOf.get(l.route) ?? '#64748b' }}>
+                          {r?.name}（{r?.agency}）{l.headsign} 行き{l.stopsBetween > 0 ? `・途中${l.stopsBetween}停留所` : ''}
+                        </div>
+                        <div>
+                          <b className="tabular-nums">{hm(l.arrSec)}</b> {stopById.get(l.toStop)?.name} で降りる
+                        </div>
+                        {next ? (
+                          <div className="my-1 rounded bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                            🔁 乗り換え：{w ? `${stopById.get(w.toStop)?.name} まで歩いて約${Math.max(1, w.minutes)}分（約${w.meters}m）・` : '同じバス停で・'}
+                            次のバスまで {Math.max(0, Math.round((next.depSec - l.arrSec) / 60))}分
+                          </div>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">時刻表どおりの計算です。バスが遅れると、乗り換えに間に合わないことがあります。きょう運行する便で調べています。歩く乗り換えは、まっすぐ測った距離です。</p>
+      </section>
 
       <section ref={panelEl} aria-label="バス停の時刻表" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         {favs.length ? (
