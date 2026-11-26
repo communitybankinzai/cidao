@@ -774,20 +774,24 @@ function PeriodEventsStrip({ events, month }: { events: EventRow[]; month: numbe
   }
 
   return (
-    <div className="mb-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
-      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-        開催中の期間イベント（{month}月） <span className="text-xs font-normal text-slate-500">{events.length}件</span>
-      </p>
-      <ul className="space-y-1.5">{head.map(renderItem)}</ul>
-      {rest.length > 0 && (
-        <details>
-          <summary className="cursor-pointer select-none text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline">
-            ほか {rest.length} 件を表示
-          </summary>
-          <ul className="space-y-1.5 mt-1.5">{rest.map(renderItem)}</ul>
-        </details>
-      )}
-    </div>
+    // 2026-11-27 事業主の指示：はじめは閉じておき、カレンダーへすぐ届くようにする（押すと開く。「新着」の帯と同じ作り）
+    <details className="mb-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg group/period">
+      <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+        <span className="flex-1">開催中の期間イベント（{month}月） <span className="text-xs font-normal text-slate-500">{events.length}件</span></span>
+        <span aria-hidden className="text-xs text-slate-500 transition-transform group-open/period:rotate-180">▼</span>
+      </summary>
+      <div className="px-3 pb-3 space-y-2">
+        <ul className="space-y-1.5">{head.map(renderItem)}</ul>
+        {rest.length > 0 && (
+          <details>
+            <summary className="cursor-pointer select-none text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline">
+              ほか {rest.length} 件を表示
+            </summary>
+            <ul className="space-y-1.5 mt-1.5">{rest.map(renderItem)}</ul>
+          </details>
+        )}
+      </div>
+    </details>
   )
 }
 
@@ -889,7 +893,7 @@ function CalendarView({
             <div
               key={ymd}
               onClick={() => selectDate(ymd)}
-              className={`min-h-[92px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${items.length > 0 ? 'cursor-pointer' : ''} ${isSelected ? 'bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-inset ring-amber-300 dark:ring-amber-800' : inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}
+              className={`min-h-[60px] md:min-h-[110px] border-r border-b border-slate-100 dark:border-slate-800 last:border-r-0 p-1 flex flex-col gap-1 ${items.length > 0 ? 'cursor-pointer' : ''} ${isSelected ? 'bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-inset ring-amber-300 dark:ring-amber-800' : inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-950/40'}`}
             >
               <div className="flex items-center justify-between">
                 <span className={`text-xs tabular-nums ${isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent-strong text-accent-strong-fg' : !inMonth ? 'text-slate-300 dark:text-slate-700' : dow === 0 ? 'text-rose-600 dark:text-rose-400' : dow === 6 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}`}>{cd}</span>
@@ -897,7 +901,16 @@ function CalendarView({
                   <Link href={`/events/new?date=${ymd}`} aria-label={`${ymd} にイベント登録`} onClick={(ev) => ev.stopPropagation()} className="opacity-0 hover:opacity-100 focus:opacity-100 [@media(hover:none)]:pointer-events-none text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1">＋</Link>
                 )}
               </div>
-              <ul className="flex flex-col gap-0.5 overflow-hidden">
+              {/* スマホ幅では題名が読めないので、件数だけを大きく出す（2026-11-27 事業主の指示）。押すと下に一覧が出るのは同じ */}
+              {cellGroups.length > 0 && (
+                <div className="md:hidden flex-1 flex items-center justify-center" aria-label={`${cellGroups.length}件`}>
+                  <span className={`inline-flex items-baseline justify-center min-w-[2rem] px-1.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 ${inMonth ? '' : 'opacity-50'}`}>
+                    <span className="text-base font-bold tabular-nums leading-none">{cellGroups.length}</span>
+                    <span className="text-[9px] leading-none ml-px">件</span>
+                  </span>
+                </div>
+              )}
+              <ul className="hidden md:flex flex-col gap-0.5 overflow-hidden">
                 {cellGroups.slice(0, 3).map(({ main: e }) => (
                   <li key={e.id}>
                     <span title={`${hmFmt.format(new Date(e.start_at))} ${e.title} / ${organizerLabel(e)}`} className="block truncate text-[11px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100">
