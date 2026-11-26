@@ -17,6 +17,7 @@ const LINE_PROVIDER = 'custom:line'
 //                  違反投稿の保全を追加したため、全員に再同意を求める
 // 2026-11-26：お約束の1番・2番の言い方を直した（代表の案をもとに事業主が決定）。宗教・政治は「活動」でなく「勧誘・支持を求めること」に絞り、
 //             ほかは前からの禁止を言い直しただけなので、再同意は求めない（日付は上げない）。規約の全文（cbi-site の terms/）も同じ日に直した
+//             同じ日の夜、代表の追加の案で「4つの基本」にした（1番に反社会的な活動を足し、宗教・政治とネットワークビジネスを別の番号に分けた）
 const TERMS_VERSION = '2026-08-08'
 const TERMS_AGREED_KEY = 'cidao_terms_agreed'
 
@@ -174,15 +175,18 @@ export default function LoginPage() {
           )}
           <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-2">
             <p className="text-sm font-bold text-slate-900 dark:text-slate-100 text-center">
-              <span className="whitespace-nowrap">参加のお約束（3つの基本）</span>
+              <span className="whitespace-nowrap">参加のお約束（4つの基本）</span>
             </p>
             <ol className="list-decimal pl-5 space-y-1.5 text-[13px] leading-relaxed text-slate-800 dark:text-slate-200">
               <li>
-                <strong>他の人や団体への非難・誹謗中傷・ハラスメントなど、不当に人を不快にさせる行為は禁止です</strong>
+                <strong>反社会的な活動、および他の人や団体への非難・誹謗中傷・ハラスメントなど、不当に人を不快にさせる行為は禁止です</strong>
               </li>
               <li>
-                <strong>宗教や政治について、勧誘したり支持を求めたりすることは禁止です。</strong>
-                ネットワークビジネスの紹介（集会・案内など）、しつこい勧誘、強引な販売も禁止です。これらを目的としたご提案もお断りしています
+                <strong>宗教や政治について、勧誘したり支持を求めたりすることは禁止です</strong>
+              </li>
+              <li>
+                <strong>ネットワークビジネスの紹介（集会・案内など）、しつこい勧誘、強引な販売は禁止です</strong>
+                （2・3を目的としたご提案もお断りしています）
               </li>
               <li>
                 <strong>事務局からのお願いには、真摯にご対応ください</strong>
