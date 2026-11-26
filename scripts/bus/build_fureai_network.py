@@ -149,6 +149,9 @@ def main() -> int:
     approx.update({norm(k): {**v, "how": "町名の代表点（国土地理院の住所検索）"} for k, v in load("geocoded_missing.json", {}).items()})
     approx.update({norm(k): {**v, "how": "近くの施設の位置（OpenStreetMap）"} for k, v in load("nominatim_missing.json", {}).items()})
 
+    # 市のバス停位置図（令和8年2月の再編）から割り出した位置（georef_maps.py）。新設・移設のバス停は、これを先に使う
+    mapped = {norm(k): v for k, v in load("map_located.json", {}).items()}
+
     holidays: list[str] = []
     if args.holidays_from:
         net = json.load(open(args.holidays_from, encoding="utf-8"))
@@ -177,7 +180,12 @@ def main() -> int:
         sid = "fureai:" + key
         if sid in stops:
             return sid
-        if key in located:
+        if key in mapped:
+            v = mapped[key]
+            stops[sid] = {"id": sid, "name": clean_name(name), "lat": v["lat"], "lon": v["lon"]}
+            if v.get("rmsM", 0) > 60:
+                stops[sid]["approx"] = "市のバス停位置図から割り出した位置（100mほどずれることがあります）"
+        elif key in located:
             v = located[key]
             stops[sid] = {"id": sid, "name": clean_name(name), "lat": v["lat"], "lon": v["lon"]}
         elif key in approx:
