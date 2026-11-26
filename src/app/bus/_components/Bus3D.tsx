@@ -43,6 +43,8 @@ type World = {
   stopMesh: THREE_NS.InstancedMesh | null
   stopNames: string[]
   mark: THREE_NS.Mesh
+  hereMark: THREE_NS.Mesh
+  span: number
   buses: Map<string, { obj: THREE_NS.Group; from: THREE_NS.Vector3; to: THREE_NS.Vector3; t0: number }>
 }
 
@@ -140,12 +142,18 @@ export function Bus3D({
   buses,
   selectedStop,
   onPickStop,
+  here,
+  focusN,
+  resetN,
 }: {
   stops: Bus3DStop[]
   lines: Bus3DLine[]
   buses: Bus3DBus[]
   selectedStop: string | null
   onPickStop: (name: string) => void
+  here: [number, number] | null // 現在地（緯度・経度）。分かっていれば、そこを中心に開く
+  focusN: number // 「現在地」を押すたびに増える（もう一度その場所へ寄せる）
+  resetN: number // 「全体」を押すたびに増える
 }) {
   const el = useRef<HTMLDivElement>(null)
   const world = useRef<World | null>(null)
@@ -273,7 +281,16 @@ export function Bus3D({
         mark.visible = false
         scene.add(mark)
 
-        const w: World = { THREE, scene, camera, renderer, controls, layer, busLayer, toXZ, yAt, stopMesh: null, stopNames: [], mark, buses: new Map() }
+        // 現在地の印（青い玉と柱）
+        const hereMark = new THREE.Mesh(new THREE.SphereGeometry(95, 20, 14), new THREE.MeshBasicMaterial({ color: 0x2563eb, depthTest: false }))
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 260, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }))
+        pole.position.y = -130
+        hereMark.add(pole)
+        hereMark.renderOrder = 6
+        hereMark.visible = false
+        scene.add(hereMark)
+
+        const w: World = { THREE, scene, camera, renderer, controls, layer, busLayer, toXZ, yAt, stopMesh: null, stopNames: [], mark, hereMark, span, buses: new Map() }
         world.current = w
         setCredit(t.credit)
 
@@ -393,6 +410,27 @@ export function Bus3D({
     }
   }, [ready, selectedStop, stops])
 
+  // 現在地が分かっていれば、そこを中心に近づいた視点にする（開いたとき・「現在地」を押したとき）
+  useEffect(() => {
+    const w = world.current
+    if (!w || !ready) return
+    w.hereMark.visible = !!here
+    if (!here) return
+    const [x, z] = w.toXZ(here[0], here[1])
+    const y = w.yAt(here[0], here[1])
+    w.hereMark.position.set(x, y + 300, z)
+    w.controls.target.set(x, y, z)
+    w.camera.position.set(x, y + 2300, z + 2600)
+  }, [ready, here, focusN])
+
+  // 「全体」：はじめの視点へ戻す
+  useEffect(() => {
+    const w = world.current
+    if (!w || !ready || resetN === 0) return
+    w.controls.target.set(0, 0, 0)
+    w.camera.position.set(0, w.span * 0.5, w.span * 0.52)
+  }, [ready, resetN])
+
   // バスを動かす（1秒ごとに届く位置へ、なめらかに寄せる）
   useEffect(() => {
     const w = world.current
@@ -445,7 +483,7 @@ export function Bus3D({
         {!ready && !error ? <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-600">立体の地図を準備しています…</p> : null}
       </div>
       <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        1本指でまわす・2本指でひろげる／うごかす。白い丸い柱がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。水色は標高{LOW_M}m未満の低い土地や水面です。{credit}
+        1本指でまわす・2本指でひろげる／うごかす。白い丸い柱がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。水色は標高{LOW_M}m未満の低い土地や水面です。青い玉は現在地です（この端末の中だけで使い、どこにも送りません）。{credit}
       </p>
     </div>
   )

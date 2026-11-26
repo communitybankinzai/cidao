@@ -188,6 +188,9 @@ export function BusMap() {
   const [routeId, setRouteId] = useState<string>('all')
   const [stopName, setStopName] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [here, setHere] = useState<LatLon | null>(null) // 現在地（路線の範囲の中にいるときだけ入る）
+  const [focusN, setFocusN] = useState(0)
+  const [resetN, setResetN] = useState(0)
   const [geoMsg, setGeoMsg] = useState('') // 現在地の取得の結果（取れなかったときの案内）
   const hereRef = useRef<LLayer | null>(null)
   const locatedOnce = useRef(false)
@@ -507,6 +510,8 @@ export function BusMap() {
         hereRef.current.bringToFront()
         fitRef.current.touched = true // 大きさが変わっても、全体へ合わせ直さない
         cur.map.setView(p, 15)
+        setHere(p)
+        setFocusN((n) => n + 1)
         setGeoMsg('')
       },
       () => {
@@ -519,6 +524,7 @@ export function BusMap() {
     const m = ref.current
     const b = fitRef.current.bounds
     if (m && b) m.map.fitBounds(b, { padding: [24, 24] })
+    setResetN((n) => n + 1)
   }
 
   function pickStop(name: string) {
@@ -569,16 +575,12 @@ export function BusMap() {
         <button type="button" className={chip(view === 'solid')} onClick={() => setView('solid')}>
           🏔 立体
         </button>
-        {view === 'flat' ? (
-          <>
-            <button type="button" className={chip(false)} onClick={() => locate(false)}>
-              📍 現在地
-            </button>
-            <button type="button" className={chip(false)} onClick={showAllRoutes}>
-              🗾 全体
-            </button>
-          </>
-        ) : null}
+        <button type="button" className={chip(false)} onClick={() => locate(false)}>
+          📍 現在地
+        </button>
+        <button type="button" className={chip(false)} onClick={showAllRoutes}>
+          🗾 全体
+        </button>
       </div>
       {geoMsg ? <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{geoMsg}</p> : null}
       <div ref={mapEl} className={`h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700${view === 'flat' ? '' : ' hidden'}`} />
@@ -588,6 +590,9 @@ export function BusMap() {
           lines={lines3d}
           buses={buses3d}
           selectedStop={stopName}
+          here={here}
+          focusN={focusN}
+          resetN={resetN}
           onPickStop={(name) => {
             setStopName(name)
             setShowAll(false)
