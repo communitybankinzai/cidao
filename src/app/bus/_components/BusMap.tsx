@@ -583,22 +583,28 @@ export function BusMap() {
         </button>
       </div>
       {geoMsg ? <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{geoMsg}</p> : null}
-      <div ref={mapEl} className={`h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700${view === 'flat' ? '' : ' hidden'}`} />
-      {view === 'solid' ? (
-        <Bus3D
-          stops={stops3d}
-          lines={lines3d}
-          buses={buses3d}
-          selectedStop={stopName}
-          here={here}
-          focusN={focusN}
-          resetN={resetN}
-          onPickStop={(name) => {
-            setStopName(name)
-            setShowAll(false)
-          }}
-        />
-      ) : null}
+      <div className="relative">
+        {/* 地図の上に常に出す注釈：バスの印は実際の位置ではない */}
+        <p className="pointer-events-none absolute left-2 top-2 z-[1000] ml-10 rounded-md bg-amber-100/95 px-2 py-1 text-xs font-bold leading-snug text-amber-950 shadow">
+          🚌 バスの位置は予測です（時刻表から計算・実際の位置ではありません）
+        </p>
+        <div ref={mapEl} className={`h-[55vh] min-h-[320px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700${view === 'flat' ? '' : ' hidden'}`} />
+        {view === 'solid' ? (
+          <Bus3D
+            stops={stops3d}
+            lines={lines3d}
+            buses={buses3d}
+            selectedStop={stopName}
+            here={here}
+            focusN={focusN}
+            resetN={resetN}
+            onPickStop={(name) => {
+              setStopName(name)
+              setShowAll(false)
+            }}
+          />
+        ) : null}
+      </div>
       <p className="text-sm text-slate-600 dark:text-slate-300">
         {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}{view === 'flat' ? '白い丸がバス停です。押すと、下に時刻表が出ます。拡大・縮小は、2本指でひろげる（スマホ）か、ホイール（パソコン）で。青い丸は現在地です（この端末の中だけで使い、どこにも送りません）。' : ''}
       </p>

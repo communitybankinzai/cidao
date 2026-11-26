@@ -27,6 +27,10 @@ type Terrain = {
 
 const EXAG = 5 // 高さの強調（印西は標高差が約40mしかなく、そのままだと平らに見える）
 const LOW_M = 3 // これより低い所は水色（沼・川・低い土地）
+// 地面に貼る航空写真（国土地理院「全国最新写真（シームレス）」）。表示のときにその場で読み込む
+// （地理院タイルは、ウェブサイトでその場で読み込む使い方なら出典の記載だけで使える。まとめて自分のサーバーから配る形にはしていない）
+const PHOTO_Z = 14
+const PHOTO_URL = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'
 
 type Three = typeof THREE_NS
 
@@ -160,6 +164,7 @@ export function Bus3D({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [credit, setCredit] = useState('')
+  const [photo, setPhoto] = useState<'loading' | 'on' | 'off'>('loading') // 航空写真を貼れたか
   const pickRef = useRef(onPickStop)
   useEffect(() => {
     pickRef.current = onPickStop
@@ -224,6 +229,17 @@ export function Bus3D({
         scene.add(sun)
 
         // 地形
+        // 航空写真のタイルの範囲（Webメルカトルのタイル座標）
+        const tn = 2 ** PHOTO_Z
+        const tileX = (lon: number) => ((lon + 180) / 360) * tn
+        const tileY = (lat: number) => ((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * tn
+        const px0 = Math.floor(tileX(t.lon0))
+        const px1 = Math.floor(tileX(t.lon1))
+        const py0 = Math.floor(tileY(t.lat1))
+        const py1 = Math.floor(tileY(t.lat0))
+        const pw = px1 - px0 + 1
+        const ph = py1 - py0 + 1
+        const uv = new Float32Array(t.cols * t.rows * 2)
         const pos = new Float32Array(t.cols * t.rows * 3)
         const col = new Float32Array(t.cols * t.rows * 3)
         for (let r = 0; r < t.rows; r++) {
@@ -237,6 +253,9 @@ export function Bus3D({
             pos[i] = x
             pos[i + 1] = m * EXAG
             pos[i + 2] = z
+            const k = (r * t.cols + c) * 2
+            uv[k] = (tileX(lon) - px0) / pw
+            uv[k + 1] = 1 - (tileY(lat) - py0) / ph
             const [cr, cg, cb] = colorFor(m)
             col[i] = cr
             col[i + 1] = cg
@@ -253,9 +272,61 @@ export function Bus3D({
         const tg = new THREE.BufferGeometry()
         tg.setAttribute('position', new THREE.BufferAttribute(pos, 3))
         tg.setAttribute('color', new THREE.BufferAttribute(col, 3))
+        tg.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
         tg.setIndex(idx)
         tg.computeVertexNormals()
-        scene.add(new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true })))
+        const groundMat = new THREE.MeshLambertMaterial({ vertexColors: true })
+        scene.add(new THREE.Mesh(tg, groundMat))
+        const roadGroup = new THREE.Group()
+        scene.add(roadGroup)
+
+        // 航空写真を1枚の絵につないで、地面に貼る（読めなかったら、色分けの地面のまま）
+        if (pw * 256 <= 4096 && ph * 256 <= 4096) {
+          const cv = document.createElement('canvas')
+          cv.width = pw * 256
+          cv.height = ph * 256
+          const g2 = cv.getContext('2d')
+          const jobs: Promise<boolean>[] = []
+          for (let ty = py0; ty <= py1; ty++) {
+            for (let tx = px0; tx <= px1; tx++) {
+              jobs.push(
+                new Promise<boolean>((resolve) => {
+                  const img = new Image()
+                  img.crossOrigin = 'anonymous'
+                  img.onload = () => {
+                    g2?.drawImage(img, (tx - px0) * 256, (ty - py0) * 256)
+                    resolve(true)
+                  }
+                  img.onerror = () => resolve(false)
+                  img.src = PHOTO_URL.replace('{z}', String(PHOTO_Z)).replace('{x}', String(tx)).replace('{y}', String(ty))
+                }),
+              )
+            }
+          }
+          Promise.all(jobs).then((res) => {
+            if (cancelled) return
+            const ok = res.filter(Boolean).length
+            if (!g2 || ok < res.length * 0.6) {
+              setPhoto('off')
+              return
+            }
+            const tex = new THREE.CanvasTexture(cv)
+            tex.colorSpace = THREE.SRGBColorSpace
+            tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+            groundMat.map = tex
+            groundMat.vertexColors = false
+            groundMat.color.set(0xffffff)
+            // 光の当たり方だけだと写真が暗く沈むので、写真そのものの明るさも少し足す
+            groundMat.emissive.set(0xffffff)
+            groundMat.emissiveMap = tex
+            groundMat.emissiveIntensity = 0.5
+            groundMat.needsUpdate = true
+            roadGroup.visible = false // 写真に道が写っているので、白い線は消す
+            setPhoto('on')
+          })
+        } else {
+          setPhoto('off')
+        }
 
         // 国道・県道（位置の手がかり）
         const roadMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthTest: false, depthWrite: false })
@@ -268,7 +339,7 @@ export function Bus3D({
           if (!g) continue
           const mesh = new THREE.Mesh(g, roadMat)
           mesh.renderOrder = 1
-          scene.add(mesh)
+          roadGroup.add(mesh)
         }
 
         const layer = new THREE.Group()
@@ -483,7 +554,7 @@ export function Bus3D({
         {!ready && !error ? <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-600">立体の地図を準備しています…</p> : null}
       </div>
       <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        1本指でまわす・2本指でひろげる／うごかす。白い丸い柱がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。水色は標高{LOW_M}m未満の低い土地や水面です。青い玉は現在地です（この端末の中だけで使い、どこにも送りません）。{credit}
+        1本指でまわす・2本指でひろげる／うごかす。白い丸い柱がバス停です（押すと下に時刻表）。土地の高さは約{EXAG}倍に強調しています。{photo === 'on' ? '地面の写真：国土地理院「全国最新写真（シームレス）」（撮影の時期は場所によって違い、いまの様子と違うことがあります）。' : photo === 'loading' ? '地面の写真を読み込んでいます…。' : `水色は標高${LOW_M}m未満の低い土地や水面です。`}青い玉は現在地です（この端末の中だけで使い、どこにも送りません）。{credit}
       </p>
     </div>
   )
