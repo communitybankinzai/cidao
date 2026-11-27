@@ -28,6 +28,7 @@ type LLeaflet = {
   divIcon(o: object): object
 }
 
+const AGENCY_PREFIX = 'agency:'
 type Route = { id: string; name: string; color: string; agency: string; agencyUrl: string; agencyTel: string; feed: string }
 type Stop = { id: string; name: string; lat: number; lon: number; approx?: string } // approx＝位置が目安（町名の代表点など）のときの説明
 type StopTime = [string, number, number, number?] // バス停ID, 着く秒, 出る秒, 起点からの距離m
@@ -379,6 +380,22 @@ export function BusMap() {
     return m
   }, [net])
 
+  // いま地図に出す路線（null＝すべて）。routeId は 'all'／路線のid／'agency:会社名' のどれか
+  const selRoutes = useMemo<Set<string> | null>(() => {
+    if (routeId === 'all') return null
+    if (routeId.startsWith(AGENCY_PREFIX)) {
+      const name = routeId.slice(AGENCY_PREFIX.length)
+      return new Set((net?.routes ?? []).filter((r) => (r.agency || 'その他') === name).map((r) => r.id))
+    }
+    return new Set([routeId])
+  }, [routeId, net])
+  const visibleStops = useMemo<Set<string> | null>(() => {
+    if (!selRoutes) return null
+    const out = new Set<string>()
+    for (const id of selRoutes) stopsOfRoute.get(id)?.forEach((x) => out.add(x))
+    return out
+  }, [selRoutes, stopsOfRoute])
+
   // きょう走る便
   const ymd = clock?.ymd ?? null
   const dow = clock?.dow ?? 0
@@ -438,7 +455,7 @@ export function BusMap() {
     const bounds: LatLon[] = []
     const drawn = new Set<string>()
     for (const t of net.trips) {
-      if (routeId !== 'all' && t.route !== routeId) continue
+      if (selRoutes && !selRoutes.has(t.route)) continue
       const key = t.shape || `${t.route}|${t.st.map((s) => s[0]).join('>')}`
       if (drawn.has(key)) continue
       drawn.add(key)
@@ -450,7 +467,7 @@ export function BusMap() {
       m.lines.push(m.L.polyline(pts, { color: colorOf.get(t.route) ?? '#2563eb', weight: 4, opacity: 0.95, interactive: false, dashArray: t.shape ? undefined : '6 6' }).addTo(m.map))
       pts.forEach((p) => bounds.push(p))
     }
-    const visible = routeId === 'all' ? null : stopsOfRoute.get(routeId)
+    const visible = visibleStops
     for (const s of net.stops) {
       if (visible && !visible.has(s.id)) continue
       const mk = m.L.circleMarker([s.lat, s.lon], { radius: 5, color: '#0f172a', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1 })
@@ -466,7 +483,7 @@ export function BusMap() {
       fitRef.current = { bounds, touched: false }
       m.map.fitBounds(bounds, { padding: [24, 24], animate: false })
     }
-  }, [ready, net, routeId, colorOf, stopById, stopsOfRoute])
+  }, [ready, net, selRoutes, visibleStops, colorOf, stopById])
 
   // 分析のデータは、色分けかスーパーを初めて出すときに読む
   useEffect(() => {
@@ -619,12 +636,12 @@ export function BusMap() {
     if (!net || !clock) return []
     const out: BusPos[] = []
     for (const t of todayTrips) {
-      if (routeId !== 'all' && t.route !== routeId) continue
+      if (selRoutes && !selRoutes.has(t.route)) continue
       const p = tripPosition(t, clock.sec, stopById, net.shapes)
       if (p) out.push(p)
     }
     return out
-  }, [net, clock, todayTrips, routeId, stopById])
+  }, [net, clock, todayTrips, selRoutes, stopById])
 
   useEffect(() => {
     const m = ref.current
@@ -661,7 +678,7 @@ export function BusMap() {
     const out: Bus3DLine[] = []
     const drawn = new Set<string>()
     for (const t of net.trips) {
-      if (routeId !== 'all' && t.route !== routeId) continue
+      if (selRoutes && !selRoutes.has(t.route)) continue
       const key = t.shape || `${t.route}|${t.st.map((x) => x[0]).join('>')}`
       if (drawn.has(key)) continue
       drawn.add(key)
@@ -671,12 +688,11 @@ export function BusMap() {
       if (pts.length >= 2) out.push({ route: t.route, color: colorOf.get(t.route) ?? '#2563eb', pts })
     }
     return out
-  }, [net, routeId, stopById, colorOf])
+  }, [net, selRoutes, stopById, colorOf])
   const stops3d = useMemo(() => {
     if (!net) return []
-    const visible = routeId === 'all' ? null : stopsOfRoute.get(routeId)
-    return net.stops.filter((x) => !visible || visible.has(x.id))
-  }, [net, routeId, stopsOfRoute])
+    return net.stops.filter((x) => !visibleStops || visibleStops.has(x.id))
+  }, [net, visibleStops])
   const buses3d = useMemo<Bus3DBus[]>(
     () => buses.map((b) => ({ id: b.trip.id, color: colorOf.get(b.trip.route) ?? '#2563eb', lat: b.pos[0], lon: b.pos[1], label: dest(b.trip.headsign) })),
     [buses, colorOf],
@@ -977,20 +993,38 @@ export function BusMap() {
       ) : null}
 
       <section aria-label="路線をえらぶ" className="space-y-1">
-        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">路線をえらぶ（横に送れます）</div>
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
-          <button type="button" className={`${chip(routeId === 'all')} shrink-0 whitespace-nowrap`} onClick={() => setRouteId('all')}>
+        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">路線をえらぶ（バス会社ごと。会社名を押すと、その会社の路線だけを出します）</div>
+        <div className="pb-1">
+          <button type="button" className={chip(routeId === 'all')} onClick={() => setRouteId('all')}>
             すべての路線
           </button>
-          {groups.flatMap((g) =>
-            g.routes.map((r) => (
-              <button key={r.id} type="button" title={g.agency} className={`${chip(routeId === r.id)} shrink-0 whitespace-nowrap`} onClick={() => setRouteId(r.id)}>
-                <span aria-hidden className="mr-2 inline-block h-3 w-3 rounded-full align-middle" style={{ background: colorOf.get(r.id) }} />
-                {r.name.replace(/^ふれあいバス /, '')}
-              </button>
-            )),
-          )}
         </div>
+        {groups.map((g) => {
+          const key = AGENCY_PREFIX + g.agency
+          const on = routeId === key
+          return (
+            <div key={g.agency} className="space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => setRouteId(on ? 'all' : key)}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-semibold ${on ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'text-slate-700 dark:text-slate-200'}`}
+              >
+                <span aria-hidden>🏢</span>
+                <span className="min-w-0 flex-1">{g.agency}</span>
+                <span className="shrink-0 text-xs font-normal opacity-80">{on ? 'この会社だけ表示中' : `${g.routes.length}路線`}</span>
+              </button>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
+                {g.routes.map((r) => (
+                  <button key={r.id} type="button" className={`${chip(routeId === r.id)} shrink-0 whitespace-nowrap`} onClick={() => setRouteId(r.id)}>
+                    <span aria-hidden className="mr-2 inline-block h-3 w-3 rounded-full align-middle" style={{ background: colorOf.get(r.id) }} />
+                    {r.name.replace(/^ふれあいバス /, '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </section>
 
       <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
