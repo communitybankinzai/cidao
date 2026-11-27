@@ -48,17 +48,43 @@ function jstParts(d: Date) {
  *   同じ日　　：「11/28（土）13:00〜16:00」
  *   日をまたぐ：「11/28（土）13:00〜11/29（日）16:00」
  *   今年でない：年を前に付ける「2027/1/23（土）10:30〜12:00」
+ *   終了が未定：「11/28（土）13:00〜（終了時刻は未定）」
  * 日時として読めないときは空文字を返す
  */
-export function formatEventRangeJst(startIso: string, endIso: string, now: Date = new Date()): string {
+export function formatEventRangeJst(
+  startIso: string,
+  endIso: string,
+  now: Date = new Date(),
+  /** 終了時刻は未定（events.end_time_unknown）。true のとき終了時刻を出さない */
+  endUnknown = false,
+): string {
   const s = new Date(startIso)
   const e = new Date(endIso)
   if (Number.isNaN(s.getTime())) return ''
   const sp = jstParts(s)
   const thisYear = jstParts(now).year
   const head = `${sp.year !== thisYear ? `${sp.year}/` : ''}${sp.md}（${sp.weekday}）${sp.hm}`
+  if (endUnknown) return `${head}〜（終了時刻は未定）`
   if (Number.isNaN(e.getTime())) return head
   const ep = jstParts(e)
   if (ep.year === sp.year && ep.md === sp.md) return `${head}〜${ep.hm}`
   return `${head}〜${ep.year !== sp.year ? `${ep.year}/` : ''}${ep.md}（${ep.weekday}）${ep.hm}`
+}
+
+/**
+ * 終了時刻が未定の催しの、中で持っておく終了日時（開始の1時間後）。
+ * 'YYYY-MM-DDTHH:MM'（日本時間の壁掛け時計）を受け取り、同じ形で返す。読めないときはそのまま返す。
+ * カレンダーに出す期間や「終了した催し」の判定が end_at を使うので、未定でも値は入れておく
+ */
+export function plusOneHourLocal(local: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local)
+  if (!m) return local
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]) + 1, Number(m[5])))
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
+}
+
+/** 保存する終了日時。未定なら開始の1時間後、決まっていれば入力のまま */
+export function endAtForSave(startLocal: string, endLocal: string, endUnknown: boolean | undefined): string {
+  return endUnknown ? plusOneHourLocal(startLocal) : endLocal
 }

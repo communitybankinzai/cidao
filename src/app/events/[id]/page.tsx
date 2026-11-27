@@ -102,7 +102,7 @@ export default async function EventDetailPage({
           )}
           <h1 className="text-xl md:text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">
-            {formatEventRangeJst(event.start_at, event.end_at)}
+            {formatEventRangeJst(event.start_at, event.end_at, new Date(), !!(event as { end_time_unknown?: boolean }).end_time_unknown)}
           </p>
         </header>
 

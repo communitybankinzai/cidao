@@ -15,6 +15,7 @@ import { childPlaceInitialInput } from '@/lib/child-place'
 import { SeniorPlaceField } from '../../_components/SeniorPlaceField'
 import { seniorPlaceInitialInput } from '@/lib/senior-place'
 import { CafePlaceField } from '../../_components/CafePlaceField'
+import { EndTimeField } from '../../_components/EndTimeField'
 import { cafePlaceInitialInput } from '@/lib/cafe-place'
 
 // JST datetime-local 用の文字列（YYYY-MM-DDTHH:MM）に変換
@@ -113,6 +114,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       category: String(formData.get('category') ?? 'other'),
       start_at: String(formData.get('start_at') ?? ''),
       end_at: String(formData.get('end_at') ?? ''),
+      end_time_unknown: formData.get('end_time_unknown') === 'on',
       location: (formData.get('location') as string | null) || undefined,
       online_flag: formData.get('online_flag') === 'on',
       capacity: formData.get('capacity') ? Number(formData.get('capacity')) : undefined,
@@ -175,9 +177,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
             <L label="開始" req>
               <input type="datetime-local" name="start_at" required defaultValue={toLocalDatetime(event.start_at)} className={inp} />
             </L>
-            <L label="終了" req>
-              <input type="datetime-local" name="end_at" required defaultValue={toLocalDatetime(event.end_at)} className={inp} />
-            </L>
+            <EndTimeField className={inp} defaultValue={toLocalDatetime(event.end_at)} defaultUnknown={!!(event as { end_time_unknown?: boolean }).end_time_unknown} />
           </div>
           <L label="場所">
             <input name="location" placeholder="例: 印西市役所 会議室" defaultValue={event.location ?? ''} className={inp} />

@@ -8,6 +8,7 @@ const good = {
   description: '大型絵本の読み聞かせなど',
   start_at: '2026-12-06T10:30',
   end_at: '2026-12-06T11:30',
+  end_time_unknown: false,
   location: '小林コミュニティプラザ2階ホール',
   online_flag: false,
   capacity: 50,
@@ -41,6 +42,12 @@ describe('checkScanBulkItems', () => {
       expect(r.error).toContain('2件目')
       expect(r.error).toContain('日時なし')
     }
+  })
+
+  it('終了時刻が未定なら、終了日時が無くても通す', () => {
+    const r = checkScanBulkItems([{ ...good, end_at: null, end_time_unknown: true }], BASE, CATS)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.items[0].end_time_unknown).toBe(true)
   })
 
   it('終了が開始より前なら断る', () => {

@@ -18,6 +18,8 @@ export type FlyerExtract = {
   description: string
   start_at: string | null
   end_at: string | null
+  /** 終了時刻の記載が無いとき true（古い呼び出しでは無いことがある） */
+  end_time_unknown?: boolean
   location: string | null
   online_flag: boolean
   organizer_name: string | null
@@ -79,6 +81,10 @@ export async function extractFromFlyer(
                 ...nullableString,
                 description: '終了日時。YYYY-MM-DDTHH:MM 形式（JST）。終了の記載が無い場合は開始の1時間後を入れる。「10/1〜10/18」のような連続した会期の場合は最終日の終了日時を入れる。日付が飛び飛びで occurrences が2件以上ある場合は、1回目の終了日時を入れる。',
               },
+              end_time_unknown: {
+                type: 'boolean',
+                description: '終了時刻の記載が無い・決まっていないとき true（そのとき end_at には開始の1時間後を入れる）。終了時刻が書いてあれば false。',
+              },
               location: { ...nullableString, description: '会場・場所。例: 中央公民館 第1会議室' },
               online_flag: { type: 'boolean', description: 'オンライン開催ならtrue' },
               organizer_name: { ...nullableString, description: '主催団体名。会場とは別物。判らなければ null。' },
@@ -123,6 +129,7 @@ export async function extractFromFlyer(
               'description',
               'start_at',
               'end_at',
+              'end_time_unknown',
               'location',
               'online_flag',
               'organizer_name',

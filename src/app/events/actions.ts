@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { jstLocalToUtcIso } from '@/lib/datetime'
+import { endAtForSave, jstLocalToUtcIso } from '@/lib/datetime'
 import { notifyAllMembers } from '@/lib/notify'
 import { sendRegisterConfirm } from '@/lib/event-register-confirm'
 import { wantsInstantEvent } from '@/lib/event-notify-mode'
@@ -24,6 +24,8 @@ type CreateInput = {
   category: string
   start_at: string
   end_at: string
+  /** 終了時刻は未定。true のとき end_at は使わず、開始の1時間後を入れる */
+  end_time_unknown?: boolean
   location?: string
   online_flag: boolean
   capacity?: number
@@ -132,7 +134,8 @@ export async function createEvent(input: CreateInput) {
       description: input.description,
       category: input.category,
       start_at: jstLocalToUtcIso(input.start_at),
-      end_at: jstLocalToUtcIso(input.end_at),
+      end_at: jstLocalToUtcIso(endAtForSave(input.start_at, input.end_at, input.end_time_unknown)),
+      end_time_unknown: !!input.end_time_unknown,
       location: input.location ?? null,
       online_flag: input.online_flag,
       capacity: input.capacity ?? null,
@@ -247,7 +250,8 @@ export async function createEventsFromScan(input: {
           description: item.description,
           category: item.category ?? 'other',
           start_at: jstLocalToUtcIso(item.start_at),
-          end_at: jstLocalToUtcIso(item.end_at),
+          end_at: jstLocalToUtcIso(endAtForSave(item.start_at, item.end_at, item.end_time_unknown)),
+          end_time_unknown: item.end_time_unknown,
           location: item.location ?? null,
           online_flag: item.online_flag,
           capacity: item.capacity ?? null,
@@ -342,7 +346,8 @@ export async function createEventBulk(input: CreateInput, occurrences: Occurrenc
         description: input.description,
         category: input.category,
         start_at: jstLocalToUtcIso(occ.start_at),
-        end_at: jstLocalToUtcIso(occ.end_at),
+        end_at: jstLocalToUtcIso(endAtForSave(occ.start_at, occ.end_at, input.end_time_unknown)),
+        end_time_unknown: !!input.end_time_unknown,
         location: input.location ?? null,
         online_flag: input.online_flag,
         capacity: input.capacity ?? null,
@@ -427,6 +432,8 @@ type UpdateInput = {
   category: string
   start_at: string
   end_at: string
+  /** 終了時刻は未定。true のとき end_at は使わず、開始の1時間後を入れる */
+  end_time_unknown?: boolean
   location?: string
   online_flag: boolean
   capacity?: number
@@ -489,7 +496,8 @@ export async function updateEvent(input: UpdateInput) {
       description: input.description,
       category: input.category,
       start_at: jstLocalToUtcIso(input.start_at),
-      end_at: jstLocalToUtcIso(input.end_at),
+      end_at: jstLocalToUtcIso(endAtForSave(input.start_at, input.end_at, input.end_time_unknown)),
+      end_time_unknown: !!input.end_time_unknown,
       location: input.location ?? null,
       online_flag: input.online_flag,
       capacity: input.capacity ?? null,

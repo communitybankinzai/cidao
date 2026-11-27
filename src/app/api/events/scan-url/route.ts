@@ -117,6 +117,10 @@ async function extractEventsFromText(apiKey: string, pageText: string, sourceUrl
                       ...nullableString,
                       description: '終了日時。YYYY-MM-DDTHH:MM 形式（JST）。終了の記載が無い場合は開始の1時間後を入れる。',
                     },
+                    end_time_unknown: {
+                      type: 'boolean',
+                      description: '終了時刻の記載が無い・決まっていないとき true（そのとき end_at には開始の1時間後を入れる）。終了時刻が書いてあれば false。',
+                    },
                     location: { ...nullableString, description: '会場・場所。例: 中央公民館 第1会議室' },
                     online_flag: { type: 'boolean', description: 'オンライン開催ならtrue' },
                     organizer_name: { ...nullableString, description: '主催団体名。会場とは別物。判らなければ null。' },
@@ -157,6 +161,7 @@ async function extractEventsFromText(apiKey: string, pageText: string, sourceUrl
                     'description',
                     'start_at',
                     'end_at',
+                    'end_time_unknown',
                     'location',
                     'online_flag',
                     'organizer_name',

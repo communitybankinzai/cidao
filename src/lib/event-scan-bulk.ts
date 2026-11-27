@@ -9,6 +9,8 @@ export type ScanBulkItem = {
   /** 'YYYY-MM-DDTHH:MM'（日本時間の壁掛け時計） */
   start_at: string
   end_at: string
+  /** 終了時刻は未定（ページに終了の記載が無い） */
+  end_time_unknown: boolean
   location?: string
   online_flag: boolean
   capacity?: number
@@ -47,7 +49,9 @@ export function checkScanBulkItems(raw: unknown, storageBase: string, categoryKe
     const title = str(r.title, 120)
     if (!title) return { ok: false, error: `${no}：題名がありません` }
     const start_at = str(r.start_at, 16)
-    const end_at = str(r.end_at, 16)
+    const end_time_unknown = r.end_time_unknown === true
+    // 未定のときは、終了日時が無くても通す（保存のときに開始の1時間後を入れる）
+    const end_at = str(r.end_at, 16) || (end_time_unknown ? start_at : '')
     if (!LOCAL_RE.test(start_at)) return { ok: false, error: `${no}「${title}」：開始日時が読み取れていません。1件ずつ反映して、日時を入れてから登録してください` }
     if (!LOCAL_RE.test(end_at)) return { ok: false, error: `${no}「${title}」：終了日時が読み取れていません。1件ずつ反映して、日時を入れてから登録してください` }
     if (end_at < start_at) return { ok: false, error: `${no}「${title}」：終了が開始より前になっています` }
@@ -59,6 +63,7 @@ export function checkScanBulkItems(raw: unknown, storageBase: string, categoryKe
       description: str(r.description, 4000) || title,
       start_at,
       end_at,
+      end_time_unknown,
       location: str(r.location, 200) || undefined,
       online_flag: r.online_flag === true,
       capacity: nonNegInt(r.capacity),

@@ -12,6 +12,7 @@ import { OrganizerPicker } from './_components/OrganizerPicker'
 import { ChildPlaceField } from '../_components/ChildPlaceField'
 import { SeniorPlaceField } from '../_components/SeniorPlaceField'
 import { CafePlaceField } from '../_components/CafePlaceField'
+import { EndTimeField } from '../_components/EndTimeField'
 
 export default async function NewEventPage({ searchParams }: { searchParams: Promise<{ date?: string; error?: string }> }) {
   const sp = await searchParams
@@ -58,6 +59,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
       category: String(formData.get('category') ?? 'other'),
       start_at: String(formData.get('start_at') ?? ''),
       end_at: String(formData.get('end_at') ?? ''),
+      end_time_unknown: formData.get('end_time_unknown') === 'on',
       location: (formData.get('location') as string | null) || undefined,
       online_flag: formData.get('online_flag') === 'on',
       capacity: formData.get('capacity') ? Number(formData.get('capacity')) : undefined,
@@ -129,7 +131,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
           <OrganizerPicker memberOrgs={memberOrgs} allOrgs={allOrgs} />
           <div className="grid md:grid-cols-2 gap-3">
             <L label="開始" req><input type="datetime-local" name="start_at" required className={inp} defaultValue={initialStart} /></L>
-            <L label="終了" req><input type="datetime-local" name="end_at" required className={inp} defaultValue={initialEnd} /></L>
+            <EndTimeField className={inp} defaultValue={initialEnd} />
           </div>
           <L label="場所"><input name="location" placeholder="例: 印西市役所 会議室" className={inp} /></L>
           <div className="grid md:grid-cols-2 gap-3">

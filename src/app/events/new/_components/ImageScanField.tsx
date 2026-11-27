@@ -14,6 +14,7 @@ type Extracted = {
   description?: string
   start_at?: string | null
   end_at?: string | null
+  end_time_unknown?: boolean
   location?: string | null
   online_flag?: boolean
   organizer_name?: string | null
@@ -256,7 +257,7 @@ export function ImageScanField({
       } else {
         setCandidates(events)
         // 日時まで読めた催しだけ、はじめからチェックを入れる（読めていないものは、1件ずつ反映して直してもらう）
-        setCandChecked(events.map((e) => !!e.start_at && !!e.end_at))
+        setCandChecked(events.map((e) => !!e.start_at && (!!e.end_at || !!e.end_time_unknown)))
         setCandFlyer(events.map((e) => !!e.flyer_source_url))
         setStatus('done')
         setMessage(`${events.length}件のイベントを検出しました。まとめて登録するか、1件ずつフォームに反映してください。`)
@@ -367,6 +368,9 @@ export function ImageScanField({
     setField('description', d.description)
     setField('start_at', d.start_at ?? undefined)
     setField('end_at', d.end_at ?? undefined)
+    // 「終了時刻は未定」のチェック欄を、読み取った結果に合わせる（React の状態が変わるよう click で切り替える）
+    const unknownCb = form.querySelector('[name="end_time_unknown"]') as HTMLInputElement | null
+    if (unknownCb && unknownCb.checked !== !!d.end_time_unknown) unknownCb.click()
     setField('location', d.location ?? undefined)
     // 分野（AI がチラシから読んだもの。一覧にある値のときだけ）
     if (d.category && PROPOSAL_CATEGORIES.some((c) => c.key === d.category)) setField('category', d.category)
@@ -531,7 +535,7 @@ export function ImageScanField({
           </p>
           <ul className="space-y-2">
             {candidates.map((c, i) => {
-              const ready = !!c.start_at && !!c.end_at
+              const ready = !!c.start_at && (!!c.end_at || !!c.end_time_unknown)
               return (
                 <li key={i} className="flex items-start gap-2 rounded border border-slate-200 dark:border-slate-700 p-2 text-xs">
                   <input
@@ -546,6 +550,7 @@ export function ImageScanField({
                     <p className="font-medium text-slate-900 dark:text-slate-100">{c.title}</p>
                     <p className="text-slate-500">
                       {c.start_at ? formatOcc(c.start_at) : '日時を読み取れませんでした'}
+                      {c.start_at && c.end_time_unknown ? '〜（終了時刻は未定）' : ''}
                       {(c.occurrences?.length ?? 0) > 1 ? ` ほか全${c.occurrences?.length}回` : ''}
                       {c.location ? `・${c.location}` : ''}
                     </p>
