@@ -93,6 +93,13 @@ export function ProposalsBrowser({
     return list
   }, [proposals, tab, category])
 
+  // 議論中の提案（投票の前に意見を集めている段階）。最初に開く「投票中」の区分では見えないので、先頭に出す
+  const discussing = useMemo(() => {
+    let list = proposals.filter((p) => p.status === 'discussion')
+    if (category !== 'all') list = list.filter((p) => p.category === category)
+    return [...list].sort((a, b) => new Date(a.discussion_start_at ?? 0).getTime() - new Date(b.discussion_start_at ?? 0).getTime())
+  }, [proposals, category])
+
   const categoriesInScope = useMemo(() => {
     const set = new Set<string>()
     proposals.forEach((p) => set.add(p.category))
@@ -120,6 +127,26 @@ export function ProposalsBrowser({
           </select>
         )}
       </div>
+
+      {tab === 'voting' && discussing.length > 0 && (
+        <section aria-label="いま意見を募集している提案" className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+          <h2 className="text-base font-semibold text-amber-900 dark:text-amber-100">💬 いま意見を募集している提案（議論中・{discussing.length}件）</h2>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900 dark:text-amber-200">投票の前に、意見や質問を書ける期間です。期間が終わると、自動で投票に移ります。</p>
+          <ul className="mt-3 space-y-2">
+            {discussing.map((p) => (
+              <li key={p.id}>
+                <Link href={`/proposals/${p.id}`} className="block min-h-11 rounded-lg border border-amber-300 bg-white p-3 hover:border-amber-500 dark:border-amber-700 dark:bg-slate-900">
+                  <span className="block text-base font-semibold leading-snug text-slate-900 dark:text-slate-100">{p.title}</span>
+                  <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{categoryLabel(p.category)}</span>
+                    <span className="ml-auto text-amber-800 dark:text-amber-200">{discussionRemainingLabel(p.discussion_start_at)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {filtered.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-lg p-12 text-center border border-slate-200 dark:border-slate-800">
