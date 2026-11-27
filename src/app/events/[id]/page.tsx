@@ -1,4 +1,5 @@
 import { BackLink } from '@/components/layout/PageHeader'
+import { formatEventRangeJst } from '@/lib/datetime'
 import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -13,6 +14,9 @@ import { AnnounceEventButton } from './_components/AnnounceEventButton'
 import { joinEvent, leaveEvent, claimEvent, manageParticipant } from '../actions'
 
 const STATUS_LABEL: Record<string, string> = {
+  // open を「受付中」としないのは、申し込みの要らない催し（外から集めたもの）が大半だから
+  open: '公開中',
+  closed: '終了',
   cancelled: '中止',
   draft: '確認中（まだ公開されていません）',
 }
@@ -98,7 +102,7 @@ export default async function EventDetailPage({
           )}
           <h1 className="text-xl md:text-3xl font-serif font-bold">{event.title}</h1>
           <p className="text-sm text-slate-500">
-            {new Date(event.start_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} 〜 {new Date(event.end_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+            {formatEventRangeJst(event.start_at, event.end_at)}
           </p>
         </header>
 
