@@ -17,7 +17,9 @@ const FAV_KEY = 'cidao.bus.favStops'
 
 type LatLon = [number, number]
 type LLayer = { addTo(m: LMap): LLayer; remove(): void; on(ev: string, fn: () => void): LLayer; setLatLng(c: LatLon): LLayer; bindPopup(html: string, o?: object): LLayer; setPopupContent(html: string): LLayer; setStyle(o: object): LLayer; bringToFront(): LLayer }
-type LMap = { setView(c: LatLon, z: number, o?: object): unknown; invalidateSize(): unknown; remove(): void; fitBounds(b: LatLon[], o?: object): unknown; panTo(c: LatLon): unknown }
+type LMap = { setView(c: LatLon, z: number, o?: object): unknown; invalidateSize(): unknown; remove(): void; fitBounds(b: LatLon[], o?: object): unknown; panTo(c: LatLon): unknown; on(ev: string, fn: (e: LClick) => void): unknown; off(ev: string, fn: (e: LClick) => void): unknown; latLngToContainerPoint(c: LatLon): { x: number; y: number } }
+type LClick = { containerPoint: { x: number; y: number } }
+const TAP_PX = 24 // 白い丸（直径10px）は指で当てにくいので、この距離までの近くを押しても選べるようにする
 type LLeaflet = {
   map(el: HTMLElement, o?: object): LMap
   tileLayer(url: string, o?: object): LLayer
@@ -471,13 +473,8 @@ export function BusMap() {
     const visible = visibleStops
     for (const s of net.stops) {
       if (visible && !visible.has(s.id)) continue
-      const mk = m.L.circleMarker([s.lat, s.lon], { radius: 5, color: '#0f172a', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1 })
-        .addTo(m.map)
-        .on('click', () => {
-          setStopName(s.name)
-          setShowAll(false)
-          panelEl.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        })
+      // 押したときの処理は、下の「地図を押したら、いちばん近いバス停をえらぶ」でまとめて行う
+      const mk = m.L.circleMarker([s.lat, s.lon], { radius: 5, color: '#0f172a', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1 }).addTo(m.map)
       m.stops.set(s.id, mk)
     }
     if (bounds.length) {
@@ -618,6 +615,34 @@ export function BusMap() {
     return () => window.clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, net])
+
+  // 地図を押したら、いちばん近いバス停をえらぶ（丸そのものに当たらなくても、近くなら選べる）
+  useEffect(() => {
+    const m = ref.current
+    if (!m || !ready || !net) return
+    const onClick = (e: LClick) => {
+      let best: Stop | null = null
+      let bestD = TAP_PX
+      for (const s of net.stops) {
+        if (visibleStops && !visibleStops.has(s.id)) continue
+        const q = m.map.latLngToContainerPoint([s.lat, s.lon])
+        const d = Math.hypot(q.x - e.containerPoint.x, q.y - e.containerPoint.y)
+        if (d < bestD) {
+          bestD = d
+          best = s
+        }
+      }
+      if (!best) return
+      setStopName(best.name)
+      setShowAll(false)
+      // 時刻の欄を、画面の上のほうへ出す（下端だと、下のメニューの帯に隠れる）
+      panelEl.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    m.map.on('click', onClick)
+    return () => {
+      m.map.off('click', onClick)
+    }
+  }, [ready, net, visibleStops])
 
   // 選んだバス停を目立たせる
   useEffect(() => {
@@ -1171,7 +1196,7 @@ export function BusMap() {
         <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">時刻表どおりの計算です。バスが遅れると、乗り換えに間に合わないことがあります。きょう運行する便で調べています。歩く乗り換えは、まっすぐ測った距離です。</p>
       </section>
 
-      <section ref={panelEl} aria-label="バス停の時刻表" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <section ref={panelEl} aria-label="バス停の時刻表" className="scroll-mt-20 space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         {favs.length ? (
           <div className="space-y-1">
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">よく使うバス停</div>
