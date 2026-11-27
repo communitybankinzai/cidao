@@ -15,6 +15,8 @@ import { seniorPlaceColumns } from '@/lib/senior-place'
 import { cafePlaceColumns } from '@/lib/cafe-place'
 import { buildReviewText, textChanged } from '@/lib/content-review'
 import { reviewPost } from '@/lib/content-review-run'
+import { buildScanBulkNotice, checkScanBulkItems } from '@/lib/event-scan-bulk'
+import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 
 type CreateInput = {
   title: string
@@ -197,6 +199,126 @@ export async function createEvent(input: CreateInput) {
 
   revalidatePath('/events')
   redirect(`/events/${data.id}`)
+}
+
+// サイト URL から読んだ「別々の催し」を、まとめて登録する（2026-11-27）。
+// 複数日程（同じ内容）の createEventBulk とは違い、題名・日時・場所・チラシが1件ずつ違う。
+// 画面（ImageScanField）から直接呼ぶので、redirect はせず結果を返す（自前で呼んだアクションの redirect は例外になるため）。
+//
+// 主催者の決め方：フォームで主催者を選んであれば（「個人で主催」以外）それを全件に使う。
+// 選んでいなければ、AI が読んだ主催者名で「未登録の団体（代理登録）」にする。どちらも無ければ個人主催。
+export async function createEventsFromScan(input: {
+  items: unknown
+  organizer_choice: string
+  organizer_name_text?: string
+  /** 読み取ったページの URL。各催しの「サイトリンク」に入れる */
+  source_url?: string
+}): Promise<{ ok: true; events: { id: string; title: string }[] } | { ok: false; error: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'ログインが切れています。開き直してからもう一度お試しください' }
+
+  const supaUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
+  const storageBase = supaUrl ? `${supaUrl}/storage/v1/object/public/event-flyers/` : ''
+  const checked = checkScanBulkItems(input.items, storageBase, PROPOSAL_CATEGORIES.map((c) => c.key))
+  if (!checked.ok) return checked
+
+  let website_url: string | null = null
+  try {
+    const u = input.source_url ? new URL(input.source_url) : null
+    if (u && (u.protocol === 'http:' || u.protocol === 'https:')) website_url = u.toString()
+  } catch {
+    website_url = null
+  }
+
+  const created: { id: string; title: string; description: string }[] = []
+  try {
+    for (const item of checked.items) {
+      const useForm = input.organizer_choice !== '__member__'
+      const choice = useForm ? input.organizer_choice : item.organizer_name ? '__external__' : '__member__'
+      const nameText = useForm ? input.organizer_name_text : item.organizer_name
+      const { organizer_type, organizer_id, name_text, isProxy, isUnknownOrganizer } =
+        await resolveOrganizer(supabase, user, choice, nameText)
+
+      const { data, error } = await supabase
+        .from('events')
+        .insert({
+          title: item.title,
+          description: item.description,
+          category: item.category ?? 'other',
+          start_at: jstLocalToUtcIso(item.start_at),
+          end_at: jstLocalToUtcIso(item.end_at),
+          location: item.location ?? null,
+          online_flag: item.online_flag,
+          capacity: item.capacity ?? null,
+          fee: item.fee ?? null,
+          organizer_type,
+          organizer_id,
+          organizer_name_text: name_text,
+          proxy_registration: isProxy,
+          proxy_source_url: isProxy ? 'https://cidao.vercel.app/events/new' : null,
+          flyer_image_url: item.flyer_image_url ?? null,
+          website_url,
+          // 居場所の目印は、題名・主催名からの自動判定にまかせる
+          ...childPlaceColumns(''),
+          ...seniorPlaceColumns(''),
+          ...cafePlaceColumns(''),
+          status: 'open',
+        })
+        .select('id')
+        .single()
+      if (error) throw new Error(error.message)
+      created.push({ id: data.id, title: item.title, description: item.description })
+
+      if (!isUnknownOrganizer && !isProxy) {
+        await supabase.from('event_participants').insert({ event_id: data.id, member_id: user.id, role: 'organizer' })
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '登録に失敗しました'
+    // 途中まで入った分は残す（何件入ったかを伝える。消すと、入った分まで失う）
+    if (created.length === 0) return { ok: false, error: `登録に失敗しました：${message}` }
+    revalidatePath('/events')
+    return { ok: false, error: `${created.length}件は登録できましたが、${created.length + 1}件目で失敗しました：${message}` }
+  }
+
+  // 知らせは1通にまとめる（催しの数だけ届かないようにする）
+  const first = created[0]
+  after(async () => {
+    const review = await reviewPost({
+      targetType: 'event', targetId: first.id, action: 'create', authorId: user.id,
+      title: first.title, text: buildReviewText(created.flatMap((c) => [c.title, c.description])),
+      extraTargetIds: created.slice(1).map((c) => c.id),
+    })
+    if (review.held) return
+    const notice = buildScanBulkNotice(created.map((c) => c.title))
+    const result = await notifyAllMembers({
+      kind: 'event',
+      actorId: user.id,
+      prefKey: 'notify_event',
+      recipientFilter: wantsInstantEvent,
+      title: notice.title,
+      body: notice.body,
+      linkUrl: created.length === 1 ? `/events/${first.id}` : '/events',
+    })
+    await sendRegisterConfirm({
+      memberId: user.id,
+      eventId: first.id,
+      title: created.length === 1 ? first.title : `${first.title} ほか${created.length - 1}件`,
+      result,
+    })
+  })
+
+  await recordWrite({
+    actorId: user.id,
+    action: 'event.create',
+    targetType: 'event',
+    targetId: first.id,
+    detail: { title: first.title, scan_bulk: created.length, ids: created.map((c) => c.id) },
+  })
+
+  revalidatePath('/events')
+  return { ok: true, events: created.map((c) => ({ id: c.id, title: c.title })) }
 }
 
 // チラシから複数日程（occurrences）が検出された場合に、同一内容のイベントをまとめて登録する。

@@ -5,6 +5,7 @@ import { FilePickButton } from '@/components/ui/file-pick-button'
 import { PROPOSAL_CATEGORIES } from '@/lib/categories'
 import { assignQrUrls, type QrPurpose } from '@/lib/flyer-qr'
 import { resizeImagePreserveAspect } from '@/lib/image-resize'
+import { createEventsFromScan } from '../../actions'
 
 type Occurrence = { start_at: string; end_at: string }
 
@@ -26,6 +27,8 @@ type Extracted = {
   form_url?: string | null
   website_url?: string | null
   confidence?: number
+  // サイト URL から読んだとき、ページ内にあった「この催しのチラシ」の画像（まだ保存していない。付けるかは本人が決める）
+  flyer_source_url?: string | null
 }
 
 // チラシの画像から QR コードを読み取る（端末の中だけで行い、どこにも送らない）。
@@ -114,6 +117,92 @@ export function ImageScanField({
   const [candidates, setCandidates] = useState<Extracted[]>([])
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [scanWithAi, setScanWithAi] = useState(defaultScan)
+  // サイト URL から複数の催しを読んだときの、まとめて登録（2026-11-27）
+  const [candChecked, setCandChecked] = useState<boolean[]>([])
+  const [candFlyer, setCandFlyer] = useState<boolean[]>([])
+  const [sourceUrl, setSourceUrl] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkDone, setBulkDone] = useState<{ id: string; title: string }[]>([])
+  const [bulkError, setBulkError] = useState('')
+  // 1件だけ反映したときの、ページ内のチラシ（付けるボタンを出す）
+  const [pageFlyer, setPageFlyer] = useState<string | null>(null)
+  const [pageFlyerBusy, setPageFlyerBusy] = useState(false)
+
+  // ページ内の画像を、自分たちの保管場所へ写す。写せなければ null
+  async function importFlyer(url: string): Promise<string | null> {
+    try {
+      const res = await fetch('/api/events/import-flyer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string }
+      return res.ok && data.ok && data.url ? data.url : null
+    } catch {
+      return null
+    }
+  }
+
+  async function attachPageFlyer() {
+    if (!pageFlyer) return
+    setPageFlyerBusy(true)
+    const saved = await importFlyer(pageFlyer)
+    setPageFlyerBusy(false)
+    if (saved) {
+      setFlyerUrl(saved)
+      setPageFlyer(null)
+    } else {
+      setStatus('notice')
+      setMessage('ページ内の画像を保存できませんでした。画像を保存してから「チラシ画像を選ぶ」で付けてください。')
+    }
+  }
+
+  // チェックした催しを、まとめて登録する。主催者は、フォームで選んであればそれを、無ければ読み取った主催者名を使う
+  async function handleBulk() {
+    const form = inputRef.current?.closest('form')
+    const picked = candidates.map((c, i) => ({ c, i })).filter(({ i }) => candChecked[i])
+    if (picked.length === 0 || bulkBusy) return
+    setBulkBusy(true)
+    setBulkError('')
+    try {
+      const items = []
+      let flyerFailed = 0
+      for (const { c, i } of picked) {
+        let flyer_image_url: string | undefined
+        if (c.flyer_source_url && candFlyer[i]) {
+          const saved = await importFlyer(c.flyer_source_url)
+          if (saved) flyer_image_url = saved
+          else flyerFailed++
+        }
+        items.push({ ...c, flyer_image_url })
+      }
+      const val = (name: string) =>
+        (form?.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value ?? ''
+      const res = await createEventsFromScan({
+        items,
+        organizer_choice: val('organizer_choice') || '__member__',
+        organizer_name_text: val('organizer_name_text') || undefined,
+        source_url: sourceUrl || undefined,
+      })
+      if (!res.ok) {
+        setBulkError(res.error)
+        return
+      }
+      setBulkDone(res.events)
+      setCandidates([])
+      setCandChecked([])
+      setCandFlyer([])
+      setStatus('done')
+      setMessage(
+        `${res.events.length}件を登録しました。` +
+          (flyerFailed > 0 ? `チラシ画像を保存できなかった催しが${flyerFailed}件あります（編集から付けられます）。` : ''),
+      )
+    } catch {
+      setBulkError('登録に失敗しました。通信の状態を確かめて、もう一度お試しください。')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   // 抽出結果1件をフォームへ反映する（画像スキャン・URL スキャン共通）。
   // 複数日程（occurrences）があれば既存の日程チェック UI に流す
@@ -139,6 +228,9 @@ export function ImageScanField({
     setMessage('ページを取得 + AI 読み取り中…')
     setCandidates([])
     setSelectedIdx(null)
+    setBulkDone([])
+    setBulkError('')
+    setPageFlyer(null)
     try {
       const res = await fetch('/api/events/scan-url', {
         method: 'POST',
@@ -149,8 +241,10 @@ export function ImageScanField({
         ok?: boolean
         reason?: string
         events?: Extracted[]
+        source_url?: string
       }
       const events = Array.isArray(data.events) ? data.events : []
+      setSourceUrl(data.source_url ?? u)
       if (!res.ok || data.ok === false || events.length === 0) {
         setStatus('notice')
         setMessage(REASON_MESSAGES[data.reason ?? 'unknown'] ?? REASON_MESSAGES.unknown)
@@ -158,10 +252,14 @@ export function ImageScanField({
       }
       if (events.length === 1) {
         applyCandidate(events[0], '読み取り完了', '')
+        setPageFlyer(events[0].flyer_source_url ?? null)
       } else {
         setCandidates(events)
+        // 日時まで読めた催しだけ、はじめからチェックを入れる（読めていないものは、1件ずつ反映して直してもらう）
+        setCandChecked(events.map((e) => !!e.start_at && !!e.end_at))
+        setCandFlyer(events.map((e) => !!e.flyer_source_url))
         setStatus('done')
-        setMessage(`${events.length}件のイベントを検出しました。下の一覧から反映するイベントを選んでください。`)
+        setMessage(`${events.length}件のイベントを検出しました。まとめて登録するか、1件ずつフォームに反映してください。`)
       }
     } catch {
       setStatus('notice')
@@ -427,32 +525,117 @@ export function ImageScanField({
         </button>
       </div>
       {candidates.length > 1 && (
-        <div className="rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-2 space-y-1">
+        <div className="rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-2 space-y-2">
           <p className="text-xs font-medium">
-            {candidates.length}件のイベントを検出しました。フォームに反映するイベントを選んでください
+            {candidates.length}件のイベントを検出しました。チェックした催しを、まとめて登録できます
           </p>
-          {candidates.map((c, i) => (
-            <label key={i} className="flex items-start gap-2 text-xs">
-              <input
-                type="radio"
-                checked={selectedIdx === i}
-                onChange={() => {
-                  setSelectedIdx(i)
-                  applyCandidate(c, `「${c.title ?? ''}」を反映しました`, '')
-                }}
-              />
-              <span>
-                <span className="font-medium">{c.title}</span>
-                <span className="text-slate-500">
-                  {c.start_at ? ` ${formatOcc(c.start_at)}` : ''}
-                  {(c.occurrences?.length ?? 0) > 1 ? ` ほか全${c.occurrences?.length}回` : ''}
-                </span>
-              </span>
-            </label>
-          ))}
-          <p className="text-[10px] text-slate-500">
-            1件ずつ反映→内容確認→登録してください。登録するとこの一覧は消えるため、続けて別のイベントを登録する場合はもう一度URLを読み取ってください。
+          <ul className="space-y-2">
+            {candidates.map((c, i) => {
+              const ready = !!c.start_at && !!c.end_at
+              return (
+                <li key={i} className="flex items-start gap-2 rounded border border-slate-200 dark:border-slate-700 p-2 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label={`「${c.title ?? ''}」をまとめて登録に入れる`}
+                    className="mt-0.5"
+                    checked={candChecked[i] ?? false}
+                    disabled={!ready || bulkBusy}
+                    onChange={(e) => setCandChecked(candChecked.map((v, j) => (j === i ? e.target.checked : v)))}
+                  />
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{c.title}</p>
+                    <p className="text-slate-500">
+                      {c.start_at ? formatOcc(c.start_at) : '日時を読み取れませんでした'}
+                      {(c.occurrences?.length ?? 0) > 1 ? ` ほか全${c.occurrences?.length}回` : ''}
+                      {c.location ? `・${c.location}` : ''}
+                    </p>
+                    {c.organizer_name && <p className="text-slate-500">主催：{c.organizer_name}</p>}
+                    {c.flyer_source_url && (
+                      <label className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={candFlyer[i] ?? false}
+                          disabled={bulkBusy}
+                          onChange={(e) => setCandFlyer(candFlyer.map((v, j) => (j === i ? e.target.checked : v)))}
+                        />
+                        このチラシ画像を付ける
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      className="underline text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                      disabled={bulkBusy}
+                      onClick={() => {
+                        setSelectedIdx(i)
+                        applyCandidate(c, `「${c.title ?? ''}」を反映しました`, '')
+                        setPageFlyer(c.flyer_source_url ?? null)
+                      }}
+                    >
+                      {selectedIdx === i ? '下のフォームに反映済み（もう一度反映）' : 'この1件だけ下のフォームに反映して直す'}
+                    </button>
+                  </div>
+                  {c.flyer_source_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.flyer_source_url}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                      className="h-20 w-16 shrink-0 rounded border border-slate-200 dark:border-slate-700 bg-white object-cover"
+                    />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <button
+            type="button"
+            onClick={() => void handleBulk()}
+            disabled={bulkBusy || candChecked.filter(Boolean).length === 0}
+            className="w-full min-h-11 rounded-lg bg-accent-strong px-3 text-sm font-semibold text-accent-strong-fg disabled:opacity-50"
+          >
+            {bulkBusy ? '登録しています…' : `チェックした ${candChecked.filter(Boolean).length} 件をまとめて登録`}
+          </button>
+          {bulkError && (
+            <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+              {bulkError}
+            </p>
+          )}
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            まとめて登録では、主催者は下のフォームで選んであればそれを、選んでいなければ読み取った主催者名（代理登録）を使います。
+            題名・日時・場所は読み取ったままで登録されるので、上の内容を確かめてください。登録したあとも、各イベントの「編集」で直せます。
+            チラシ画像は、掲載してよいものだけ付けてください。
           </p>
+        </div>
+      )}
+      {bulkDone.length > 0 && (
+        <div className="rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-2 space-y-1">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">{bulkDone.length}件を登録しました</p>
+          <ul className="space-y-0.5">
+            {bulkDone.map((e) => (
+              <li key={e.id} className="text-xs">
+                <a href={`/events/${e.id}`} className="text-sky-700 underline dark:text-sky-300">{e.title}</a>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-slate-500">下のフォームは使わずに、このまま閉じてかまいません。</p>
+        </div>
+      )}
+      {pageFlyer && !flyerUrl && (
+        <div className="flex items-center gap-3 rounded border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={pageFlyer} alt="" referrerPolicy="no-referrer" className="h-20 w-16 shrink-0 rounded border border-slate-200 dark:border-slate-700 bg-white object-cover" />
+          <div className="space-y-1">
+            <p className="text-xs">ページ内に、この催しのチラシ画像がありました。</p>
+            <button
+              type="button"
+              onClick={() => void attachPageFlyer()}
+              disabled={pageFlyerBusy}
+              className="rounded bg-amber-200 px-2 py-1 text-xs text-amber-900 disabled:opacity-50 dark:bg-amber-800 dark:text-amber-100"
+            >
+              {pageFlyerBusy ? '保存しています…' : 'このチラシ画像を付ける'}
+            </button>
+          </div>
         </div>
       )}
       {flyerUrl && (
