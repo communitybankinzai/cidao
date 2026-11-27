@@ -136,7 +136,7 @@ export function ProposalsBrowser({
           )}
         </div>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-5">
           {filtered.map((p) => {
             const s = STATUS_LABELS[p.status] ?? STATUS_LABELS.draft
             const meta = bindingMeta(p.binding_type)
@@ -147,7 +147,7 @@ export function ProposalsBrowser({
               <li key={p.id}>
                 <Link
                   href={`/proposals/${p.id}`}
-                  className="block bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition"
+                  className="block bg-white dark:bg-slate-900 p-4 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-md hover:border-slate-500 hover:shadow-lg dark:hover:border-slate-500 transition"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 leading-tight">

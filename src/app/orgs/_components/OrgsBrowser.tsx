@@ -415,7 +415,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
           {orgs.length === 0 ? '団体はまだありません' : '該当する団体がありません'}
         </p>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((o) => {
             const cats = o.organization_categories ?? []
             const primary = cats.find((c) => c.is_primary) ?? cats[0]
@@ -425,7 +425,7 @@ export default function OrgsBrowser({ orgs }: { orgs: Org[] }) {
             const overflow = visibleMembers.length - preview.length
             return (
               <li key={o.id}>
-                <div className="flex h-full flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-slate-400 dark:hover:border-slate-600 transition">
+                <div className="flex h-full flex-col bg-white dark:bg-slate-900 p-4 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-md hover:border-slate-500 hover:shadow-lg dark:hover:border-slate-500 transition">
                   <Link href={`/orgs/${o.id}`} className="block">
                     <div className="flex items-start gap-3 mb-2">
                       <OrgLogo src={o.logo_url} name={o.name} size="md" />

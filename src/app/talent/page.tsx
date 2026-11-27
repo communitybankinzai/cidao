@@ -40,10 +40,10 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
       {matching.length === 0 ? (
         <p className="text-slate-400 text-center py-12">{published.length ? '条件に合う人はいませんでした' : '公開中の人材プロフィールはまだありません'}</p>
       ) : (
-        <ul className="grid md:grid-cols-2 gap-3">
+        <ul className="grid md:grid-cols-2 gap-5">
           {matching.map(p => {
             const mem = avatars.get(p.member_id)
-            return <li key={p.profile_id}><Link href={`/talent/${p.member_id}?subject=${p.subject_id}`} className="block h-full bg-white dark:bg-slate-900 border rounded-lg p-4 hover:border-slate-400">
+            return <li key={p.profile_id}><Link href={`/talent/${p.member_id}?subject=${p.subject_id}`} className="block h-full bg-white dark:bg-slate-900 p-4 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-md hover:border-slate-500 hover:shadow-lg dark:hover:border-slate-500 transition">
               <div className="flex items-start gap-3">
                 <Avatar src={mem?.avatar_url ?? null} name={p.display_name} size="lg" objectPosition={mem?.avatar_position ?? undefined} zoom={mem?.avatar_zoom ?? undefined} />
                 <div className="flex-1 min-w-0">

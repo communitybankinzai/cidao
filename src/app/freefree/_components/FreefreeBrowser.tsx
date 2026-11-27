@@ -231,7 +231,7 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
       {filtered.length === 0 ? (
         <p className="text-slate-400 text-center py-12">該当する掲載はありません</p>
       ) : (
-        <ul className="grid md:grid-cols-2 gap-3">
+        <ul className="grid md:grid-cols-2 gap-5 md:gap-6">
           {shown.map((p) => {
             const meta = freefreePosterKindMeta(p.posterKind)
             const daysLeft = p.expires_at
@@ -240,10 +240,10 @@ export default function FreefreeBrowser({ rows }: { rows: FreefreeRow[] }) {
             const expiringSoon = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0
             return (
               <li key={p.id}>
-                <Link href={`/freefree/${p.id}`} className="block bg-white dark:bg-slate-900 border rounded-lg overflow-hidden hover:border-slate-400 dark:hover:border-slate-600 transition">
+                <Link href={`/freefree/${p.id}`} className="block h-full bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden shadow-md hover:border-slate-500 hover:shadow-lg dark:hover:border-slate-500 transition">
                   {p.images && p.images.length > 0 && (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={p.images[0]} alt={p.title} className="w-full h-32 object-cover" />
+                    <img src={p.images[0]} alt={p.title} className="w-full h-32 object-cover border-b-2 border-slate-300 dark:border-slate-700" />
                   )}
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-2 gap-2">
