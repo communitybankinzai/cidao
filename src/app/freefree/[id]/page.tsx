@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -88,8 +88,6 @@ export default async function FreefreeDetailPage({ params }: { params: Promise<{
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <article className="max-w-2xl mx-auto space-y-6">
         <BackLink href="/freefree">掲示板</BackLink>
-        <FeatureEyebrow feature="freefree" />
-
         <header className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${posterMeta.badgeClass}`}>{posterMeta.badge}</span>

@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -48,7 +48,6 @@ export default async function TalentDetailPage({ params, searchParams }: { param
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('talent')}`}>
       <article className="max-w-2xl mx-auto space-y-6">
         <BackLink href="/talent">登録メンバー</BackLink>
-        <FeatureEyebrow feature="talent" />
         <header className="flex items-center gap-4">
           <Avatar
             src={member.avatar_url}

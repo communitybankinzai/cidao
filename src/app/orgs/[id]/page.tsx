@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -125,8 +125,6 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('orgs')}`}>
       <article className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/orgs">団体一覧</BackLink>
-        <FeatureEyebrow feature="orgs" />
-
         <header className="space-y-3">
           <div className="flex items-start gap-4">
             <OrgLogo src={org.logo_url} name={org.name} size="xl" />

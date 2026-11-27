@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -140,7 +140,6 @@ export default async function EditProfilePage({
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('account')}`}>
       <form action={handleSubmit} className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/me">マイページ</BackLink>
-        <FeatureEyebrow feature="account" />
         <header>
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
             {wasLight ? '本登録（プロフィール完成）' : 'プロフィール編集'}

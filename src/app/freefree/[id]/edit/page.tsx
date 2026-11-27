@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink, FormTitle } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { notFound, redirect, unstable_rethrow } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -78,8 +78,7 @@ export default async function EditFreefreePage({ params }: { params: Promise<{ i
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <div className="max-w-2xl mx-auto space-y-4">
         <BackLink href={`/freefree/${id}`}>掲載に戻る</BackLink>
-        <FeatureEyebrow feature="freefree" />
-        <h1 className="text-2xl md:text-3xl font-serif font-bold">掲載を編集</h1>
+        <FormTitle feature="freefree">掲載を編集</FormTitle>
         <EditFreefreeForm
           action={handleUpdate}
           postId={id}

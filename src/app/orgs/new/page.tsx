@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink, FormTitle } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -48,8 +48,7 @@ export default async function NewOrgPage() {
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('orgs')}`}>
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
         <BackLink href="/orgs">団体一覧</BackLink>
-        <FeatureEyebrow feature="orgs" />
-        <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい団体</h1>
+        <FormTitle feature="orgs">新しい団体</FormTitle>
 
         <div className="bg-sky-50 dark:bg-sky-950 border-l-4 border-sky-500 p-3 rounded text-sm">
           登録すると、すぐに一般公開されます。印西市市民活動推進条例 第10条で市に登録した団体は「印西市民活動団体登録番号」（例: 08-001）を入力できます（任意）。

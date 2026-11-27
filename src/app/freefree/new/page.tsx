@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink, FormTitle } from '@/components/layout/PageHeader'
 import { PostingRules } from '@/components/PostingRules'
 import { accentClass } from '@/components/features'
 import { redirect, unstable_rethrow } from 'next/navigation'
@@ -115,8 +115,7 @@ export default async function NewFreefreePage() {
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('freefree')}`}>
       <div className="max-w-2xl mx-auto space-y-4">
         <BackLink href="/freefree">掲示板</BackLink>
-        <FeatureEyebrow feature="freefree" />
-        <h1 className="text-2xl md:text-3xl font-serif font-bold">新しい掲載</h1>
+        <FormTitle feature="freefree">新しい掲載</FormTitle>
         <PostingRules variant="full" />
         <NewFreefreeForm
           action={handleCreate}

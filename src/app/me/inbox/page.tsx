@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink } from '@/components/layout/PageHeader'
 import { accentClass } from '@/components/features'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -112,8 +112,6 @@ export default async function InboxPage() {
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('account')}`}>
       <div className="max-w-3xl mx-auto space-y-6">
         <BackLink href="/me">マイページ</BackLink>
-        <FeatureEyebrow feature="account" />
-
         <header className="space-y-2">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">受信箱</p>
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
