@@ -150,6 +150,15 @@ const AREA_STYLE: Record<AreaCat, { color: string; label: string; note: string }
 }
 const AREA_ORDER: AreaCat[] = ['none', 'far', 'few', 'other', 'ok']
 
+// 移動販売（移動スーパーなど）の来る場所と日時（public/bus/mobile_shops.json・scripts/bus/build_mobile_shops.py）
+type MobileShop = { op: string; tel: string; goods: string; day: string; time: string; place: string; src: string; srcUrl: string; lat?: number; lon?: number; approx?: string }
+type MobileShops = { asOf: string; note: string; items: MobileShop[] }
+const DAY_ORDER = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日']
+function dayRank(day: string): number {
+  const i = DAY_ORDER.findIndex((d) => day.includes(d.slice(0, 1) + '曜'))
+  return i < 0 ? 9 : i
+}
+
 // 行き先の書き方。「〜回り」「循環」はそのまま、ふつうの行き先には「行き」を付ける
 function dest(h: string): string {
   return /回り$|循環$/.test(h) ? h : `${h} 行き`
@@ -247,6 +256,10 @@ export function BusMap() {
   const [resetN, setResetN] = useState(0)
   const [showArea, setShowArea] = useState(false) // 移動が不便なエリアの色分け
   const [showShops, setShowShops] = useState(false) // スーパーの印
+  const [showMobile, setShowMobile] = useState(false) // 移動販売の印と一覧
+  const [mobile, setMobile] = useState<MobileShops | null>(null)
+  const [mobileErr, setMobileErr] = useState(false)
+  const mobileLayers = useRef<LLayer[]>([])
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [analysisErr, setAnalysisErr] = useState(false)
   const areaLayers = useRef<LLayer[]>([])
@@ -526,6 +539,59 @@ export function BusMap() {
     }
   }, [ready, showShops, analysis])
 
+  // 移動販売：初めて出すときに読み、印を置く
+  useEffect(() => {
+    if (!showMobile || mobile || mobileErr) return
+    let cancelled = false
+    fetch('/bus/mobile_shops.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: MobileShops) => {
+        if (!cancelled) setMobile(d)
+      })
+      .catch(() => {
+        if (!cancelled) setMobileErr(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showMobile, mobile, mobileErr])
+  useEffect(() => {
+    const m = ref.current
+    mobileLayers.current.forEach((l) => l.remove())
+    mobileLayers.current = []
+    if (!m || !ready || !showMobile || !mobile) return
+    // 同じ場所に来る販売は、1つの印にまとめる
+    const byPos = new Map<string, MobileShop[]>()
+    for (const it of mobile.items) {
+      if (it.lat == null || it.lon == null) continue
+      const k = `${it.lat},${it.lon}`
+      byPos.set(k, [...(byPos.get(k) ?? []), it])
+    }
+    for (const list of byPos.values()) {
+      const first = list[0]
+      const rows = list
+        .map(
+          (it) =>
+            `<div style="padding:5px 0;border-top:1px solid #e2e8f0"><b>${esc(it.day)} ${esc(it.time)}</b><br>${esc(it.place)}<br><span style="font-size:12px;color:#475569">${esc(it.op)}${it.goods ? '・' + esc(it.goods) : ''}</span><br>` +
+            `<a href="tel:${esc(it.tel.replace(/[^0-9]/g, ''))}" style="font-weight:700">📞 ${esc(it.tel)}</a>` +
+            (it.approx ? `<br><span style="font-size:11px;color:#b45309">📍 ${esc(it.approx)}</span>` : '') +
+            `</div>`,
+        )
+        .join('')
+      const icon = m.L.divIcon({
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+        html: '<div style="width:26px;height:26px;border-radius:50%;background:#ea580c;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:14px">🚚</div>',
+      })
+      mobileLayers.current.push(
+        m.L.marker([first.lat as number, first.lon as number], { icon })
+          .addTo(m.map)
+          .bindPopup(`<div style="font-size:14px;line-height:1.5;min-width:210px;max-height:260px;overflow:auto"><b>🚚 移動販売</b>${rows}<div style="font-size:11px;color:#64748b;padding-top:4px">日時・場所は変わることがあります。行く前にお電話で確かめてください。</div></div>`),
+      )
+    }
+  }, [ready, showMobile, mobile])
+
   // 開いたときに1回だけ、現在地へ寄せる（路線の線を描いたあと）
   useEffect(() => {
     if (!ready || !net || locatedOnce.current) return
@@ -761,6 +827,16 @@ export function BusMap() {
         >
           🛒 スーパー
         </button>
+        <button
+          type="button"
+          className={chip(showMobile)}
+          onClick={() => {
+            setShowMobile((v) => !v)
+            setView('flat')
+          }}
+        >
+          🚚 移動販売
+        </button>
       </div>
       {geoMsg ? <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{geoMsg}</p> : null}
       <div className="relative">
@@ -835,6 +911,69 @@ export function BusMap() {
       ) : null}
       {showShops && analysis ? (
         <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">🛒 スーパー {analysis.shops.length}か所（印西市と、市境から近い店）。出典：© OpenStreetMap contributors。載っていない店・閉店した店があるかもしれません。移動スーパーの来る場所は、まだ載せていません。</p>
+      ) : null}
+
+      {showMobile && mobileErr ? <p className="rounded bg-amber-50 p-2 text-sm text-amber-900">移動販売のデータを読み込めませんでした。</p> : null}
+      {showMobile && mobile ? (
+        <section aria-label="移動販売" data-testid="bus-mobile" className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">🚚 移動販売が来る場所と日時</h3>
+          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            市の資料（{mobile.asOf}）から、運営が写したものです。{mobile.note}
+          </p>
+          {DAY_ORDER.map((d, di) => {
+            const list = mobile.items.filter((it) => dayRank(it.day) === di).sort((a, b) => a.time.padStart(12, '0').localeCompare(b.time.padStart(12, '0')))
+            if (!list.length) return null
+            return (
+              <details key={d} className="rounded-lg border border-slate-200 dark:border-slate-700">
+                <summary className="min-h-11 cursor-pointer px-3 py-2 text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {d}（{list.length}か所）
+                </summary>
+                <ul className="divide-y divide-slate-100 px-3 pb-2 dark:divide-slate-800">
+                  {list.map((it) => (
+                    <li key={it.op + it.day + it.time + it.place} className="py-2 text-sm leading-relaxed text-slate-800 dark:text-slate-100">
+                      <div>
+                        <b className="tabular-nums">{it.time}</b> {it.place}
+                        {it.day !== d ? <span className="ml-1 text-xs text-slate-500">（{it.day}）</span> : null}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300">
+                        {it.op}
+                        <a href={`tel:${it.tel.replace(/[^0-9]/g, '')}`} className="ml-2 font-semibold text-sky-700 underline dark:text-sky-300">
+                          📞 {it.tel}
+                        </a>
+                        {it.lat != null ? (
+                          <button
+                            type="button"
+                            className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold dark:border-slate-600"
+                            onClick={() => {
+                              fitRef.current.touched = true
+                              ref.current?.map.setView([it.lat as number, it.lon as number], 16)
+                              mapEl.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            }}
+                          >
+                            地図で見る{it.approx ? '（おおよそ）' : ''}
+                          </button>
+                        ) : (
+                          <span className="ml-2 text-amber-700 dark:text-amber-300">地図の位置は確認中</span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )
+          })}
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            出典：
+            <a href="https://www.city.inzai.lg.jp/0000016245.html" target="_blank" rel="noopener noreferrer" className="mx-1 underline">
+              印西市 社会資源マップ 第4版
+            </a>
+            ・
+            <a href="https://www.city.inzai.lg.jp/0000021841.html" target="_blank" rel="noopener noreferrer" className="mx-1 underline">
+              市のお知らせ（平賀学園台の移動スーパー）
+            </a>
+            。お宅を1件ずつ回る販売は載せていません。地図の印は、近くのバス停や町の代表点に置いたものが多く、販売の場所そのものではありません。
+          </p>
+        </section>
       ) : null}
 
       <section aria-label="路線をえらぶ" className="space-y-1">
