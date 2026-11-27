@@ -1025,6 +1025,9 @@ export function BusMap() {
             </div>
           )
         })}
+        <p className="border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-600 dark:border-slate-700 dark:text-slate-300">
+          京成バスなど、ほかの会社の路線は準備中です（時刻表をまだ入れていないため、地図に線が出ません）。
+        </p>
       </section>
 
       <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
