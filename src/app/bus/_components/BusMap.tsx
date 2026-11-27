@@ -17,7 +17,7 @@ const FAV_KEY = 'cidao.bus.favStops'
 
 type LatLon = [number, number]
 type LLayer = { addTo(m: LMap): LLayer; remove(): void; on(ev: string, fn: () => void): LLayer; setLatLng(c: LatLon): LLayer; bindPopup(html: string, o?: object): LLayer; setPopupContent(html: string): LLayer; setStyle(o: object): LLayer; bringToFront(): LLayer }
-type LMap = { setView(c: LatLon, z: number): unknown; invalidateSize(): unknown; remove(): void; fitBounds(b: LatLon[], o?: object): unknown; panTo(c: LatLon): unknown }
+type LMap = { setView(c: LatLon, z: number, o?: object): unknown; invalidateSize(): unknown; remove(): void; fitBounds(b: LatLon[], o?: object): unknown; panTo(c: LatLon): unknown }
 type LLeaflet = {
   map(el: HTMLElement, o?: object): LMap
   tileLayer(url: string, o?: object): LLayer
@@ -411,7 +411,7 @@ export function BusMap() {
         ro = new ResizeObserver(() => {
           map.invalidateSize()
           const f = fitRef.current
-          if (f.bounds && !f.touched && box.clientWidth > 0 && box.clientHeight > 0) map.fitBounds(f.bounds, { padding: [24, 24] })
+          if (f.bounds && !f.touched && box.clientWidth > 0 && box.clientHeight > 0) map.fitBounds(f.bounds, { padding: [24, 24], animate: false })
         })
         ro.observe(box)
         setReady(true)
@@ -464,7 +464,7 @@ export function BusMap() {
     }
     if (bounds.length) {
       fitRef.current = { bounds, touched: false }
-      m.map.fitBounds(bounds, { padding: [24, 24] })
+      m.map.fitBounds(bounds, { padding: [24, 24], animate: false })
     }
   }, [ready, net, routeId, colorOf, stopById, stopsOfRoute])
 
@@ -739,7 +739,7 @@ export function BusMap() {
         else hereRef.current = cur.L.circleMarker(p, { radius: 9, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1, interactive: false }).addTo(cur.map)
         hereRef.current.bringToFront()
         fitRef.current.touched = true // 大きさが変わっても、全体へ合わせ直さない
-        cur.map.setView(p, 15)
+        cur.map.setView(p, 15, { animate: false })
         setHere(p)
         setFocusN((n) => n + 1)
         setGeoMsg('')
@@ -753,7 +753,7 @@ export function BusMap() {
   function showAllRoutes() {
     const m = ref.current
     const b = fitRef.current.bounds
-    if (m && b) m.map.fitBounds(b, { padding: [24, 24] })
+    if (m && b) m.map.fitBounds(b, { padding: [24, 24], animate: false })
     setResetN((n) => n + 1)
   }
 
@@ -946,7 +946,7 @@ export function BusMap() {
                             className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold dark:border-slate-600"
                             onClick={() => {
                               fitRef.current.touched = true
-                              ref.current?.map.setView([it.lat as number, it.lon as number], 16)
+                              ref.current?.map.setView([it.lat as number, it.lon as number], 16, { animate: false })
                               mapEl.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                             }}
                           >
