@@ -41,6 +41,24 @@ export function FeatureEyebrow({ feature, label = 'Citizen DAO' }: { feature: Fe
 }
 
 /**
+ * 入力フォームの題名。機能の色のアイコンと題名を1行に並べる（一覧ページの「詰めた形」と同じ見た目・2026-11-27）。
+ * 「Citizen DAO」の小見出しは出さない
+ */
+export function FormTitle({ feature, children }: { feature: FeatureKey; children: React.ReactNode }) {
+  const f = FEATURES[feature]
+  const Icon = f.icon
+  const hc = HEADER_COLORS[f.color]
+  return (
+    <h1 className="flex items-center gap-2 font-serif text-xl font-bold text-slate-900 md:text-3xl dark:text-slate-100">
+      <span aria-hidden className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${hc.chip}`}>
+        <Icon className="size-5" strokeWidth={1.75} />
+      </span>
+      <span className="min-w-0">{children}</span>
+    </h1>
+  )
+}
+
+/**
  * ページの先頭（戻るリンク＋見出し＋説明＋右側の操作ボタン）。
  *
  * 見出しの大きさ（text-2xl／md:text-3xl）、「Citizen DAO」の小見出し、

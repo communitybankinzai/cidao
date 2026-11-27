@@ -1,4 +1,4 @@
-import { BackLink, FeatureEyebrow } from '@/components/layout/PageHeader'
+import { BackLink, FormTitle } from '@/components/layout/PageHeader'
 import { PostingRules } from '@/components/PostingRules'
 import { accentClass } from '@/components/features'
 import { redirect } from 'next/navigation'
@@ -94,8 +94,7 @@ export default async function NewEventPage({ searchParams }: { searchParams: Pro
     <div className={`min-h-screen bg-slate-50 px-4 py-6 md:p-12 dark:bg-slate-950 ${accentClass('events')}`}>
       <form action={handleCreate} className="max-w-2xl mx-auto space-y-4">
         <BackLink href="/events">イベント一覧</BackLink>
-        <FeatureEyebrow feature="events" />
-        <h1 className="text-2xl md:text-3xl font-serif font-bold">新しいイベント</h1>
+        <FormTitle feature="events">新しいイベント</FormTitle>
         <PostingRules variant="full" />
 
         {sp.error && (
