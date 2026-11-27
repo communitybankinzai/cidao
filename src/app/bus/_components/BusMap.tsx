@@ -23,6 +23,7 @@ type LLeaflet = {
   tileLayer(url: string, o?: object): LLayer
   polyline(pts: LatLon[], o?: object): LLayer
   circleMarker(c: LatLon, o?: object): LLayer
+  rectangle(b: [LatLon, LatLon], o?: object): LLayer
   marker(c: LatLon, o?: object): LLayer
   divIcon(o: object): object
 }
@@ -127,6 +128,28 @@ function jstStamp(iso: string): string {
   return `${t.getUTCMonth() + 1}/${t.getUTCDate()} ${t.getUTCHours()}:${String(t.getUTCMinutes()).padStart(2, '0')}`
 }
 
+// 移動が不便なエリアの分析（public/bus/analysis.json・scripts/bus/build_bus_analysis.py が作る）
+type AreaCat = 'ok' | 'other' | 'few' | 'far' | 'none'
+type AreaCell = { lat: number; lon: number; pop: number; p65: number; p75: number; solo: number; d: number; stop: string; n: number; ds: number; sm?: number; do?: number; ostop?: string; oop?: string; cat: AreaCat }
+type AreaSum = { cells: number; pop: number; p65: number; p75: number; solo: number }
+type Analysis = {
+  builtAt: string
+  cell: { dlat: number; dlon: number }
+  rule: { stopNearM: number; stopFarM: number; stationM: number; fewBuses: number }
+  summary: Record<AreaCat, AreaSum>
+  total: { cells: number; pop: number; p65: number; p75: number }
+  cells: AreaCell[]
+  shops: { name: string; lat: number; lon: number }[]
+}
+const AREA_STYLE: Record<AreaCat, { color: string; label: string; note: string }> = {
+  none: { color: '#dc2626', label: 'バス停も駅も遠い', note: 'バス停まで600mより遠く、駅まで1kmより遠い' },
+  far: { color: '#f97316', label: 'バス停がやや遠い', note: 'バス停まで300〜600m（駅は1kmより遠い）' },
+  few: { color: '#eab308', label: '本数が少ない', note: '300m以内にバス停はあるが、平日の本数が1日20本より少ない' },
+  other: { color: '#38bdf8', label: 'ほかの会社のバス停が近い', note: '京成バスなど、この地図にまだ時刻表を入れていない会社のバス停が300m以内にある（本数は数えていません）' },
+  ok: { color: '#16a34a', label: '便利', note: '駅まで1km以内、または300m以内のバス停に平日1日20本以上' },
+}
+const AREA_ORDER: AreaCat[] = ['none', 'far', 'few', 'other', 'ok']
+
 // 行き先の書き方。「〜回り」「循環」はそのまま、ふつうの行き先には「行き」を付ける
 function dest(h: string): string {
   return /回り$|循環$/.test(h) ? h : `${h} 行き`
@@ -222,6 +245,12 @@ export function BusMap() {
   const [here, setHere] = useState<LatLon | null>(null) // 現在地（路線の範囲の中にいるときだけ入る）
   const [focusN, setFocusN] = useState(0)
   const [resetN, setResetN] = useState(0)
+  const [showArea, setShowArea] = useState(false) // 移動が不便なエリアの色分け
+  const [showShops, setShowShops] = useState(false) // スーパーの印
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [analysisErr, setAnalysisErr] = useState(false)
+  const areaLayers = useRef<LLayer[]>([])
+  const shopLayers = useRef<LLayer[]>([])
   const [notice, setNotice] = useState<NoticeState>({ status: 'loading', items: [], checkedAt: null })
   const [geoMsg, setGeoMsg] = useState('') // 現在地の取得の結果（取れなかったときの案内）
   const hereRef = useRef<LLayer | null>(null)
@@ -411,7 +440,7 @@ export function BusMap() {
     const visible = routeId === 'all' ? null : stopsOfRoute.get(routeId)
     for (const s of net.stops) {
       if (visible && !visible.has(s.id)) continue
-      const mk = m.L.circleMarker([s.lat, s.lon], { radius: 7, color: '#0f172a', weight: 2, fillColor: '#ffffff', fillOpacity: 1 })
+      const mk = m.L.circleMarker([s.lat, s.lon], { radius: 5, color: '#0f172a', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1 })
         .addTo(m.map)
         .on('click', () => {
           setStopName(s.name)
@@ -425,6 +454,77 @@ export function BusMap() {
       m.map.fitBounds(bounds, { padding: [24, 24] })
     }
   }, [ready, net, routeId, colorOf, stopById, stopsOfRoute])
+
+  // 分析のデータは、色分けかスーパーを初めて出すときに読む
+  useEffect(() => {
+    if ((!showArea && !showShops) || analysis || analysisErr) return
+    let cancelled = false
+    fetch('/bus/analysis.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: Analysis) => {
+        if (!cancelled) setAnalysis(d)
+      })
+      .catch(() => {
+        if (!cancelled) setAnalysisErr(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showArea, showShops, analysis, analysisErr])
+
+  // 色分け（250m四方の区画）を描く。「便利」の区画は塗らない
+  useEffect(() => {
+    const m = ref.current
+    areaLayers.current.forEach((l) => l.remove())
+    areaLayers.current = []
+    if (!m || !ready || !showArea || !analysis) return
+    for (const c of analysis.cells) {
+      if (c.cat === 'ok') continue
+      const st = AREA_STYLE[c.cat]
+      const html =
+        `<div style="font-size:14px;line-height:1.6"><b style="color:${st.color}">■</b> <b>${esc(st.label)}</b><br>` +
+        `この区画の人口 ${c.pop}人（65歳以上 ${c.p65}人・75歳以上 ${c.p75}人）<br>` +
+        `最寄りのバス停：${esc(c.stop)} まで約${c.d}m<br>300m以内のバス停の本数：平日 ${c.n}本／日<br>` +
+        (c.ostop ? `ほかの会社のバス停：${esc(c.ostop)}（${esc(c.oop ?? '')}）まで約${c.do}m<br>` : '') +
+        `最寄りの駅まで：約${c.ds >= 1000 ? (c.ds / 1000).toFixed(1) + 'km' : c.ds + 'm'}<br>` +
+        (c.sm != null ? `最寄りのスーパーまで：約${c.sm >= 1000 ? (c.sm / 1000).toFixed(1) + 'km' : c.sm + 'm'}<br>` : '') +
+        `<span style="font-size:12px;color:#64748b">区画の中心から、まっすぐ測った距離です</span></div>`
+      const rect = m.L.rectangle(
+        [
+          [c.lat, c.lon],
+          [c.lat + analysis.cell.dlat, c.lon + analysis.cell.dlon],
+        ],
+        { color: st.color, weight: 0.5, fillColor: st.color, fillOpacity: 0.42 },
+      )
+        .addTo(m.map)
+        .bindPopup(html)
+      areaLayers.current.push(rect)
+    }
+    // 路線とバス停を、色分けの上へ出し直す
+    m.lines.forEach((l) => l.bringToFront())
+    m.stops.forEach((l) => l.bringToFront())
+  }, [ready, showArea, analysis, routeId])
+
+  // スーパーの印
+  useEffect(() => {
+    const m = ref.current
+    shopLayers.current.forEach((l) => l.remove())
+    shopLayers.current = []
+    if (!m || !ready || !showShops || !analysis) return
+    for (const sh of analysis.shops) {
+      const icon = m.L.divIcon({
+        className: '',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        html: '<div style="width:22px;height:22px;border-radius:5px;background:#15803d;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:12px">🛒</div>',
+      })
+      shopLayers.current.push(
+        m.L.marker([sh.lat, sh.lon], { icon })
+          .addTo(m.map)
+          .bindPopup(`<div style="font-size:14px"><b>🛒 ${esc(sh.name)}</b><br><span style="font-size:12px;color:#64748b">出典：© OpenStreetMap contributors（名前や場所が古いことがあります）</span></div>`),
+      )
+    }
+  }, [ready, showShops, analysis])
 
   // 開いたときに1回だけ、現在地へ寄せる（路線の線を描いたあと）
   useEffect(() => {
@@ -443,7 +543,7 @@ export function BusMap() {
       const mk = m.stops.get(s.id)
       if (!mk) continue
       const on = s.name === stopName
-      mk.setStyle({ radius: on ? 11 : 7, fillColor: on ? '#facc15' : '#ffffff', weight: on ? 3 : 2 })
+      mk.setStyle({ radius: on ? 10 : 5, fillColor: on ? '#facc15' : '#ffffff', weight: on ? 3 : 1.5 })
       if (on) mk.bringToFront()
     }
   }, [stopName, net, routeId, ready])
@@ -599,15 +699,10 @@ export function BusMap() {
   }
 
   const chip = (on: boolean) =>
-    `min-h-11 rounded-full border px-4 py-2 text-base font-semibold ${on ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'}`
+    `min-h-11 shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-base font-semibold ${on ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'}`
 
   return (
     <div className="space-y-4">
-      <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold leading-relaxed text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-        🚌 バスの印は、時刻表から計算した「予測の位置」です。実際の遅れは反映されません。
-        {clock?.fixed ? `（確認用：${clock.ymd} ${hm(clock.sec)} の表示）` : ''}
-      </p>
-
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
 
       {/* 市などの公式の運行情報。あるときだけ赤い帯で出す。無いときは小さく。取れなかったときは「無い」とは言わない */}
@@ -631,41 +726,9 @@ export function BusMap() {
             ))}
           </ul>
         </section>
-      ) : notice.status === 'ok' && notice.checkedAt ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">市の公共交通の運行情報：いま出ているお知らせはありません（最終確認 {jstStamp(notice.checkedAt)}）。遅れの情報は出ません。</p>
-      ) : notice.status === 'error' ? (
-        <p className="text-xs text-amber-800 dark:text-amber-200">
-          市の運行情報を確認できませんでした。運休などは、
-          <a href="https://www.city.inzai.lg.jp/0000022520.html" target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold underline">
-            市のページ
-          </a>
-          でご確認ください。
-        </p>
       ) : null}
-
-      <section aria-label="路線をえらぶ" className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={chip(routeId === 'all')} onClick={() => setRouteId('all')}>
-            すべての路線
-          </button>
-        </div>
-        {groups.map((g) => (
-          <div key={g.agency} className="space-y-1">
-            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">{g.agency}</div>
-            <div className="flex flex-wrap gap-2">
-              {g.routes.map((r) => (
-                <button key={r.id} type="button" className={chip(routeId === r.id)} onClick={() => setRouteId(r.id)}>
-                  <span aria-hidden className="mr-2 inline-block h-3 w-3 rounded-full align-middle" style={{ background: colorOf.get(r.id) }} />
-                  {r.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </section>
-
       {mapError ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{mapError}</p> : null}
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="地図の見え方">
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="地図の見え方（横に送れます）">
         <button type="button" className={chip(view === 'flat')} onClick={() => setView('flat')}>
           🗺 平面
         </button>
@@ -677,6 +740,26 @@ export function BusMap() {
         </button>
         <button type="button" className={chip(false)} onClick={showAllRoutes}>
           🗾 全体
+        </button>
+        <button
+          type="button"
+          className={chip(showArea)}
+          onClick={() => {
+            setShowArea((v) => !v)
+            setView('flat')
+          }}
+        >
+          📊 不便なエリア
+        </button>
+        <button
+          type="button"
+          className={chip(showShops)}
+          onClick={() => {
+            setShowShops((v) => !v)
+            setView('flat')
+          }}
+        >
+          🛒 スーパー
         </button>
       </div>
       {geoMsg ? <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{geoMsg}</p> : null}
@@ -706,6 +789,87 @@ export function BusMap() {
         {clock ? `いま走っている予定のバス：${buses.length}台（${hm(clock.sec)} 現在）。` : ''}{view === 'flat' ? '白い丸がバス停です。押すと、下に時刻表が出ます。拡大・縮小は、2本指でひろげる（スマホ）か、ホイール（パソコン）で。青い丸は現在地です（この端末の中だけで使い、どこにも送りません）。' : ''}
       </p>
 
+      {(showArea || showShops) && analysisErr ? <p className="rounded bg-amber-50 p-2 text-sm text-amber-900">分析のデータを読み込めませんでした。</p> : null}
+      {showArea && analysis ? (
+        <section aria-label="移動が不便なエリア" data-testid="bus-area" className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">📊 移動が不便なエリア（250m四方ごと・印西市内）</h3>
+          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">色の付いた区画を押すと、人口と、バス停・駅・スーパーまでの距離が出ます。人が住んでいる区画だけを数えています。</p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[340px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-300 text-left text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  <th className="py-1 pr-2 font-semibold">区分</th>
+                  <th className="py-1 pr-2 text-right font-semibold">人口</th>
+                  <th className="py-1 pr-2 text-right font-semibold">65歳以上</th>
+                  <th className="py-1 text-right font-semibold">75歳以上</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AREA_ORDER.map((k) => {
+                  const v = analysis.summary[k]
+                  return (
+                    <tr key={k} className="border-b border-slate-100 align-top dark:border-slate-800">
+                      <td className="py-1.5 pr-2">
+                        <span aria-hidden className="mr-1 inline-block h-3 w-3 rounded-sm align-middle" style={{ background: AREA_STYLE[k].color, opacity: k === 'ok' ? 0.5 : 1 }} />
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">{AREA_STYLE[k].label}</span>
+                        <span className="block text-xs leading-snug text-slate-500 dark:text-slate-400">{AREA_STYLE[k].note}</span>
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">
+                        {v.pop.toLocaleString()}人<span className="block text-xs text-slate-500">{((v.pop * 100) / Math.max(1, analysis.total.pop)).toFixed(1)}%</span>
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{v.p65.toLocaleString()}人</td>
+                      <td className="py-1.5 text-right tabular-nums">{v.p75.toLocaleString()}人</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            <li>運営（市民活動団体）の試算です。印西市の公式の判定ではありません。市の計画の「バス停300m・駅1km」の目安を参考にしていますが、市街化調整区域かどうかなどは入れていません。</li>
+            <li>本数を数えているのは、ふれあいバス・宗像路線・六合路線だけです。京成バスなどは、バス停の位置（2022年）だけを使っています（水色の区分）。</li>
+            <li>距離は、区画の中心からまっすぐ測ったものです。坂や、実際に歩く道のりは入っていません。</li>
+            <li>人口：国勢調査（令和2年）の250m四方の集計（e-Stat）。人数の少ない区画は、数字が隠されていて0になることがあります。{analysis.builtAt} 計算。</li>
+          </ul>
+        </section>
+      ) : null}
+      {showShops && analysis ? (
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">🛒 スーパー {analysis.shops.length}か所（印西市と、市境から近い店）。出典：© OpenStreetMap contributors。載っていない店・閉店した店があるかもしれません。移動スーパーの来る場所は、まだ載せていません。</p>
+      ) : null}
+
+      <section aria-label="路線をえらぶ" className="space-y-1">
+        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">路線をえらぶ（横に送れます）</div>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
+          <button type="button" className={`${chip(routeId === 'all')} shrink-0 whitespace-nowrap`} onClick={() => setRouteId('all')}>
+            すべての路線
+          </button>
+          {groups.flatMap((g) =>
+            g.routes.map((r) => (
+              <button key={r.id} type="button" title={g.agency} className={`${chip(routeId === r.id)} shrink-0 whitespace-nowrap`} onClick={() => setRouteId(r.id)}>
+                <span aria-hidden className="mr-2 inline-block h-3 w-3 rounded-full align-middle" style={{ background: colorOf.get(r.id) }} />
+                {r.name.replace(/^ふれあいバス /, '')}
+              </button>
+            )),
+          )}
+        </div>
+      </section>
+
+      <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+        🚌 バスの印は、時刻表から計算した「予測の位置」です。実際の遅れは反映されません。
+        {clock?.fixed ? `（確認用：${clock.ymd} ${hm(clock.sec)} の表示）` : ''}
+      </p>
+
+      {notice.items.length ? null : notice.status === 'ok' && notice.checkedAt ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">市の公共交通の運行情報：いま出ているお知らせはありません（最終確認 {jstStamp(notice.checkedAt)}）。遅れの情報は出ません。</p>
+      ) : notice.status === 'error' ? (
+        <p className="text-xs text-amber-800 dark:text-amber-200">
+          市の運行情報を確認できませんでした。運休などは、
+          <a href="https://www.city.inzai.lg.jp/0000022520.html" target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold underline">
+            市のページ
+          </a>
+          でご確認ください。
+        </p>
+      ) : null}
       <section aria-label="乗り方をさがす" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">🧭 乗り方をさがす</h3>
         <p className="text-sm text-slate-600 dark:text-slate-300">乗るバス停と降りるバス停をえらぶと、いちばん早く着く乗り方を出します。バス会社がちがっても、乗り継ぎの案を出します。</p>

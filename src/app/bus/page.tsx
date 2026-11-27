@@ -20,7 +20,7 @@ export default function BusPage() {
         feature="help"
         title="印西バスマップ（試作）"
         back={{ href: '/', label: 'ホーム' }}
-        description="バスが、いまどのあたりを走っている予定かを地図で見られます。バス停を押すと、次のバスまでの時間が出ます。"
+        description="バス停を押すと、次のバスまでの時間が出ます。"
       />
       <BusMap />
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
