@@ -96,6 +96,37 @@ function serviceRuns(sv: Service | undefined, ymd: string, dow: number): boolean
   return sv.days[dow] === 1
 }
 
+// 市などの公式の発表のうち、バスの運行にかかわるもの（防災MAPと同じ情報源：/api/disaster/timeline）
+type Notice = { id: string; at: string; label: string; title: string; body: string; url: string }
+type NoticeState = { status: 'loading' | 'ok' | 'error'; items: Notice[]; checkedAt: string | null }
+const NOTICE_HOURS = 48 // これより古い発表は出さない
+const NOTICE_WORDS = /運休|運転見合わせ|運行見合わせ|運転を見合わせ|迂回|うかい|遅延|遅れ|運行中止|折り返し|通行止め/
+
+function pickNotices(data: unknown, nowMs: number): { items: Notice[]; checkedAt: string | null } {
+  const d = data as { items?: Record<string, unknown>[]; sources?: Record<string, unknown>[] }
+  const out: Notice[] = []
+  for (const it of d.items ?? []) {
+    const label = String(it.sourceLabel ?? '')
+    const title = String(it.title ?? '')
+    const body = String(it.body ?? '')
+    const at = String(it.occurredAt ?? '')
+    if (String(it.changeType ?? '') === 'cancel') continue
+    if (!at || nowMs - Date.parse(at) > NOTICE_HOURS * 3600 * 1000) continue
+    const transit = String(it.sourceKind ?? '') === 'city-page-watch' && label.includes('公共交通')
+    // ほかの公式の発表は、バスに触れていて、運休・迂回などの語があるものだけ
+    const busWord = String(it.trust ?? '') === 'official' && /バス/.test(title + body) && NOTICE_WORDS.test(title + body)
+    if (transit || busWord) out.push({ id: String(it.id ?? at + title), at, label, title, body, url: String(it.url ?? '') })
+  }
+  const src = (d.sources ?? []).find((x) => String(x.label ?? '').includes('公共交通'))
+  const okSrc = src && String(src.lastStatus ?? '') === 'success' ? String(src.lastFetchedAt ?? '') : null
+  return { items: out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 3), checkedAt: okSrc || null }
+}
+
+function jstStamp(iso: string): string {
+  const t = new Date(Date.parse(iso) + 9 * 3600 * 1000)
+  return `${t.getUTCMonth() + 1}/${t.getUTCDate()} ${t.getUTCHours()}:${String(t.getUTCMinutes()).padStart(2, '0')}`
+}
+
 // 行き先の書き方。「〜回り」「循環」はそのまま、ふつうの行き先には「行き」を付ける
 function dest(h: string): string {
   return /回り$|循環$/.test(h) ? h : `${h} 行き`
@@ -191,6 +222,7 @@ export function BusMap() {
   const [here, setHere] = useState<LatLon | null>(null) // 現在地（路線の範囲の中にいるときだけ入る）
   const [focusN, setFocusN] = useState(0)
   const [resetN, setResetN] = useState(0)
+  const [notice, setNotice] = useState<NoticeState>({ status: 'loading', items: [], checkedAt: null })
   const [geoMsg, setGeoMsg] = useState('') // 現在地の取得の結果（取れなかったときの案内）
   const hereRef = useRef<LLayer | null>(null)
   const locatedOnce = useRef(false)
@@ -228,6 +260,38 @@ export function BusMap() {
       })
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // 市の運行情報（開いたときと、15分ごと。画面が裏にあるときは読まない）
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      if (document.hidden) return
+      // 確認用：?testnotice=1 で見本のお知らせを出す（本物の発表ではない）
+      if (new URLSearchParams(window.location.search).get('testnotice') === '1') {
+        setNotice({
+          status: 'ok',
+          checkedAt: new Date().toISOString(),
+          items: [{ id: 'test', at: new Date().toISOString(), label: '印西市 公共交通の運行情報（市公式）', title: '【見本】ふれあいバス 東ルートは、道路の冠水のため一部区間を運休しています', body: 'これは表示の確認用の見本です。本物の発表ではありません。', url: 'https://www.city.inzai.lg.jp/0000022520.html' }],
+        })
+        return
+      }
+      fetch('/api/disaster/timeline?days=2')
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((data) => {
+          if (!cancelled) setNotice({ status: 'ok', ...pickNotices(data, Date.now()) })
+        })
+        .catch(() => {
+          if (!cancelled) setNotice((prev) => ({ ...prev, status: 'error' }))
+        })
+    }
+    const first = window.setTimeout(load, 0)
+    const id = window.setInterval(load, 15 * 60 * 1000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(first)
+      window.clearInterval(id)
     }
   }, [])
 
@@ -545,6 +609,39 @@ export function BusMap() {
       </p>
 
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
+
+      {/* 市などの公式の運行情報。あるときだけ赤い帯で出す。無いときは小さく。取れなかったときは「無い」とは言わない */}
+      {notice.items.length ? (
+        <section aria-label="運行情報" className="space-y-2 rounded-lg border-2 border-rose-400 bg-rose-50 p-3 dark:border-rose-700 dark:bg-rose-950">
+          <h3 className="text-base font-bold text-rose-900 dark:text-rose-100">⚠ 運行のお知らせが出ています（地図のバスの位置には反映されません）</h3>
+          <ul className="space-y-2">
+            {notice.items.map((n) => (
+              <li key={n.id} className="text-sm leading-relaxed text-rose-950 dark:text-rose-50">
+                <div className="font-semibold">{n.title}</div>
+                {n.body ? <div className="text-rose-900 dark:text-rose-100">{n.body.length > 140 ? `${n.body.slice(0, 140)}…` : n.body}</div> : null}
+                <div className="text-xs text-rose-800 dark:text-rose-200">
+                  {jstStamp(n.at)} {n.label}
+                  {n.url ? (
+                    <a href={n.url} target="_blank" rel="noopener noreferrer" className="ml-2 font-semibold underline">
+                      もとの発表を見る
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : notice.status === 'ok' && notice.checkedAt ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">市の公共交通の運行情報：いま出ているお知らせはありません（最終確認 {jstStamp(notice.checkedAt)}）。遅れの情報は出ません。</p>
+      ) : notice.status === 'error' ? (
+        <p className="text-xs text-amber-800 dark:text-amber-200">
+          市の運行情報を確認できませんでした。運休などは、
+          <a href="https://www.city.inzai.lg.jp/0000022520.html" target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold underline">
+            市のページ
+          </a>
+          でご確認ください。
+        </p>
+      ) : null}
 
       <section aria-label="路線をえらぶ" className="space-y-2">
         <div className="flex flex-wrap gap-2">
