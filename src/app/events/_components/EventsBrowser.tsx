@@ -929,7 +929,12 @@ function CalendarView({
 
     {(selectedItems.length > 0 || selectedPeriodItems.length > 0) && (
       <div key={selected} ref={panelRef} className="cidao-panel-flash scroll-my-4 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{dayGroups.length + periodGroups.length}件）</p>
+        {/* 見出しの件数は、マスの数字と同じ数え方（その日だけの催し）にする。期間中の催しは下に分けて数える
+            （2026-11-28 「数字よりも登録件数が多かった」。足した数を見出しに出していて、マスの数字と合わなかった） */}
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedLabel} のイベント（{dayGroups.length}件）</p>
+        {dayGroups.length === 0 && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">この日だけのイベントはありません。</p>
+        )}
         <ul className="space-y-1.5">
           {dayGroups.map(({ main: e, members }) => (
             <li key={e.id}>
@@ -954,6 +959,14 @@ function CalendarView({
               )}
             </li>
           ))}
+        </ul>
+        {periodGroups.length > 0 && (
+          <p className="pt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            この日も開催中の期間イベント（{periodGroups.length}件）
+            <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">カレンダーのマスの数字には入りません</span>
+          </p>
+        )}
+        <ul className="space-y-1.5">
           {periodGroups.map(({ main: e, members }) => (
             <li key={e.id}>
               <Link href={`/events/${e.id}`} className="flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition">
