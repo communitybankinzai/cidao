@@ -5,7 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export type ReachMember = { id: string; tier: string | null; contact_preferences: unknown }
+export type ReachMember = { id: string; profile_confirmed_at: string | null; contact_preferences: unknown }
 
 export type ReachSummary = {
   /** 在籍している会員（退会していない人） */
@@ -16,7 +16,7 @@ export type ReachSummary = {
   loggedIn14d: number
   /** 通知が届いているのに、一度も既読にしていない人 */
   neverRead: number
-  /** 仮登録（light）のまま止まっている人 */
+  /** 表示名の確認（プロフィールの最初の保存）がまだの人。2026-11-28 までは仮登録（tier=light）の人数で、数え方の中身は同じ */
   light: number
   /** 設定で「イベント通知を受け取る」を外している人 */
   offEvent: number
@@ -64,7 +64,7 @@ export function summarizeReach(input: {
     const last = input.lastSignIns.get(m.id)
     if (last && new Date(last).getTime() >= since) loggedIn14d += 1
     if (notified.has(m.id) && !read.has(m.id)) neverRead += 1
-    if (m.tier === 'light') light += 1
+    if (!m.profile_confirmed_at) light += 1
     const prefs = (m.contact_preferences ?? {}) as Record<string, unknown>
     if (prefs.notify_event === false) offEvent += 1
     if (prefs.notify_freefree === false) offFreeFree += 1
@@ -107,7 +107,7 @@ async function loadNotificationReach(admin: SupabaseClient): Promise<{ notified:
 /** service_role のクライアントを渡す。失敗したら例外（呼び出し側で握りつぶして、カードだけ出さない） */
 export async function loadReachSummary(admin: SupabaseClient, now = new Date()): Promise<ReachSummary> {
   const [membersRes, pushRes, usersRes, notif] = await Promise.all([
-    admin.from('members').select('id, tier, contact_preferences').is('deleted_at', null),
+    admin.from('members').select('id, profile_confirmed_at, contact_preferences').is('deleted_at', null),
     admin.from('push_subscriptions').select('member_id'),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     loadNotificationReach(admin),

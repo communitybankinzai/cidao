@@ -42,9 +42,8 @@ function toMs(iso: string | null | undefined): number | null {
   return Number.isFinite(t) ? t : null
 }
 
+// 2026-11-28 に仮登録・本登録の区別をやめた。会員証に札を出すのは本人確認済みだけ
 const TIER_LABEL: Record<string, { label: string; color: string }> = {
-  light:      { label: 'ライト登録',   color: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
-  email_only: { label: '通常登録',     color: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200' },
   verified:   { label: '本人確認済み', color: 'bg-sky-200 text-sky-900 dark:bg-sky-900 dark:text-sky-200' },
 }
 
@@ -95,7 +94,7 @@ export default async function Home() {
   const latestEventAt = toMs(latestEvent?.created_at)
 
   // 会員証カード用データ（ログイン時のみ）
-  let member: { tier: string; display_name: string; avatar_url: string | null; created_at: string } | null = null
+  let member: { tier: string; display_name: string; avatar_url: string | null; created_at: string; profile_confirmed_at: string | null } | null = null
   let qrDataUrl: string | null = null
   let contribTotal = 0
   let contribMonthly = 0
@@ -103,7 +102,7 @@ export default async function Home() {
   if (userId) {
     const { data: m } = await supabase
       .from('members')
-      .select('tier, display_name, avatar_url, created_at')
+      .select('tier, display_name, avatar_url, created_at, profile_confirmed_at')
       .eq('id', userId)
       .maybeSingle()
     member = m ?? null
@@ -131,8 +130,9 @@ export default async function Home() {
       contribMonthly = summary.monthlyTotal
     }
   }
-  const isLight = member?.tier === 'light'
-  const tierInfo = member ? (TIER_LABEL[member.tier] ?? TIER_LABEL.light) : null
+  // 表示名の確認がまだの人（確認しなくても全部使える。案内の文だけ変える）
+  const needsConfirm = Boolean(member) && !member?.profile_confirmed_at
+  const tierInfo = member ? (TIER_LABEL[member.tier] ?? null) : null
 
   // ホームのボタンは3段（2026-11-23 事業主決定・A案）。段ごとに形を変えて、色が見えにくくても見分けられるようにする
   // 上段：自分のこと・困ったときの入口。ログイン前も後も、見出しのすぐ下（会員証より上）に置く
@@ -141,7 +141,7 @@ export default async function Home() {
   // そこで会員の画面では、上段を小さい形にして3つのボタンと同じ行の左へ置き、帯はそのすぐ下にした（同日・事業主決定）。
   // それでも画面を少し下へ動かすと、会員証が3つのボタンの下にもぐって重なった（3つは画面に貼りついたまま・同日の2度目の指摘）。
   // そこでこの行を、下へ動かしても画面の上に残る帯（背景つき・横いっぱい）にした。会員証は帯の下に隠れる（同日・事業主決定A）
-  const isMemberView = Boolean(member && tierInfo)
+  const isMemberView = Boolean(member)
   const topRow = (
     <PillRow label="マイページと使い方" compact={isMemberView}>
       {userId ? (
@@ -238,7 +238,7 @@ export default async function Home() {
 
   return (
     <PageShell width="narrow" dense topBarRow={isMemberView}>
-        {member && tierInfo ? (
+        {member ? (
           <>
           {/* 画面の上に残る帯。高さは 上の余白12＋ボタン40＋下の余白8＝60px で、右上の3つのボタン（上から12〜52px）がこの帯の中に収まる。
              背景はページと同じ色で不透明（下を通る会員証を隠すため。透けさせない）。z は右上のボタン（z-50）より下・本文より上。
@@ -258,9 +258,11 @@ export default async function Home() {
                 <div className="flex items-center gap-1.5 overflow-hidden">
                   <h1 className="font-serif text-[15px] font-bold leading-none text-slate-900 dark:text-slate-100">CiDAO</h1>
                   <span className="truncate text-[10px] uppercase tracking-[0.25em] text-slate-400">Member</span>
-                  <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${tierInfo.color}`}>
-                    {tierInfo.label}
-                  </span>
+                  {tierInfo && (
+                    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${tierInfo.color}`}>
+                      {tierInfo.label}
+                    </span>
+                  )}
                 </div>
                 <div className="truncate text-lg font-bold leading-[22px] text-slate-900 dark:text-slate-100">{member.display_name}</div>
                 <div className="truncate text-[11px] leading-[14px] tabular-nums text-slate-500 dark:text-slate-400">
@@ -356,16 +358,6 @@ export default async function Home() {
           </section>
         )}
 
-        {/* ライト登録の人への注意書き（会員証を帯にして一番上へ移したので、ここに残した） */}
-        {isLight && (
-          <p className="text-xs text-slate-400">
-            ライト登録では提案・投票・団体への応募・メンバーへのコンタクトはできません。{' '}
-            <Link href="/me/edit" className="underline hover:text-slate-600 dark:hover:text-slate-300">
-              プロフィールを完成させて本登録する →
-            </Link>
-          </p>
-        )}
-
         {/* プッシュ通知の購読案内（ログイン済み・未購読の人だけに表示） */}
         {member && <PushNudge />}
 
@@ -378,7 +370,7 @@ export default async function Home() {
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
               <StepChip label="① 登録" state="done" />
               <span aria-hidden>→</span>
-              <StepChip label={isLight ? '② プロフィール登録' : '② PR（自己紹介）を作る'} state="now" />
+              <StepChip label={needsConfirm ? '② プロフィールの確認' : '② PR（自己紹介）を作る'} state="now" />
               <span aria-hidden>→</span>
               <StepChip label="③ 活動を探す" state="todo" />
             </div>
@@ -386,12 +378,12 @@ export default async function Home() {
               まずは、できること・興味があることを登録しましょう（約3分）
             </p>
             <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-              {isLight
-                ? 'プロフィールを確認して保存すると本登録が完了し、提案・投票・団体への応募ができるようになります。興味分野は選ばなくても進めます。'
+              {needsConfirm
+                ? 'まず、表示名を確認して保存しましょう。いまは LINE の名前がそのまま入っています。興味分野は選ばなくても進めます。'
                 : '人材バンクで紹介文を作って公開を申請し、運営が確認すると「登録メンバー」一覧に載り、団体から活動の声がけが届くようになります。'}
             </p>
-            <Link href={isLight ? '/me/edit' : '/me/talent'}>
-              <Button size="sm">{isLight ? 'プロフィールを登録する' : 'PR（自己紹介）を作る'}</Button>
+            <Link href={needsConfirm ? '/me/edit' : '/me/talent'}>
+              <Button size="sm">{needsConfirm ? 'プロフィールを確認する' : 'PR（自己紹介）を作る'}</Button>
             </Link>
           </section>
         )}

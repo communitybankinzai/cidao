@@ -12,7 +12,7 @@ const TILES: Tile[] = [
   { key: 'push', label: 'プッシュ購読', hint: 'アプリを閉じていてもスマホに届く人', better: 'up' },
   { key: 'loggedIn14d', label: '14日以内にログイン', hint: 'ベル🔔を見に来ている人', better: 'up' },
   { key: 'neverRead', label: '通知を一度も既読にしていない', hint: '届いているのに、開いたことがない人', better: 'down' },
-  { key: 'light', label: '仮登録のまま', hint: '本登録に進んでいない人', better: 'down' },
+  { key: 'light', label: '表示名の確認がまだ', hint: 'プロフィールを一度も保存していない人', better: 'down' },
   { key: 'offEvent', label: 'イベント通知をOFF', hint: '本人の選択。勝手に戻さない', better: null },
   { key: 'offFreeFree', label: 'FreeFree通知をOFF', hint: '本人の選択。勝手に戻さない', better: null },
 ]

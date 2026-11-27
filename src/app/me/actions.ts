@@ -54,7 +54,6 @@ type ProfileUpdate = {
   proposal_email: boolean       // 提案・投票のメール通知（contact_preferences.proposal_email）
   event_notify_mode: EventNotifyMode // 新着イベントの知らせ方（その都度／毎日18時にまとめて／受け取らない）。notify_event も一緒に保存する
   notify_freefree: boolean      // FreeFree掲示板の新着（contact_preferences.notify_freefree）
-  upgradeToEmailOnly: boolean   // 本登録時 true（tier='email_only' に昇格）
 }
 
 export async function updateProfile(input: ProfileUpdate) {
@@ -62,17 +61,17 @@ export async function updateProfile(input: ProfileUpdate) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // 興味分野は任意（2026-11-06）。空のままでも本登録できる。
-  // 本登録の目印は興味分野ではなく tier（light→email_only）。判定は lib/member-onboarding.ts
+  // 興味分野は任意（2026-11-06）。空のままでも保存できる。
   if (input.display_name.trim().length === 0) {
     throw new Error('表示名を入力してください')
   }
 
   // contact_preferences は jsonb 丸ごと更新になるため、既存キーを保持してマージする
-  // tier は「本登録完了の瞬間」（light→email_only 昇格）の判定に使う
+  // profile_confirmed_at は「表示名の確認を初めて済ませた瞬間」の判定に使う
+  // （2026-11-28：仮登録・本登録の区別をやめた。判定は lib/member-onboarding.ts）
   const { data: current } = await (createServiceClient() ?? supabase)
     .from('members')
-    .select('contact_preferences, tier')
+    .select('contact_preferences, profile_confirmed_at')
     .eq('id', user.id)
     .single()
   const prefs = {
@@ -96,8 +95,10 @@ export async function updateProfile(input: ProfileUpdate) {
     contact_preferences: prefs,
   }
 
-  if (input.upgradeToEmailOnly) {
-    update.tier = 'email_only'
+  // 表示名の確認を初めて済ませた保存か（いまの値を読めなかったときは、通知を二重に出さないよう false）
+  const firstConfirm = Boolean(current) && !current?.profile_confirmed_at
+  if (firstConfirm) {
+    update.profile_confirmed_at = new Date().toISOString()
   }
 
   const { error } = await supabase
@@ -107,12 +108,12 @@ export async function updateProfile(input: ProfileUpdate) {
 
   if (error) throw new Error(`プロフィール更新に失敗: ${error.message}`)
 
-  // 本登録完了の瞬間（light→email_only 昇格）に、一覧に載っていない人へ
+  // 表示名の確認を初めて済ませた瞬間に、一覧に載っていない人へ
   // 「一覧に載るには人材バンクでの公開が必要」をベル通知＋Webプッシュで案内する。
   // 登録確認メールが存在しない（LINEログイン一本化）ため、これが全員に届く唯一の案内経路
-  if (input.upgradeToEmailOnly && current?.tier === 'light') {
+  if (firstConfirm) {
     // 全メンバーへ「新しい仲間が増えた」通知（ベル＋Webプッシュ）。
-    // 本登録の瞬間だけ。以後のプロフィール編集では飛ばさない。
+    // 最初の確認の瞬間だけ（表示名が LINE の名前のまま流れないよう、登録の瞬間には出さない）。以後のプロフィール編集では飛ばさない。
     //
     // この時点では「登録メンバー」一覧（/talent）にはまだ載らない。
     // 一覧は人材バンクで公開された紹介文（talent_profiles）を起点にしており、運営の承認が要るため。
@@ -124,7 +125,7 @@ export async function updateProfile(input: ProfileUpdate) {
         kind: 'member',
         topicKey: 'notify_member_new',
         actorId: user.id,
-        title: `${nameWithSan(newName)}が新しく本登録しました`,
+        title: `${nameWithSan(newName)}が新しく登録しました`,
         body: '「登録メンバー」一覧に載るのは、人材バンクで紹介文を公開した人です',
       })
     })
@@ -138,7 +139,7 @@ export async function updateProfile(input: ProfileUpdate) {
       await insertNotification({
         recipientId: user.id,
         kind: 'system',
-        title: '本登録が完了しました🎉 「登録メンバー」一覧に載るには、人材バンクでの公開が必要です',
+        title: 'プロフィールの確認が完了しました🎉 「登録メンバー」一覧に載るには、人材バンクでの公開が必要です',
         body: '人材バンクで自己紹介を書いて紹介文を作り、公開を申請してください。運営が確認して承認すると一覧に載り、団体から活動の声がけが届くようになります。',
         linkUrl: '/me/talent',
       })

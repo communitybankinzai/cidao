@@ -1,24 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { needsProfileSetup } from '../member-onboarding'
 
-describe('needsProfileSetup（本登録まだの会員か）', () => {
-  it('仮登録（light）で興味分野が空なら、本登録画面へ案内する', () => {
-    expect(needsProfileSetup({ tier: 'light', interests: [] })).toBe(true)
-    expect(needsProfileSetup({ tier: 'light', interests: null })).toBe(true)
+describe('needsProfileSetup（表示名の確認がまだの会員か）', () => {
+  it('確認の日時が入っていない人は、確認の画面へ案内する', () => {
+    expect(needsProfileSetup({ profile_confirmed_at: null })).toBe(true)
+    expect(needsProfileSetup({ profile_confirmed_at: undefined })).toBe(true)
   })
 
-  it('本登録を終えた人は、興味分野が空でも案内しない（任意になったため）', () => {
-    expect(needsProfileSetup({ tier: 'email_only', interests: [] })).toBe(false)
-    expect(needsProfileSetup({ tier: 'verified', interests: [] })).toBe(false)
-    expect(needsProfileSetup({ tier: 'email_only', interests: null })).toBe(false)
-  })
-
-  it('仮登録のままでも興味分野が入っている人は、これまでどおり案内しない', () => {
-    expect(needsProfileSetup({ tier: 'light', interests: ['environment'] })).toBe(false)
-  })
-
-  it('会員区分が読めないときは案内しない（読み取り失敗でログインを妨げない）', () => {
-    expect(needsProfileSetup({ tier: null, interests: [] })).toBe(false)
-    expect(needsProfileSetup({ tier: undefined, interests: [] })).toBe(false)
+  it('確認を済ませた人は案内しない（興味分野が空でも戻さない）', () => {
+    expect(needsProfileSetup({ profile_confirmed_at: '2026-11-28T00:00:00+00:00' })).toBe(false)
   })
 })

@@ -43,14 +43,14 @@ export default async function AdminMembersPage() {
         <nav className="text-xs text-slate-500 flex gap-3">
           <Link href="/" className="hover:underline">← ホーム</Link>
           <Link href="/admin" className="hover:underline">管理</Link>
-          <Link href="/admin/members/light" className="hover:underline">ライトユーザー一覧 →</Link>
+          <Link href="/admin/members/light" className="hover:underline">表示名の確認がまだの人 →</Link>
         </nav>
 
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin</p>
-          <h1 className="text-3xl font-serif font-bold">メンバー一覧（本登録済み）</h1>
+          <h1 className="text-3xl font-serif font-bold">メンバー一覧</h1>
           <p className="text-xs text-slate-500">
-            メール確認済み・住所確認済み（本登録）の会員 {rows.length} 名。LINE登録のみの「ライト」会員は別画面。
+            登録している会員 {rows.length} 名（表示名の確認がまだの人を含む。その人だけの一覧は別画面）。
           </p>
           <p className="text-xs text-slate-500">
             各行の「お知らせを送る」から、その方だけに個別のお知らせを送れます（表示名で見つからないときは実名の列も確認してください）。
@@ -89,7 +89,7 @@ export default async function AdminMembersPage() {
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200')
                         }>
-                          {m.tier === 'verified' ? '本登録済み' : 'メール確認済み'}
+                          {m.tier === 'verified' ? '本人確認済み' : '会員'}
                         </span>
                       </td>
                       <td className="p-3 text-slate-500">{RESIDENCY_LABEL[m.residency_type ?? ''] ?? '—'}</td>

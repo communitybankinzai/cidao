@@ -33,10 +33,6 @@ export default async function TalentDetailPage({ params, searchParams }: { param
     .eq('member_id', id)
     .single()
 
-  const { data: myTierRow } = user
-    ? await supabase.from('members').select('tier').eq('id', user.id).single()
-    : { data: null }
-  const myTier = myTierRow?.tier ?? null
   // 見る人の権限で読むので、その人に見えない記録は出ない（本人が隠していれば null）
   const footprints = await getFootprints(supabase, id)
   // 紹介動画：プロフィールが見える人にだけ出す（再生の権限は /api/talent-bank/video でもう一度確かめる）
@@ -144,7 +140,6 @@ export default async function TalentDetailPage({ params, searchParams }: { param
             targetMemberId={id}
             targetName={member.display_name}
             isLoggedIn={!!user}
-            myTier={myTier}
             acceptanceMode={pr?.message_acceptance ?? null}
           />
         )}

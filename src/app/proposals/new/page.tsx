@@ -18,13 +18,13 @@ export default async function NewProposalPage() {
     .eq('id', user.id)
     .single()
 
-  if (!member || member.tier === 'light') {
+  if (!member) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-950">
         <div className="max-w-md text-center space-y-4">
-          <h1 className="text-2xl font-bold">本登録が必要です</h1>
+          <h1 className="text-2xl font-bold">会員情報が見つかりません</h1>
           <p className="text-slate-600">
-            提案投稿には本登録（メール認証以上）が必要です。マイページからプロフィールを完成させてください。
+            お手数ですが、もう一度ログインしてからお試しください。
           </p>
           <a href="/">
             <Button>ホームへ戻る</Button>

@@ -8,7 +8,6 @@ export function InterestForm({
   orgId,
   orgName,
   lastAppliedAt,
-  myTier,
   isLoggedIn,
   hasOrgEmail,
   recruitmentStatus,
@@ -16,7 +15,6 @@ export function InterestForm({
   orgId: string
   orgName: string
   lastAppliedAt: string | null
-  myTier: string | null
   isLoggedIn: boolean
   hasOrgEmail: boolean
   recruitmentStatus: string | null
@@ -46,25 +44,6 @@ export function InterestForm({
           className="inline-block text-sm bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-medium"
         >
           ログインして登録メンバーになる
-        </a>
-      </div>
-    )
-  }
-
-  if (myTier === 'light') {
-    return (
-      <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded text-sm space-y-2">
-        <p className="font-semibold text-amber-900 dark:text-amber-100">
-          本登録（登録メンバー化）すると、この団体に参加意思を伝えられます
-        </p>
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          /me/edit で本登録すると、応募できるようになります。興味分野は選ばなくても進めます。
-        </p>
-        <a
-          href="/me/edit"
-          className="inline-block text-sm bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-medium"
-        >
-          本登録フォームを開く
         </a>
       </div>
     )

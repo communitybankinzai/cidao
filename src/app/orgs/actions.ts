@@ -83,13 +83,10 @@ export async function createOrganization(input: OrgInput) {
 
   const { data: member } = await supabase
     .from('members')
-    .select('tier, admin_role')
+    .select('admin_role')
     .eq('id', user.id)
     .single()
   if (!member) throw new Error('メンバー情報が見つかりません')
-  if (member.tier === 'light') {
-    throw new Error('プロフィール完成（本登録）後に団体を申告できます')
-  }
 
   // 登録した団体は、運営でも一般の会員でも、その場で公開する（自動承認・2026-11-16）。
   // 以前は一般の会員の登録を承認待ちにしていたが、承認の画面の不具合と通知の抜けで
@@ -200,13 +197,10 @@ export async function expressInterest(orgId: string, message: string, contactOk:
 
   const { data: member } = await supabase
     .from('members')
-    .select('display_name, tier')
+    .select('display_name')
     .eq('id', user.id)
     .single()
   if (!member) throw new Error('メンバー情報が見つかりません')
-  if (member.tier === 'light') {
-    throw new Error('本登録（プロフィール完成）後に応募できます')
-  }
 
   const { data: org } = await supabase
     .from('organizations')

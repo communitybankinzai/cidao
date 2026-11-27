@@ -210,8 +210,8 @@ export default async function AdminHomePage() {
               href="/admin/members"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
-              <h2 className="text-lg font-semibold mb-1">メンバー一覧（本登録済み）</h2>
-              <p className="text-sm text-slate-500">メール確認済み・住所確認済み会員の一覧</p>
+              <h2 className="text-lg font-semibold mb-1">メンバー一覧</h2>
+              <p className="text-sm text-slate-500">登録している会員の一覧</p>
             </Link>
           </li>
           <li>
@@ -219,8 +219,8 @@ export default async function AdminHomePage() {
               href="/admin/members/light"
               className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 hover:border-slate-400 dark:hover:border-slate-600 transition"
             >
-              <h2 className="text-lg font-semibold mb-1">メンバー一覧（ライト）</h2>
-              <p className="text-sm text-slate-500">LINEログインのみで自動作成された会員の一覧</p>
+              <h2 className="text-lg font-semibold mb-1">表示名の確認がまだの人</h2>
+              <p className="text-sm text-slate-500">登録したあと、プロフィールを一度も保存していない会員の一覧</p>
             </Link>
           </li>
           <li>

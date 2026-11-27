@@ -20,7 +20,7 @@ export default async function AdminMembersLightPage() {
   const { data: members } = await supabase
     .from('members')
     .select('id, display_name, residency_type, created_at, last_active_at, contact_permission')
-    .eq('tier', 'light')
+    .is('profile_confirmed_at', null)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
@@ -40,14 +40,14 @@ export default async function AdminMembersLightPage() {
         <nav className="text-xs text-slate-500 flex gap-3">
           <Link href="/" className="hover:underline">← ホーム</Link>
           <Link href="/admin" className="hover:underline">管理</Link>
-          <Link href="/admin/members" className="hover:underline">← メンバー一覧（本登録済み）</Link>
+          <Link href="/admin/members" className="hover:underline">← メンバー一覧</Link>
         </nav>
 
         <header className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-slate-500 uppercase">Admin</p>
-          <h1 className="text-3xl font-serif font-bold">メンバー一覧（ライト）</h1>
+          <h1 className="text-3xl font-serif font-bold">表示名の確認がまだの人</h1>
           <p className="text-xs text-slate-500">
-            LINEログインのみで自動作成された「ライト」会員 {rows.length} 名（メール確認・住所確認は未実施）。実名は保持していません。
+            登録したあと、プロフィールを一度も保存していない会員 {rows.length} 名（表示名は LINE の名前のまま。できることは、ほかの会員と同じ）。実名は保持していません。
           </p>
         </header>
 

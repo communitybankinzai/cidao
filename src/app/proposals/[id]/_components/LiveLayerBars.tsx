@@ -5,8 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { VOTE_CHOICES } from '@/lib/categories'
 
 const TIER_LABEL: Record<string, string> = {
-  light: 'ライト登録',
-  email_only: '通常登録',
+  email_only: '会員',
   verified: 'マイナンバー確認済（将来）',
 }
 
@@ -79,7 +78,7 @@ export function LiveLayerBars({
     }
   }, [proposalId, liveEnabled])
 
-  const tiers = ['verified', 'email_only', 'light'] as const
+  const tiers = ['verified', 'email_only'] as const
 
   // 現在の選択肢に、選択肢統一より前に投じられた票の選択肢を足したもの。
   // これを描画対象にしないと、票数はあるのに棒が描かれない選択肢が出てしまう

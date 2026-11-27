@@ -1,10 +1,10 @@
-// 本登録（プロフィール完成）がまだの会員かどうかの判定。
-// 興味分野は任意になった（2026-11-06）ため、「興味分野が空＝本登録まだ」とは言えない。
-// 本登録を終えた人（tier が light 以外）は、興味分野が空でも対象にしない。
-// 仮登録（tier=light）のまま興味分野も未選択の人だけを、ログイン直後に本登録画面へ案内する。
+// 表示名（プロフィール）の確認がまだの会員かどうかの判定。
+// 2026-11-28 に、仮登録（tier=light）と本登録の区別をやめた（事業主決定）。登録した時点で全部使える。
+// ただし LINE の名前がそのまま表示名に入るので、本名が気づかないまま公開の場に出ないよう、
+// 確認がまだの人はログイン直後に確認の画面（/me/edit?welcome=1）へ案内する。
+// 確認を済ませたかどうかは members.profile_confirmed_at で見る（プロフィールを初めて保存した時に入る）。
 export function needsProfileSetup(member: {
-  tier: string | null | undefined
-  interests: string[] | null | undefined
+  profile_confirmed_at: string | null | undefined
 }): boolean {
-  return member.tier === 'light' && (member.interests ?? []).length === 0
+  return !member.profile_confirmed_at
 }

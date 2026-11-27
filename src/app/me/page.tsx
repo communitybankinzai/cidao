@@ -36,9 +36,10 @@ const RECRUITMENT_BADGE: Record<string, { label: string; className: string }> = 
   },
 }
 
-const TIER_LABEL: Record<string, { label: string; weight_citizen: string; weight_related: string; color: string }> = {
-  light:      { label: 'ライト登録',                weight_citizen: '0.1', weight_related: '0.1',  color: 'bg-slate-200 text-slate-800' },
-  email_only: { label: '通常登録',                  weight_citizen: '0.3', weight_related: '0.15', color: 'bg-emerald-200 text-emerald-900' },
+// 2026-11-28 に仮登録・本登録の区別をやめた。札を出すのは本人確認済みだけ（label が null の区分は札を出さない）。
+// 重みは DB の calc_vote_weight と同じ値
+const TIER_LABEL: Record<string, { label: string | null; weight_citizen: string; weight_related: string; color: string }> = {
+  email_only: { label: null,                        weight_citizen: '0.3', weight_related: '0.15', color: '' },
   verified:   { label: 'マイナンバー確認済（将来）', weight_citizen: '1.0', weight_related: '0.5',  color: 'bg-sky-200 text-sky-900' },
 }
 
@@ -120,7 +121,7 @@ export default async function MyPage({
     collidingOrgs = data ?? []
   }
 
-  const tierInfo = TIER_LABEL[member.tier]
+  const tierInfo = TIER_LABEL[member.tier] ?? TIER_LABEL.email_only
 
   // /me?updated=1（保存直後）かつ興味分野が入っているとき限り、match-orgs を呼ぶ
   // 通常閲覧では Claude API を叩かない（クレジット節約）
@@ -251,7 +252,7 @@ export default async function MyPage({
                 {member.display_name}
               </h1>
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className={`px-2 py-1 rounded ${tierInfo.color}`}>{tierInfo.label}</span>
+                {tierInfo.label && <span className={`px-2 py-1 rounded ${tierInfo.color}`}>{tierInfo.label}</span>}
                 <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-slate-600">
                   {member.residency_type === 'citizen' ? '市民' : '関係人口'}
                 </span>
@@ -279,7 +280,7 @@ export default async function MyPage({
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">プロフィール編集</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              表示名・興味分野・本登録（提案・投票への参加）の設定
+              表示名・興味分野など、基本情報の設定
             </p>
           </Link>
           {/* 人材バンク（2026-09-15 一本化）：従来の「公開PRの編集」と AI インタビュー版を1画面にまとめた */}
@@ -346,17 +347,17 @@ export default async function MyPage({
           </div>
         )}
 
-        {/* tier 昇格動線 */}
-        {member.tier === 'light' && (
+        {/* 表示名の確認がまだの人への案内（2026-11-28：仮登録・本登録の区別をやめた。確認しなくても全部使える） */}
+        {!member.profile_confirmed_at && (
           <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded space-y-2">
             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-              提案・投票・コメントに参加するには本登録（無料）が必要です
+              表示名の確認がまだです
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              「プロフィール編集」で内容を確認して保存するだけで完了します。興味分野は選ばなくても進めます（投票の重みも上がります）
+              いまは LINE の名前がそのまま表示名になっています。提案・コメント・掲示板などに、この名前が出ます。「プロフィール編集」で確認して保存してください
             </p>
             <Link href="/me/edit">
-              <Button size="sm">本登録に進む</Button>
+              <Button size="sm">プロフィールを確認する</Button>
             </Link>
           </div>
         )}

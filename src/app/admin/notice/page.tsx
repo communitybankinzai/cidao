@@ -120,7 +120,7 @@ export default async function AdminNoticePage() {
         <Link href="/admin" className="text-sm text-blue-600 hover:underline">← 管理メニュー</Link>
         <h1 className="text-2xl font-bold mt-2">お知らせ配信</h1>
         <p className="text-sm text-slate-500 mt-1">
-          全体に関わる出来事（新着イベント・FreeFree掲載・新規提案・メンバー本登録・団体の登録/更新）は
+          全体に関わる出来事（新着イベント・FreeFree掲載・新規提案・メンバーの登録・団体の登録/更新）は
           自動でベル🔔とWebプッシュに配信されます。ここでは、それ以外の連絡を手動で一斉配信できます。
         </p>
       </div>

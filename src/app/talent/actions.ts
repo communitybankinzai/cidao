@@ -90,9 +90,6 @@ export async function sendTalentInquiry(targetMemberId: string, message: string)
     .eq('id', user.id)
     .single()
   if (!senderMember) throw new Error('メンバー情報が見つかりません')
-  if (senderMember.tier === 'light') {
-    throw new Error('本登録（プロフィール完成）後にコンタクトできます')
-  }
 
   // ターゲットの公開状態チェック
   const { data: targetPr } = await supabase
@@ -227,9 +224,6 @@ export async function sendProposalSupportMessage(
     supabase.from('members').select('display_name').eq('id', proposal.proposer_id).single(),
   ])
   if (!senderMember) return { ok: false, error: 'メンバー情報が見つかりません' }
-  if (senderMember.tier === 'light') {
-    return { ok: false, error: '本登録（プロフィール完成）後にメッセージを送れます' }
-  }
   if (!targetMember) return { ok: false, error: '提案者のメンバー情報が見つかりません' }
 
   const { data: inserted, error: insertErr } = await supabase

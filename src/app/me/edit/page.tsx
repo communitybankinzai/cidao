@@ -40,7 +40,8 @@ export default async function EditProfilePage({
     .eq('member_id', user.id)
     .maybeSingle()
 
-  const wasLight = member.tier === 'light'
+  // 表示名の確認がまだの人（2026-11-28：仮登録・本登録の区別をやめ、確認の有無だけを見る）
+  const needsConfirm = !member.profile_confirmed_at
   const currentEventMode = eventNotifyMode(member.contact_preferences)
 
   // 所属団体 picker 用データ
@@ -95,7 +96,6 @@ export default async function EditProfilePage({
           ? (formData.get('event_notify_mode') as 'instant' | 'digest' | 'off')
           : currentEventMode,
         notify_freefree: formData.get('notify_freefree') === 'on',
-        upgradeToEmailOnly: formData.get('upgrade') === 'on',
       })
     } catch (e) {
       backWithError('profile', e)
@@ -142,11 +142,11 @@ export default async function EditProfilePage({
         <BackLink href="/me">マイページ</BackLink>
         <header>
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-900 dark:text-slate-100">
-            {wasLight ? '本登録（プロフィール完成）' : 'プロフィール編集'}
+            {needsConfirm ? 'プロフィールの確認' : 'プロフィール編集'}
           </h1>
           <p className="text-sm text-slate-500 mt-2">
-            {wasLight
-              ? '表示名などを確認して「本登録する」を押すと本登録が完了し、提案・投票・コメントに参加できるようになります。興味分野は選ばなくても進めます'
+            {needsConfirm
+              ? 'この表示名で、提案・コメント・掲示板などに名前が出ます。LINE の名前がそのまま入っているので、本名を出したくないときはここで直してください。確認して「この内容で保存する」を押すと完了です。興味分野は選ばなくても進めます。'
               : '表示名・興味分野など、会員としての基本情報を設定するページです'}
           </p>
         </header>
@@ -240,7 +240,7 @@ export default async function EditProfilePage({
               defaultSelected={member.interests ?? []}
             />
             <p className="text-xs text-slate-500 mt-1.5">
-              選んでおくと、あなたに合う団体や活動を見つけやすくなります。選ばなくても本登録できます。あとからいつでも選べます。
+              選んでおくと、あなたに合う団体や活動を見つけやすくなります。選ばなくても進めます。あとからいつでも選べます。
             </p>
           </Field>
 
@@ -340,17 +340,6 @@ export default async function EditProfilePage({
                   <span className="block text-xs text-slate-500">地域応援掲示板に新しい掲載があったときにベル🔔でお知らせします。外すと、新しい掲載に気づく手段がなくなります</span>
                 </span>
               </label>
-              {wasLight && (
-                <label className="flex items-start gap-2 p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded">
-                  <input type="checkbox" name="upgrade" defaultChecked className="mt-1" />
-                  <span>
-                    <strong className="text-emerald-900 dark:text-emerald-100">本登録に昇格</strong>
-                    <span className="block text-xs text-emerald-700 dark:text-emerald-300">
-                      上記の設定で本登録完了。投票重みが上がり、提案・拘束的投票・コメントが可能になります
-                    </span>
-                  </span>
-                </label>
-              )}
             </div>
           </Field>
         </div>
@@ -407,7 +396,7 @@ export default async function EditProfilePage({
           <Link href="/me">
             <Button type="button" variant="outline">キャンセル</Button>
           </Link>
-          <Button type="submit">{wasLight ? '本登録する' : '保存'}</Button>
+          <Button type="submit">{needsConfirm ? 'この内容で保存する' : '保存'}</Button>
         </div>
       </form>
     </div>

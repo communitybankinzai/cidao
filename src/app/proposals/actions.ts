@@ -30,14 +30,14 @@ export async function createProposal(input: CreateInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('未ログイン')
 
-  // tier='light' は提案不可（RLS でも弾かれるが UI 側でも早期エラー）
+  // 会員の行が無い人は提案できない（RLS でも弾かれるが、分かる文で先に止める）
   const { data: member } = await supabase
     .from('members')
-    .select('tier')
+    .select('id')
     .eq('id', user.id)
     .single()
-  if (!member || member.tier === 'light') {
-    throw new Error('提案には本登録（メール登録以上）が必要です')
+  if (!member) {
+    throw new Error('メンバー情報が見つかりません。もう一度ログインしてからお試しください')
   }
 
   // 締切の個別指定は未来日のみ有効。過去日・空文字は null にして

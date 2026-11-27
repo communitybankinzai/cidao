@@ -53,8 +53,8 @@ export const BROADCAST_TOPICS: readonly BroadcastTopic[] = [
   },
   {
     key: 'notify_member_new',
-    label: '新しい会員の本登録',
-    hint: '会員が新しく本登録したときのお知らせです',
+    label: '新しい会員の登録',
+    hint: '会員が新しく登録したときのお知らせです',
     defaultChannel: 'push',
     channels: ['push', 'bell', 'off'],
   },

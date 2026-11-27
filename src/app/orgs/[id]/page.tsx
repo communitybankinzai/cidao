@@ -98,10 +98,6 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
         .limit(1)
         .maybeSingle()
     : { data: null }
-  // 自分の tier（InterestForm の出し分け用）
-  const { data: myMemberForInterest } = user
-    ? await supabase.from('members').select('tier').eq('id', user.id).single()
-    : { data: null }
 
   // 編集権者か（自動拡充された provisional 情報の確認/修正ボタンの出し分け）
   const canEdit = user
@@ -313,7 +309,6 @@ export default async function OrgDetailPage({ params }: { params: Promise<{ id: 
           orgId={id}
           orgName={org.name}
           lastAppliedAt={myInterest?.created_at ?? null}
-          myTier={myMemberForInterest?.tier ?? null}
           isLoggedIn={!!user}
           hasOrgEmail={!!org.contact_email}
           recruitmentStatus={org.recruitment_status ?? null}

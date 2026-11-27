@@ -4,8 +4,6 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
 const TIER_LABEL: Record<string, string> = {
-  light: 'ライト登録',
-  email_only: '通常登録',
   verified: '住所確認済',
 }
 
@@ -78,7 +76,7 @@ export default async function RankingPage() {
             <div className="flex-1">
               <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{m.display_name}</div>
               <div className="text-xs text-slate-500">
-                {m.residency_type === 'citizen' ? '市民' : '関係人口'} · {TIER_LABEL[m.tier] ?? m.tier}
+                {m.residency_type === 'citizen' ? '市民' : '関係人口'}{TIER_LABEL[m.tier] ? ` · ${TIER_LABEL[m.tier]}` : ''}
               </div>
             </div>
             <div className="font-mono text-right">

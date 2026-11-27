@@ -9,13 +9,11 @@ export function ContactForm({
   targetMemberId,
   targetName,
   isLoggedIn,
-  myTier,
   acceptanceMode,
 }: {
   targetMemberId: string
   targetName: string
   isLoggedIn: boolean
-  myTier: string | null
   /** open / recommended_only / closed */
   acceptanceMode: string | null
 }) {
@@ -33,19 +31,6 @@ export function ContactForm({
         </p>
         <a href={`/login?next=/talent/${targetMemberId}`} className="inline-block">
           <Button>ログイン</Button>
-        </a>
-      </div>
-    )
-  }
-
-  if (myTier === 'light') {
-    return (
-      <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 p-4 rounded text-sm space-y-2">
-        <p className="font-semibold text-amber-900 dark:text-amber-100">
-          本登録（プロフィール完成）後にコンタクトできます
-        </p>
-        <a href="/me/edit" className="inline-block">
-          <Button size="sm">本登録フォームを開く</Button>
         </a>
       </div>
     )

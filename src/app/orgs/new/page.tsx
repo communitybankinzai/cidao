@@ -13,19 +13,6 @@ export default async function NewOrgPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?next=/orgs/new')
 
-  const { data: member } = await supabase.from('members').select('tier').eq('id', user.id).single()
-  if (!member || member.tier === 'light') {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <div className="text-center space-y-3 max-w-md">
-          <h1 className="text-2xl font-bold">本登録が必要です</h1>
-          <p className="text-slate-600">団体登録にはマイページからの本登録（プロフィール完成）が必要です</p>
-          <Link href="/me/edit"><Button>本登録フォームへ</Button></Link>
-        </div>
-      </div>
-    )
-  }
-
   async function handleCreate(formData: FormData) {
     'use server'
     const categories = formData.getAll('categories').map(String)

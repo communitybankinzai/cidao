@@ -5,10 +5,10 @@ const NOW = new Date('2026-11-13T00:00:00Z')
 
 describe('summarizeReach（届いているか）', () => {
   const members = [
-    { id: 'm1', tier: 'verified', contact_preferences: {} },
-    { id: 'm2', tier: 'light', contact_preferences: { notify_event: false, notify_freefree: false } },
-    { id: 'm3', tier: 'verified', contact_preferences: { notify_event: false } },
-    { id: 'm4', tier: 'light', contact_preferences: null },
+    { id: 'm1', profile_confirmed_at: '2026-11-01T00:00:00+00:00', contact_preferences: {} },
+    { id: 'm2', profile_confirmed_at: null, contact_preferences: { notify_event: false, notify_freefree: false } },
+    { id: 'm3', profile_confirmed_at: '2026-11-01T00:00:00+00:00', contact_preferences: { notify_event: false } },
+    { id: 'm4', profile_confirmed_at: null, contact_preferences: null },
   ]
 
   it('購読・14日ログイン・既読ゼロ・仮登録・OFF を人数で数える', () => {
