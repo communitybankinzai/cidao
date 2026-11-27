@@ -29,12 +29,13 @@ type LLeaflet = {
 }
 
 const AGENCY_PREFIX = 'agency:'
-type Route = { id: string; name: string; color: string; agency: string; agencyUrl: string; agencyTel: string; feed: string }
+type Route = { id: string; name: string; color: string; agency: string; agencyUrl: string; agencyTel: string; feed: string; noTimes?: boolean } // noTimes＝線とバス停だけ（時刻表を入れていない路線）
 type Stop = { id: string; name: string; lat: number; lon: number; approx?: string } // approx＝位置が目安（町名の代表点など）のときの説明
 type StopTime = [string, number, number, number?] // バス停ID, 着く秒, 出る秒, 起点からの距離m
 type Trip = { id: string; route: string; service: string; headsign: string; shape: string; st: StopTime[] }
 type Service = { days: number[]; start: string; end: string; add: string[]; remove: string[] }
-type Source = { key: string; publisher: string; start: string; end: string; version: string }
+type Source = { key: string; publisher: string; start: string; end: string; version: string; noTimes?: boolean }
+const KEISEI_TIMETABLE_URL = 'https://www.keiseibus.co.jp/route-bus/' // 京成バスの時刻表検索の入口（公式）
 type Network = { builtAt: string; sources: Source[]; routes: Route[]; stops: Stop[]; shapes: Record<string, number[][]>; trips: Trip[]; services: Record<string, Service> }
 
 let leafletPromise: Promise<LLeaflet> | null = null
@@ -465,7 +466,7 @@ export function BusMap() {
       if (pts.length < 2) continue
       m.lines.push(m.L.polyline(pts, { color: '#1e293b', weight: 7, opacity: 0.35, interactive: false }).addTo(m.map))
       m.lines.push(m.L.polyline(pts, { color: colorOf.get(t.route) ?? '#2563eb', weight: 4, opacity: 0.95, interactive: false, dashArray: t.shape ? undefined : '6 6' }).addTo(m.map))
-      pts.forEach((p) => bounds.push(p))
+      if (selRoutes || !routeById.get(t.route)?.noTimes) pts.forEach((p) => bounds.push(p))
     }
     const visible = visibleStops
     for (const s of net.stops) {
@@ -483,7 +484,7 @@ export function BusMap() {
       fitRef.current = { bounds, touched: false }
       m.map.fitBounds(bounds, { padding: [24, 24], animate: false })
     }
-  }, [ready, net, selRoutes, visibleStops, colorOf, stopById])
+  }, [ready, net, selRoutes, visibleStops, colorOf, stopById, routeById])
 
   // 分析のデータは、色分けかスーパーを初めて出すときに読む
   useEffect(() => {
@@ -725,6 +726,16 @@ export function BusMap() {
     return searchJourneyOptions(todayTrips, neighbors, ids(fromName), ids(toName), planDepart, 3)
   }, [net, fromName, toName, planDepart, todayTrips, neighbors])
 
+  const stopNoTimeLines = useMemo(() => {
+    if (!net || !stopName) return []
+    const ids = new Set(net.stops.filter((x) => x.name === stopName).map((x) => x.id))
+    const out = new Set<string>()
+    for (const t of net.trips) {
+      const r = routeById.get(t.route)
+      if (r?.noTimes && t.st.some((x) => ids.has(x[0]))) out.add(r.name)
+    }
+    return [...out]
+  }, [net, stopName, routeById])
   const stopNames = useMemo(() => [...new Set(net?.stops.map((s) => s.name) ?? [])].sort((a, b) => a.localeCompare(b, 'ja')), [net])
   const nowSec = clock?.sec ?? 0
   const upcoming = departures.filter((d) => d.sec >= nowSec)
@@ -1014,6 +1025,15 @@ export function BusMap() {
                 <span className="min-w-0 flex-1">{g.agency}</span>
                 <span className="shrink-0 text-xs font-normal opacity-80">{on ? 'この会社だけ表示中' : `${g.routes.length}路線`}</span>
               </button>
+              {g.routes.every((r) => r.noTimes) ? (
+                <p className="px-2 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+                  線とバス停だけです。時刻表は入れていません（バスの印・乗り継ぎの案にも出ません）。時刻は
+                  <a href={KEISEI_TIMETABLE_URL} target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold underline">
+                    京成バスの時刻表検索
+                  </a>
+                  でご確認ください。線とバス停は2024年10月のデータです。
+                </p>
+              ) : null}
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
                 {g.routes.map((r) => (
                   <button key={r.id} type="button" className={`${chip(routeId === r.id)} shrink-0 whitespace-nowrap`} onClick={() => setRouteId(r.id)}>
@@ -1026,7 +1046,7 @@ export function BusMap() {
           )
         })}
         <p className="border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-600 dark:border-slate-700 dark:text-slate-300">
-          京成バスなど、ほかの会社の路線は準備中です（時刻表をまだ入れていないため、地図に線が出ません）。
+          京成バス千葉セントラル（旧ちばレインボーバス）は、線とバス停だけを出しています。時刻表は準備中です。北総循環線など、新しい線はまだ入っていません。
         </p>
       </section>
 
@@ -1195,6 +1215,15 @@ export function BusMap() {
             {net?.stops.some((x) => x.name === stopName && x.approx) ? (
               <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">📍 このバス停の地図上の位置は、おおよそです（新しいバス停で、正確な位置のデータがまだありません）。時刻は市の時刻表のとおりです。</p>
             ) : null}
+            {stopNoTimeLines.length ? (
+              <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                このバス停には、京成バス千葉セントラルの {stopNoTimeLines.join('・')} も通ります。この線の時刻は入れていません。
+                <a href={KEISEI_TIMETABLE_URL} target="_blank" rel="noopener noreferrer" className="ml-1 font-semibold underline">
+                  京成バスの時刻表検索
+                </a>
+                でご確認ください。
+              </p>
+            ) : null}
             {upcoming.length ? (
               <ul className="space-y-2">
                 {(showAll ? upcoming : upcoming.slice(0, 3)).map((d) => {
@@ -1215,7 +1244,7 @@ export function BusMap() {
                 })}
               </ul>
             ) : (
-              <p className="text-base text-slate-700 dark:text-slate-200">きょうは、このあとのバスはありません。</p>
+              <p className="text-base text-slate-700 dark:text-slate-200">{stopNoTimeLines.length ? '時刻表を入れている路線では、きょうは、このあとのバスはありません。' : 'きょうは、このあとのバスはありません。'}</p>
             )}
             {upcoming.length > 3 ? (
               <button type="button" className="min-h-11 w-full rounded-lg border border-slate-300 text-base font-semibold dark:border-slate-700" onClick={() => setShowAll((v) => !v)}>
@@ -1247,7 +1276,7 @@ export function BusMap() {
             })}
           </ul>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            データ：{net.sources.map((x) => `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月${Number(x.start.slice(6, 8))}日からの時刻）`).join('、')}／バス停の位置：国土数値情報（バス停留所・国土交通省）ほか／道路：© OpenStreetMap contributors／{net.builtAt} 取りこみ
+            データ：{net.sources.map((x) => (x.noTimes ? `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月のデータ・CC BY 4.0）` : `${x.publisher}（${x.start.slice(0, 4)}年${Number(x.start.slice(4, 6))}月${Number(x.start.slice(6, 8))}日からの時刻）`)).join('、')}／バス停の位置：国土数値情報（バス停留所・国土交通省）ほか／道路：© OpenStreetMap contributors／{net.builtAt} 取りこみ
           </p>
         </section>
       ) : null}
