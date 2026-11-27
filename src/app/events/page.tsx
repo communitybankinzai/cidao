@@ -8,7 +8,14 @@ import { Button } from '@/components/ui/button'
 import { buildCells, fetchWindow, parseYm, newBadgeSinceMs, ymdInJst } from '@/lib/events-calendar'
 import { tagKinds } from '@/lib/child-place'
 import { parsePlaceTag } from '@/lib/senior-place'
+import type { Metadata } from 'next'
 import EventsBrowser, { type EventRow, type OrgInfo } from './_components/EventsBrowser'
+
+// 検索結果でどこのカレンダーか分かるように、題名と説明にサイト名と運営を入れる（2026-11-28 会員の指摘）
+export const metadata: Metadata = {
+  title: '印西市のイベント・活動カレンダー | CiDAO',
+  description: '印西市内の催し・講座・市民活動を一つにまとめたカレンダーです。登録なしで見られます。市民参加アプリ CiDAO（シダオ）／運営：Community Bank Inzai（CBI）',
+}
 
 export default async function EventsPage({ searchParams }: { searchParams: Promise<{ ym?: string; view?: string; tag?: string }> }) {
   const sp = await searchParams
