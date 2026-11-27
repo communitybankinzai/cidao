@@ -68,9 +68,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   return (
     <PageShell feature="events" width="default">
       <PageHeader feature="events"
+        compact
         title="印西市のイベント・活動カレンダー"
+        summary={user ? '日付を押すと、その日のイベントが下に出ます。' : '日付を押すと、その日のイベントが下に出ます。見るだけなら登録は不要です。'}
         description={
           <>
+            <p>
             印西市内で活動する<strong className="text-slate-800 dark:text-slate-200">市民団体・企業・行政・個人</strong>が主催するイベントをまとめて掲載
             {!user && (
               <>
@@ -81,6 +84,8 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 してください（LINEでワンタップ・無料）。
               </>
             )}
+            </p>
+            <PostingRules variant="line" />
           </>
         }
         actions={
@@ -92,7 +97,6 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         }
       />
 
-      <PostingRules variant="line" />
       <MarkSeen seenKey="events" />
 
       <EventsBrowser

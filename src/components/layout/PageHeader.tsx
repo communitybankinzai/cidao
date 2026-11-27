@@ -54,6 +54,8 @@ export function PageHeader({
   eyebrow = 'Citizen DAO',
   actions,
   feature,
+  compact = false,
+  summary,
 }: {
   title: React.ReactNode
   description?: React.ReactNode
@@ -65,7 +67,54 @@ export function PageHeader({
   actions?: React.ReactNode
   /** ホームのタイルと同じ色・アイコンを、見出しの左のチップと小見出しに使う */
   feature?: FeatureKey
+  /**
+   * 詰めた形（2026-11-27 事業主の指示「TOPに合わせて各ページもシンプルに」・まず予定ページを見本に）。
+   * ホームと同じ考え方で、最初の画面は「アイコン＋題名」と1行の説明（summary）だけにし、
+   * 長い説明（description）と使い方の入口は「くわしく見る」の中へ入れる。戻るリンクと小見出しは出さない（下のメニューにホームがある）
+   */
+  compact?: boolean
+  /** compact のときに題名の下へ出す1行 */
+  summary?: React.ReactNode
 }) {
+  if (compact) {
+    const f = feature ? FEATURES[feature] : null
+    const Icon = f?.icon
+    const hc = f ? HEADER_COLORS[f.color] : null
+    const helpSlug = feature ? HELP_SLUG_BY_FEATURE[feature] : undefined
+    return (
+      <header className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="flex min-w-0 items-center gap-2 font-serif text-xl font-bold text-slate-900 md:text-3xl dark:text-slate-100">
+            {Icon && hc && (
+              <span aria-hidden className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${hc.chip}`}>
+                <Icon className="size-5" strokeWidth={1.75} />
+              </span>
+            )}
+            <span className="min-w-0">{title}</span>
+          </h1>
+          {actions}
+        </div>
+        {summary && <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{summary}</p>}
+        {(description || helpSlug) && (
+          <details className="text-sm text-slate-600 dark:text-slate-400">
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+              くわしく見る
+            </summary>
+            <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-4 text-xs leading-relaxed dark:border-slate-800 dark:bg-slate-900">
+              {description}
+              {helpSlug && (
+                <p>
+                  <Link href={`/help/${helpSlug}`} className="inline-flex min-h-10 items-center gap-1 text-sm text-sky-700 hover:underline dark:text-sky-300">
+                    📖 この機能の使い方（画面と音声で説明）
+                  </Link>
+                </p>
+              )}
+            </div>
+          </details>
+        )}
+      </header>
+    )
+  }
   return (
     <>
       {back && <BackLink href={back.href}>{back.label}</BackLink>}
