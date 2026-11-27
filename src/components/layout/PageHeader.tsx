@@ -83,7 +83,7 @@ export function PageHeader({
     const helpSlug = feature ? HELP_SLUG_BY_FEATURE[feature] : undefined
     return (
       <header className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="flex min-w-0 items-center gap-2 font-serif text-xl font-bold text-slate-900 md:text-3xl dark:text-slate-100">
             {Icon && hc && (
               <span aria-hidden className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${hc.chip}`}>

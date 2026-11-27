@@ -74,8 +74,9 @@ export default async function ProposalsPage() {
   return (
     <PageShell feature="proposals" width="default">
       <PageHeader feature="proposals"
+        compact
         title="提案一覧"
-        description={<>市民から寄せられた {summaries.length} 件の提案</>}
+        summary={<>市民から寄せられた {summaries.length} 件の提案</>}
         actions={
           user ? (
             <Link href="/proposals/new">

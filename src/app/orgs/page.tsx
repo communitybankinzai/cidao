@@ -67,6 +67,7 @@ export default async function OrgsPage() {
   return (
     <PageShell feature="orgs" width="default">
       <PageHeader feature="orgs"
+        compact
         title="団体"
         actions={
           user && (

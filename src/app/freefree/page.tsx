@@ -65,8 +65,9 @@ export default async function FreefreePage() {
   return (
     <PageShell feature="freefree" width="default">
       <PageHeader feature="freefree"
+        compact
         title="地域応援掲示板"
-        description={
+        summary={
           <>
             印西の小さなお店・個人事業・団体・企業・行政を応援
             <span className="mt-1 block text-xs">
@@ -74,6 +75,7 @@ export default async function FreefreePage() {
             </span>
           </>
         }
+        description={<PostingRules variant="line" />}
         actions={
           user && (
             <Link href="/freefree/new"><Button>掲載する</Button></Link>
@@ -81,7 +83,6 @@ export default async function FreefreePage() {
         }
       />
 
-      <PostingRules variant="line" />
       <MarkSeen seenKey="freefree" />
 
       <FreefreeBrowser rows={rows} />
