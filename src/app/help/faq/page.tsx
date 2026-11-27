@@ -26,9 +26,11 @@ export default function HelpFaqPage() {
         feature="help"
         title="よくある質問（Q&A）"
         back={{ href: '/help', label: '使い方ヘルプ' }}
+        compact
+        summary="みなさんからいただいた質問・ご要望と、その解決策をまとめています。"
         description={
           <>
-            みなさんからいただいた質問・ご要望と、その解決策をまとめています。ここに無いことは
+            ここに無いことは
             <Link href="/bug-report?source=cidao_app&category=question" className="mx-1 text-blue-600 hover:underline">
               運営に相談・不具合を知らせる
             </Link>

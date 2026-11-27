@@ -21,9 +21,11 @@ export default function HelpNotesPage() {
       <PageHeader feature="help"
         title="通知・提案の出し方"
         back={{ href: '/help', label: '使い方ヘルプ' }}
+        compact
+        summary="通知の仕組みと、提案の出し方を説明します。"
         description={
           <>
-            通知の仕組みと、提案の出し方を説明します。わからないことや困ったことがあれば
+            わからないことや困ったことがあれば
             <Link href="/bug-report?source=cidao_app&category=question" className="mx-1 text-blue-600 hover:underline">運営に相談・不具合を知らせる</Link>
             からお知らせください。返事は画面右上のベル🔔に届きます。
           </>

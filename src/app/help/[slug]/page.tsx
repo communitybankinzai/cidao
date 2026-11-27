@@ -39,7 +39,8 @@ export default async function HelpTopicPage({ params }: { params: Promise<{ slug
         eyebrow="使い方ヘルプ"
         title={<><span aria-hidden className="mr-2">{t.emoji}</span>{t.title}</>}
         back={{ href: '/help', label: '使い方ヘルプ（機能の一覧）' }}
-        description={
+        compact
+        summary={
           <>
             {t.reading && <span className="block text-xs text-slate-500">読み：{t.reading}</span>}
             {t.summary}

@@ -65,7 +65,8 @@ export default function InstallPage() {
     <PageShell feature="help" width="narrow">
       <PageHeader feature="help"
         title="CiDAOをアプリとして使う"
-        description={
+        compact
+        summary={
           <>
             アプリストアからのダウンロードは不要です。スマホの「ホーム画面に追加」をするだけで、
             アイコンから1タップで開けるアプリになります（無料）。

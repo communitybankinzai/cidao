@@ -61,7 +61,9 @@ export default async function AttendancePage() {
       <PageHeader
         feature="events"
         title="参加者数の記録（任意）"
-        description="開かれた「子どもの居場所」の催しに、実際に来た人数を入れられます。入力は任意です。入れていただいた回は「こどもの居場所カレンダー」の実績に反映されます。"
+        compact
+        summary="開かれた「子どもの居場所」の催しに、実際に来た人数を入れられます。入力は任意です。"
+        description="入れていただいた回は「こどもの居場所カレンダー」の実績に反映されます。"
       />
 
       <section className="mb-6 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed dark:border-amber-900 dark:bg-amber-950/30">

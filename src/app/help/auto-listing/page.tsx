@@ -23,7 +23,8 @@ export default function HelpAutoListingPage() {
         feature="help"
         title="催しをカレンダーに載せるには（団体の方へ）"
         back={{ href: '/help', label: '使い方ヘルプ' }}
-        description="Instagram でお知らせしている催しを、イベントカレンダーに載せる2つの方法を説明します。"
+        compact
+        summary="Instagram でお知らせしている催しを、イベントカレンダーに載せる2つの方法を説明します。"
       />
 
       <section className={card}>

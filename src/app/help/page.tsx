@@ -20,9 +20,10 @@ export default function HelpPage() {
     <PageShell feature="help" width="narrow">
       <PageHeader feature="help"
         title="使い方ヘルプ"
+        compact
+        summary="知りたい機能を選んでください。画面の写真と文章、音声で説明します（スマホでも見られます）。"
         description={
           <>
-            知りたい機能を選んでください。画面の写真と文章、音声で説明します（スマホでも見られます）。
             わからないことや困ったことがあれば
             <Link href="/bug-report?source=cidao_app&category=question" className="mx-1 text-blue-600 hover:underline">運営に相談・不具合を知らせる</Link>
             からお知らせください。返事は画面右上のベル🔔に届きます。

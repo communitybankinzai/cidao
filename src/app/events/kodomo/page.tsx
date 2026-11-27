@@ -72,7 +72,8 @@ export default async function KodomoCalendarPage({ searchParams }: { searchParam
       <PageHeader
         feature="events"
         title="こどもの居場所カレンダー"
-        description={DESCRIPTION}
+        compact
+        summary={DESCRIPTION}
         actions={
           <Link href="/events" className="text-sm underline text-slate-600 dark:text-slate-300 print:hidden">
             すべてのイベントを見る →

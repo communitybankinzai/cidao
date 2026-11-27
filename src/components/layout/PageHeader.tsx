@@ -81,8 +81,14 @@ export function PageHeader({
     const Icon = f?.icon
     const hc = f ? HEADER_COLORS[f.color] : null
     const helpSlug = feature ? HELP_SLUG_BY_FEATURE[feature] : undefined
+    // 戻るリンクは、ホーム以外へ戻るページ（使い方の各ページ・マイページの下など）だけ出す。ホームへは下のメニューから戻れる
+    const showBack = back && back.href !== '/'
+    // 小見出しは、そのページだけの特別なもの（「使い方ヘルプ」など）だけ出す
+    const showEyebrow = eyebrow && eyebrow !== 'Citizen DAO'
     return (
       <header className="space-y-1.5">
+        {showBack && <BackLink href={back.href}>{back.label}</BackLink>}
+        {showEyebrow && <p className={`text-xs tracking-[0.2em] ${hc ? hc.eyebrow : 'text-slate-500'}`}>{eyebrow}</p>}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="flex min-w-0 items-center gap-2 font-serif text-xl font-bold text-slate-900 md:text-3xl dark:text-slate-100">
             {Icon && hc && (

@@ -33,7 +33,8 @@ export default async function InterviewPage() {
       title="AIインタビューで登録"
       eyebrow="CBI 人材バンク・試行版"
       back={{ href: "/talent", label: "登録メンバー" }}
-      description="一つずつお聞きします。途中で保存して、後から続けられます。"
+      compact
+      summary="一つずつお聞きします。途中で保存して、後から続けられます。"
     />
     {hasProfile && <Link href="/me/talent" className="block rounded-xl border border-sky-600 bg-sky-50 p-4 font-medium dark:bg-sky-950">
       プロフィール案はできています。確認と公開の申請へ進む →</Link>}

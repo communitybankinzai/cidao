@@ -63,7 +63,8 @@ export default function HospitalsPage() {
         feature="help"
         title="病院マップ（印西市）"
         back={{ href: '/', label: 'ホーム' }}
-        description="印西市の病院・診療所・歯科を、地図と一覧でさがせます。休日や夜に具合が悪くなったときは、下の電話の案内を先に見てください。"
+        compact
+        summary="印西市の病院・診療所・歯科を、地図と一覧でさがせます。休日や夜に具合が悪くなったときは、下の電話の案内を先に見てください。"
       />
 
       <section aria-labelledby="hospitals-emergency" className="space-y-3 rounded-lg border-2 border-rose-300 bg-rose-50 p-4 dark:border-rose-800 dark:bg-rose-950">

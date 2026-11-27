@@ -28,7 +28,8 @@ export default function HelpBousaiMapPage() {
         feature="help"
         title="防災MAP 冠水した道の記録のしかた・直し方"
         back={{ href: '/help', label: '使い方ヘルプ' }}
-        description="大雨のときに通れなかった道・通れた道を、地図の道をなぞって匿名で記録できます。送ったあと24時間は、ご本人が直せます。"
+        compact
+        summary="大雨のときに通れなかった道・通れた道を、地図の道をなぞって匿名で記録できます。送ったあと24時間は、ご本人が直せます。"
       />
 
       <section className={card} aria-label="使い方の動画">

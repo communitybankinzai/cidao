@@ -48,7 +48,7 @@ export default async function NotificationsPage() {
   return (
     <PageShell feature="account" width="narrow">
       <MarkAllRead hasUnread={hasUnread} />
-      <PageHeader feature="account" title="通知" description="自分宛の通知を新しい順に最大100件表示します。" />
+      <PageHeader feature="account" compact title="通知" summary="自分宛の通知を新しい順に最大100件表示します。" />
 
       {/* ベルを開いた人に、スマホへの通知の案内を出す（2026-11-22）。出る・出ないの判定は PushNudge の中 */}
       <PushNudge />

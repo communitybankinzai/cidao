@@ -34,7 +34,9 @@ export default async function BugReportPage({
     <PageShell feature="help" width="narrow">
       <PageHeader feature="help"
         title="運営に相談・不具合を知らせる"
-        description="使い方の質問や相談（提案の書き方など）、不具合、ご要望をお寄せください。ログインしていれば、運営の返事は画面右上のベル🔔に届きます。ログインしていなくても送信できます。"
+        compact
+        summary="使い方の質問や相談（提案の書き方など）、不具合、ご要望をお寄せください。"
+        description="ログインしていれば、運営の返事は画面右上のベル🔔に届きます。ログインしていなくても送信できます。"
       />
       <BugReportForm
         source={source === 'cbi_site' ? 'cbi_site' : 'cidao_app'}

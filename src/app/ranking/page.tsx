@@ -60,7 +60,8 @@ export default async function RankingPage() {
     <PageShell feature="ranking" width="narrow">
       <PageHeader feature="ranking"
         title="貢献度ランキング"
-        description={<>「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）</>}
+        compact
+        summary={<>「ランキングに参加する」設定にしたメンバーのみ掲載しています（{ranking.length}人）</>}
       />
 
       <ol className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-200 dark:divide-slate-800">

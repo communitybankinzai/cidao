@@ -25,7 +25,8 @@ export default async function MatchPage({ searchParams }: { searchParams: Promis
     <PageShell feature="match" width="form">
       <PageHeader feature="match"
         title="マッチング相談"
-        description={
+        compact
+        summary={
           <>
             <strong className="text-slate-800 dark:text-slate-200">団体</strong>または<strong className="text-slate-800 dark:text-slate-200">メンバー</strong>から、あなたに合う相手を AI と会話で探します。
           </>
