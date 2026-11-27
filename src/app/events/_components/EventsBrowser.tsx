@@ -1128,7 +1128,8 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newIds }
               const members = membersOf.get(e.id) ?? [e]
               return (
                 <RevealItem key={e.id} id={e.id} fromLeft={false} itemsRef={itemsRef}>
-                  <div className="relative">
+                  {/* 1件ごとに枠で囲む（2026-11-27 事業主の指摘「どこまでが1つか分かりにくい」。掲示板・団体などの一覧と同じ枠） */}
+                  <div className="relative overflow-hidden bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-md hover:border-slate-500 hover:shadow-lg dark:hover:border-slate-500 transition">
                   <Link href={`/events/${e.id}`} className="flex gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <DateBadge iso={e.start_at} />
                     {e.flyer_image_url ? (
@@ -1197,9 +1198,9 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newIds }
           key={key}
           open={isThisMonth}
           onToggle={() => requestReveal()}
-          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden"
+          className="group bg-slate-50 dark:bg-slate-950/40 border-2 border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden"
         >
-          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
+          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center justify-between text-sm font-semibold bg-slate-100 dark:bg-slate-950/40 hover:bg-slate-200 dark:hover:bg-slate-900 transition-colors">
             <span>{g.label}</span>
             <span className="flex items-center gap-2 text-xs font-normal text-slate-500">
               {g.items.length}件
@@ -1207,18 +1208,18 @@ function ListView({ events, today, organizerLabel, orgInfo, canEditRow, newIds }
             </span>
           </summary>
           {past.length > 0 && (
-            <details className="group/past border-b border-slate-100 dark:border-slate-800" onToggle={() => requestReveal()}>
+            <details className="group/past border-b border-slate-200 dark:border-slate-800" onToggle={() => requestReveal()}>
               <summary className="cursor-pointer select-none px-4 py-2 text-xs text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 flex items-center justify-between">
                 <span>終了した {past.length} 件（{Number(ymdFmt.format(new Date(past[0].start_at)).slice(8, 10))}日〜{Number(ymdFmt.format(new Date(past[past.length - 1].start_at)).slice(8, 10))}日）を表示</span>
                 <span className="inline-block transition-transform group-open/past:rotate-180">▾</span>
               </summary>
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800 opacity-70">{past.map(renderItem)}</ul>
+              <ul className="space-y-3 p-3 opacity-70">{past.map(renderItem)}</ul>
             </details>
           )}
           {isThisMonth && upcoming.length === 0 && (
             <p className="px-4 py-3 text-xs text-slate-500">今月の今日以降のイベントはありません（来月は下の月をタップ）</p>
           )}
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">{upcoming.map(renderItem)}</ul>
+          <ul className="space-y-3 p-3 empty:hidden">{upcoming.map(renderItem)}</ul>
         </details>
         )
       })}
