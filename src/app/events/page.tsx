@@ -104,6 +104,11 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         }
       />
 
+      {/* 集め方と削除の方針を、折り畳みの外に常に出す（2026-11-28 代表の依頼・文は代表のもの） */}
+      <p className="-mt-2 mb-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+        イベント情報はSNS投稿から自動で集めて掲載しています。規約に反する投稿は削除するようにします。
+      </p>
+
       <MarkSeen seenKey="events" />
 
       <EventsBrowser
